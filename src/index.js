@@ -34,6 +34,7 @@ const error = (msg) => {
 
 
 const run = async ()=>{
+  console.error = (msg) => { window.alert(msg); }
   if (!navigator.gpu) {
     error("Your device does not support WebGPU.");
     return;

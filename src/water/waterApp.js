@@ -88,7 +88,7 @@ class WaterApp {
         this.scene.backgroundNode = bgNode;
         this.scene.environmentNode = bgNode;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 0.8;
+        this.renderer.toneMappingExposure = 0.66;
 
         await progressCallback(0.5)
 

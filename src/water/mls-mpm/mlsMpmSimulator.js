@@ -195,7 +195,8 @@ class mlsMpmSimulator {
                     });
                 });
             });
-            this.densityBuffer.element(instanceIndex).assign(density);
+            const densityStore = this.densityBuffer.element(instanceIndex);
+            this.densityBuffer.element(instanceIndex).assign(densityStore.mul(0.75).add(density.mul(0.25)));
 
             const volume = float(1).div(density);
             const pressure = max(0.0, pow(density.div(restDensity), 5.0).sub(1).mul(stiffness));

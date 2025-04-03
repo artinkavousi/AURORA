@@ -16,6 +16,8 @@ class BackgroundGeometry {
             return vertexId-1;
         }
 
+
+        const grid = 64;
         const frontRows = [];
         for (let y = 0; y<4; y++) {
             const row = [];
@@ -26,7 +28,6 @@ class BackgroundGeometry {
             }
             frontRows.push(row);
         }
-
         for (let y = 0; y<3; y++) {
             for (let x = 0; x < 3; x++) {
                 if (x === 1 && y === 1) { continue; }
@@ -39,6 +40,50 @@ class BackgroundGeometry {
             }
         }
 
+        const depth = grid * 0.4;
+        {
+            const v0 = addVertex([-grid/2, -grid/2, 0], [1, 0, 0]);
+            const v1 = addVertex([-grid/2, -grid/2, depth], [1, 0, 0]);
+            const v2 = addVertex([-grid/2, grid/2, 0], [1, 0, 0]);
+            const v3 = addVertex([-grid/2, grid/2, depth], [1, 0, 0]);
+            indices.push(v2,v1,v0);
+            indices.push(v1,v2,v3);
+        }
+        {
+            const v0 = addVertex([grid/2, grid/2, 0], [-1, 0, 0]);
+            const v1 = addVertex([grid/2, grid/2, depth], [-1, 0, 0]);
+            const v2 = addVertex([grid/2, -grid/2, 0], [-1, 0, 0]);
+            const v3 = addVertex([grid/2, -grid/2, depth], [-1, 0, 0]);
+            indices.push(v2,v1,v0);
+            indices.push(v1,v2,v3);
+        }
+        {
+            const v0 = addVertex([grid/2, -grid/2, 0], [0, 1, 0]);
+            const v1 = addVertex([grid/2, -grid/2, depth], [0, 1, 0]);
+            const v2 = addVertex([-grid/2, -grid/2, 0], [0, 1, 0]);
+            const v3 = addVertex([-grid/2, -grid/2, depth], [0, 1, 0]);
+            indices.push(v2,v1,v0);
+            indices.push(v1,v2,v3);
+        }
+        {
+            const v0 = addVertex([-grid/2, grid/2, 0], [0, -1, 0]);
+            const v1 = addVertex([-grid/2, grid/2, depth], [0, -1, 0]);
+            const v2 = addVertex([grid/2, grid/2, 0], [0, -1, 0]);
+            const v3 = addVertex([grid/2, grid/2, depth], [0, -1, 0]);
+            indices.push(v2,v1,v0);
+            indices.push(v1,v2,v3);
+        }
+
+        {
+            const v0 = addVertex([grid/2, -grid/2, depth], [0, 0, -1]);
+            const v1 = addVertex([grid/2, grid/2, depth], [0, 0, -1]);
+            const v2 = addVertex([-grid/2, -grid/2, depth], [0, 0, -1]);
+            const v3 = addVertex([-grid/2, grid/2, depth], [0, 0, -1]);
+            indices.push(v2,v1,v0);
+            indices.push(v1,v2,v3);
+        }
+
+
         const positionAttribute = new THREE.BufferAttribute(new Float32Array(positionArray), 3, false);
         const normalAttribute = new THREE.BufferAttribute(new Float32Array(normalArray), 3, false);
         const geometry = new THREE.BufferGeometry();
@@ -46,9 +91,12 @@ class BackgroundGeometry {
         geometry.setAttribute("normal", normalAttribute);
         geometry.setIndex(indices);
 
-        const material = new THREE.MeshStandardNodeMaterial();
+        const material = new THREE.MeshStandardNodeMaterial({
+            roughness: 0.9,
+            metalness:0.1,
+        });
 
-        material.colorNode = Fn(() => {
+        /*material.colorNode = Fn(() => {
            const p = positionLocal.mul(0.004).add(vec3(0,0,positionLocal.x.mul(0.004).mul(0.2)));
 
             const matrix = mat3(-2/3,-1/3,2/3, 3/3,-2/3,1/3, 1/3,2/3,2/3);
@@ -64,9 +112,11 @@ class BackgroundGeometry {
            const noise = triNoise3D(p,time,0.2)
            return noise.add(smoothstep(0.35, 0.4, noise).mul(0.3)).mul(1.0).oneMinus(); //noise.mul(smoothstep(noise,0.3,0.8).oneMinus());
 
-        })();
+        })();*/
 
         this.object = new THREE.Mesh(geometry, material);
+        //this.object.castShadow = true;
+        this.object.receiveShadow = true;
 
 
     }

@@ -82,13 +82,16 @@ class WaterApp {
             const matrix = mat2(c,-s,s,c);
             const uvt = normalWorld.toVar();
             uvt.xz.mulAssign(matrix);
-            return pmremTexture(hdriTexture, uvt);
+            return pmremTexture(hdriTexture, uvt).mul(0.5);
         })();
 
         this.scene.backgroundNode = bgNode;
         this.scene.environmentNode = bgNode;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 0.66;
+
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         await progressCallback(0.5)
 

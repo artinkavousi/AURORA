@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
-import {Fn, attribute, triNoise3D, time, vec3, float} from "three/tsl";
+import {Fn, attribute, triNoise3D, time, vec3, float, varying} from "three/tsl";
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 class ParticleRenderer {
     mlsMpmSim = null;
@@ -7,8 +8,8 @@ class ParticleRenderer {
     constructor(mlsMpmSim) {
         this.mlsMpmSim = mlsMpmSim;
 
-        const geometry = new THREE.IcosahedronGeometry(0.5, 2);
-        this.geometry = new THREE.InstancedBufferGeometry().copy(geometry);
+        const sphereGeometry = BufferGeometryUtils.mergeVertices(new THREE.IcosahedronGeometry(0.5, 1));
+        this.geometry = new THREE.InstancedBufferGeometry().copy(sphereGeometry);
         this.geometry.instanceCount = this.mlsMpmSim.numParticles;
 
 
@@ -18,11 +19,13 @@ class ParticleRenderer {
             metalness: 0.15,
             roughness: 0.95,
         });
+        const color = varying(0, "vColor");
         this.material.positionNode = Fn(() => {
+            color.assign(float(1.0).sub(densityAttribute.mul(0.18)).mul(positionAttribute.z.div(64).oneMinus()));
             return attribute("position").mul(densityAttribute.mul(0.2)).add(positionAttribute.mul(vec3(1,1,0.4)));
         })();
         this.material.colorNode = Fn(() => {
-            return float(1.0).sub(densityAttribute.mul(0.18)).mul(positionAttribute.z.div(64).oneMinus());
+            return color;
         })();
         /*this.material.emissiveNode = Fn(() => {
             return densityAttribute.mul(0.0);
@@ -33,6 +36,7 @@ class ParticleRenderer {
         this.object = new THREE.Mesh(this.geometry, this.material);
         this.object.frustumCulled = false;
         this.object.position.set(-32,-32,0);
+        this.object.castShadow = true;
     }
 }
 export default ParticleRenderer;

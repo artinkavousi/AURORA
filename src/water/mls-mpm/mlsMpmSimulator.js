@@ -51,6 +51,7 @@ class mlsMpmSimulator {
 
 
         this.positionArray = new Float32Array(this.numParticles * 3);
+        this.massArray = new Float32Array(this.numParticles);
         const vec = new THREE.Vector3();
         for (let i = 0; i < this.numParticles; i++) {
             let dist = 2;
@@ -62,12 +63,20 @@ class mlsMpmSimulator {
                 this.positionArray[i*3+1] = vec.y;
                 this.positionArray[i*3+2] = vec.z;
             }
-
-
+            this.massArray[i] = 1.0 - Math.random() * 0.001;
         }
+        /*for (let i = 1; i <= 22; i++) {
+            this.positionArray[i*3+0] = this.positionArray[0];
+            this.positionArray[i*3+1] = this.positionArray[1];
+            this.positionArray[i*3+2] = this.positionArray[2];
+        }*/
+
+
         this.positionBuffer = instancedArray(this.positionArray, "vec3").label("particlePositionBuffer");
+        this.massBuffer = instancedArray(this.massArray, "float").label("particleMassBuffer");
         this.densityBuffer = instancedArray(this.numParticles, "float").label("particleDensityBuffer");
         this.velocityBuffer = instancedArray(this.numParticles, "vec3").label("particleVelocityBuffer");
+        this.directionBuffer = instancedArray(this.numParticles, "vec3").label("particleDirectionBuffer");
         this.CBuffer = instancedArray(this.numParticles, "mat3").label("particleCBuffer");
 
         const cellCount = this.gridSize.x * this.gridSize.y * this.gridSize.z;
@@ -196,7 +205,8 @@ class mlsMpmSimulator {
                 });
             });
             const densityStore = this.densityBuffer.element(instanceIndex);
-            this.densityBuffer.element(instanceIndex).assign(densityStore.mul(0.75).add(density.mul(0.25)));
+            //this.densityBuffer.element(instanceIndex).assign(densityStore.mul(0.75).add(density.mul(0.25)));
+            densityStore.assign(mix(densityStore, density, 0.05));
 
             const volume = float(1).div(density);
             const pressure = max(0.0, pow(density.div(restDensity), 5.0).sub(1).mul(stiffness));
@@ -278,17 +288,18 @@ class mlsMpmSimulator {
                 Return();
             });
             const gridSize = this.uniforms.gridSize;
+            const particleMass = this.massBuffer.element(instanceIndex).toVar("particleMass");
             const particlePosition = this.positionBuffer.element(instanceIndex).xyz.toVar("particlePosition");
             const particleVelocity = vec3(0).toVar();
             const pn = particlePosition.div(vec3(this.uniforms.gridSize.sub(1))).sub(0.5).normalize().toVar();
-            particleVelocity.subAssign(pn.mul(0.3).mul(this.uniforms.dt));
-            //particleVelocity.y.subAssign(float(0.3).mul(this.uniforms.dt));
+            //particleVelocity.subAssign(pn.mul(0.3).mul(this.uniforms.dt));
+            particleVelocity.z.subAssign(float(-0.2).mul(this.uniforms.dt));
             const noise = vec3(
                 triNoise3D(particlePosition.mul(0.015), time, 0.21),
                 triNoise3D(particlePosition.yzx.mul(0.015), time, 0.22),
                 triNoise3D(particlePosition.zxy.mul(0.015), time, 0.23)
             );
-            particleVelocity.subAssign(noise.sub(0.285).mul(0.93).mul(this.uniforms.dt));
+            particleVelocity.subAssign(noise.sub(0.285).mul(1.93).mul(this.uniforms.dt));
 
             /*const dither = vec3(hash(instanceIndex),hash(instanceIndex.add(1337)),hash(instanceIndex.add(2337))).mul(0.0001);
             particleVelocity.addAssign(dither)*/
@@ -325,6 +336,7 @@ class mlsMpmSimulator {
             const force = dist.mul(0.1).oneMinus().max(0.0).pow(2);
             //particleVelocity.assign(mix(particleVelocity, this.uniforms.mouseForce.mul(6), force));
             particleVelocity.addAssign(this.uniforms.mouseForce.mul(1).mul(force));
+            particleVelocity.mulAssign(particleMass); // to ensure difference between particles
 
 
             this.CBuffer.element(instanceIndex).assign(B.mul(4));
@@ -345,13 +357,17 @@ class mlsMpmSimulator {
             this.positionBuffer.element(instanceIndex).assign(particlePosition)
             this.velocityBuffer.element(instanceIndex).assign(particleVelocity)
 
+
+            const direction = this.directionBuffer.element(instanceIndex);
+            direction.assign(mix(direction,particleVelocity, 0.1));
+
         })().debug().compute(this.numParticles);
     }
 
     setMouseRay(origin, direction, pos) {
         origin.multiplyScalar(64);
         pos.multiplyScalar(64);
-        origin.add(new THREE.Vector3(32,0,0));
+        origin.add(new THREE.Vector3(32,2,0));
         this.uniforms.mouseRayDirection.value.copy(direction);
         this.uniforms.mouseRayOrigin.value.copy(origin);
         this.mousePos.copy(pos);
@@ -374,6 +390,7 @@ class mlsMpmSimulator {
         await this.renderer.computeAsync(this.kernels.updateGrid);
 
         await this.renderer.computeAsync(this.kernels.g2p);
+
         //console.log(this.cellBufferMass, this.renderer.backend.get(this.cellBufferMass.value));
         //const result = new Int32Array(await this.renderer.getArrayBufferAsync(this.cellBufferMass.value));
         //console.log(result);

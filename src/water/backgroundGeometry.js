@@ -34,7 +34,7 @@ class BackgroundGeometry {
         }
 
 
-        //const normalMap = await loadTexture(normalMapFile);
+        const normalMap = await loadTexture(normalMapFile);
         const aoMap = await loadTexture(aoMapFile);
         const map = await loadTexture(colorMapFile);
         const roughnessMap = await loadTexture(roughnessMapFile);
@@ -42,10 +42,12 @@ class BackgroundGeometry {
         const material = new THREE.MeshStandardNodeMaterial({
             roughness: 0.9,
             metalness:0.0,
-            //normalMap,
+            normalScale: new THREE.Vector3(2.0, 2.0),
+            normalMap,
             aoMap,
             map,
             roughnessMap,
+
         });
 
         /*material.colorNode = Fn(() => {
@@ -68,7 +70,7 @@ class BackgroundGeometry {
 
         this.object = new THREE.Mesh(geometry, material);
         this.object.rotation.set(0, Math.PI, 0);
-        this.object.position.set(0, -0.05, 0.2);
+        this.object.position.set(0, -0.05, 0.22);
         this.object.castShadow = true;
         this.object.receiveShadow = true;
     }

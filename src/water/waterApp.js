@@ -95,7 +95,7 @@ class WaterApp {
 
         await progressCallback(0.5)
 
-        this.mlsMpmSim = new MlsMpmSimulator(this.renderer, 8192*2);
+        this.mlsMpmSim = new MlsMpmSimulator(this.renderer, 8192*8);
         this.particleRenderer = new ParticleRenderer(this.mlsMpmSim);
         this.scene.add(this.particleRenderer.object);
 

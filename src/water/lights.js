@@ -5,10 +5,10 @@ export class Lights {
 
     constructor() {
         this.object = new THREE.Object3D();
-        const light = new THREE.SpotLight(0xffffff, 5, 0, Math.PI * 0.16, 1, 0);
+        const light = new THREE.SpotLight(0xffffff, 5, 0, Math.PI * 0.18, 1, 0);
         const lightTarget = new THREE.Object3D();
-        light.position.set(-10, 30, -50);
-        //lightTarget.position.set(10,-10,10);
+        light.position.set(0., 1.2, -0.8);
+        lightTarget.position.set(0,0.7,0);
         light.target = lightTarget;
 
         this.object.add(light);
@@ -18,9 +18,9 @@ export class Lights {
         light.castShadow = true; // default false
         light.shadow.mapSize.width = 512*2; // default
         light.shadow.mapSize.height = 512*2; // default
-        light.shadow.bias = -0.0001;
+        light.shadow.bias = -0.005;
             light.shadow.camera.near = 0.5; // default
-            light.shadow.camera.far = 100;
+            light.shadow.camera.far = 5;
 
     }
 

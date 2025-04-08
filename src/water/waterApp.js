@@ -59,9 +59,9 @@ class WaterApp {
         conf.init();
         this.info = new Info();
 
-        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 120);
+        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 5);
         //this.camera.position.set(32,32, -64);
-        this.camera.position.set(0, 0, -32);
+        this.camera.position.set(0, 0.5, -1);
         this.camera.updateProjectionMatrix()
 
         this.scene = new THREE.Scene();
@@ -69,7 +69,7 @@ class WaterApp {
         //this.scene.add(new THREE.Mesh(new THREE.BoxGeometry(64,64,64)), new THREE.MeshBasicNodeMaterial());
 
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        //this.controls.target.set(32,32,32);
+        this.controls.target.set(0,0.5,0);
         this.controls.enableDamping = true;
 
         await progressCallback(0.1)
@@ -77,15 +77,15 @@ class WaterApp {
         const hdriTexture = await loadHdr(hdri);
 
         const bgNode = Fn(() => {
-            const angle = -2.4;
+            const angle = -2.15;
             const s = Math.sin(angle), c = Math.cos(angle);
             const matrix = mat2(c,-s,s,c);
             const uvt = normalWorld.toVar();
             uvt.xz.mulAssign(matrix);
-            return pmremTexture(hdriTexture, uvt).mul(0.05);
+            return pmremTexture(hdriTexture, uvt).mul(0.5);
         })();
 
-        this.scene.backgroundNode = bgNode;
+        this.scene.backgroundNode = bgNode.div(0.5);
         this.scene.environmentNode = bgNode;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 0.66;
@@ -103,10 +103,11 @@ class WaterApp {
         this.scene.add(this.lights.object);
 
         const backgroundGeometry = new BackgroundGeometry();
+        await backgroundGeometry.init();
         this.scene.add(backgroundGeometry.object);
 
         this.raycaster = new THREE.Raycaster();
-        this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+        this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.2);
         this.renderer.domElement.addEventListener("mousemove", (event) => { this.onMouseMove(event); });
 
         await progressCallback(1.0, 100);

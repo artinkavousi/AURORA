@@ -282,10 +282,11 @@ class mlsMpmSimulator {
             const particleVelocity = vec3(0).toVar();
             const pn = particlePosition.div(vec3(this.uniforms.gridSize.sub(1))).sub(0.5).normalize().toVar();
             particleVelocity.subAssign(pn.mul(0.3).mul(this.uniforms.dt));
+            //particleVelocity.y.subAssign(float(0.3).mul(this.uniforms.dt));
             const noise = vec3(
-                triNoise3D(particlePosition.mul(0.02), time, 0.21),
-                triNoise3D(particlePosition.yzx.mul(0.02), time, 0.22),
-                triNoise3D(particlePosition.zxy.mul(0.02), time, 0.23)
+                triNoise3D(particlePosition.mul(0.015), time, 0.21),
+                triNoise3D(particlePosition.yzx.mul(0.015), time, 0.22),
+                triNoise3D(particlePosition.zxy.mul(0.015), time, 0.23)
             );
             particleVelocity.subAssign(noise.sub(0.285).mul(0.93).mul(this.uniforms.dt));
 
@@ -328,12 +329,12 @@ class mlsMpmSimulator {
 
             this.CBuffer.element(instanceIndex).assign(B.mul(4));
             particlePosition.addAssign(particleVelocity.mul(this.uniforms.dt));
-            particlePosition.assign(clamp(particlePosition, vec3(2), this.uniforms.gridSize.sub(1)));
+            particlePosition.assign(clamp(particlePosition, vec3(2), this.uniforms.gridSize.sub(2)));
 
             const wallStiffness = 0.3;
             const xN = particlePosition.add(particleVelocity.mul(this.uniforms.dt).mul(3.0)).toVar("xN");
             const wallMin = vec3(3).toVar("wallMin");
-            const wallMax = vec3(this.uniforms.gridSize).sub(4).toVar("wallMax");
+            const wallMax = vec3(this.uniforms.gridSize).sub(3).toVar("wallMax");
             If(xN.x.lessThan(wallMin.x), () => { particleVelocity.x.addAssign(wallMin.x.sub(xN.x).mul(wallStiffness)); });
             If(xN.x.greaterThan(wallMax.x), () => { particleVelocity.x.addAssign(wallMax.x.sub(xN.x).mul(wallStiffness)); });
             If(xN.y.lessThan(wallMin.y), () => { particleVelocity.y.addAssign(wallMin.y.sub(xN.y).mul(wallStiffness)); });
@@ -348,7 +349,9 @@ class mlsMpmSimulator {
     }
 
     setMouseRay(origin, direction, pos) {
-        origin.add(new THREE.Vector3(32,32,0));
+        origin.multiplyScalar(64);
+        pos.multiplyScalar(64);
+        origin.add(new THREE.Vector3(32,0,0));
         this.uniforms.mouseRayDirection.value.copy(direction);
         this.uniforms.mouseRayOrigin.value.copy(origin);
         this.mousePos.copy(pos);

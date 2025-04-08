@@ -15,7 +15,7 @@ class ParticleRenderer {
 
         const positionAttribute = this.mlsMpmSim.positionBuffer.toAttribute();
         const densityAttribute = this.mlsMpmSim.densityBuffer.toAttribute().mul(4);
-        this.material = new THREE.MeshStandardMaterial({
+        this.material = new THREE.MeshStandardNodeMaterial({
             metalness: 0.15,
             roughness: 0.95,
         });
@@ -27,9 +27,9 @@ class ParticleRenderer {
         this.material.colorNode = Fn(() => {
             return color.mul(vec3(1,0,1));
         })();
-        this.material.roughnessNode = Fn(() => {
+        /*this.material.roughnessNode = Fn(() => {
             return densityAttribute.mul(0.23).oneMinus();
-        })();
+        })();*/
         /*this.material.emissiveNode = Fn(() => {
             return densityAttribute.mul(0.03).mul(vec3(1,0,1));
             const noise = triNoise3D(positionAttribute.mul(0.01), time, 0.2);
@@ -38,7 +38,19 @@ class ParticleRenderer {
 
         this.object = new THREE.Mesh(this.geometry, this.material);
         this.object.frustumCulled = false;
-        this.object.position.set(-32,-32,0);
+
+        const s = (1/60);
+        const matrix = new THREE.Matrix4().makeScale(s,s,s);
+        matrix.multiply(new THREE.Matrix4().makeTranslation(-32.0, -2, 0));
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Quaternion();
+        const scale = new THREE.Vector3();
+        matrix.decompose(position, rotation, scale);
+        console.log(position);
+
+
+        this.object.position.copy(position);
+        this.object.scale.copy(scale);
         this.object.castShadow = true;
         this.object.receiveShadow = true;
     }

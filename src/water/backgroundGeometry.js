@@ -1,99 +1,51 @@
 import * as THREE from "three/webgpu";
 import {Fn, attribute, triNoise3D, time, positionLocal, smoothstep, vec3, pow, min, mat3} from "three/tsl";
+import {OBJLoader} from "three/examples/jsm/loaders/OBJLoader";
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import boxObj from 'bundle-text:../assets/boxSlightlySmooth.obj';
+
+import normalMapFile from '../assets/concrete_0016_normal_opengl_2k.png';
+import aoMapFile from '../assets/concrete_0016_ao_2k.jpg';
+import colorMapFile from '../assets/concrete_0016_color_2k.jpg';
+import roughnessMapFile from '../assets/concrete_0016_roughness_2k.jpg';
+
+const textureLoader = new THREE.TextureLoader();
+const loadTexture = (file) => {
+    return new Promise(resolve => {
+        textureLoader.load(file, texture => {
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            resolve(texture);
+        });
+    });
+}
 
 class BackgroundGeometry {
     object = null;
     constructor() {
-        const positionArray = [];
-        const normalArray = [];
-        const indices = [];
-        let vertexId = 0;
-
-        const addVertex = (position, normal) => {
-            positionArray.push(...position);
-            normalArray.push(...normal);
-            vertexId++;
-            return vertexId-1;
+    }
+    async init() {
+        console.log(boxObj);
+        const objectRaw = new OBJLoader().parse(boxObj);
+        const geometry = BufferGeometryUtils.mergeVertices(objectRaw.children[0].geometry);
+        const uvArray = geometry.attributes.uv.array;
+        for (let i=0; i<uvArray.length; i++) {
+            uvArray[i] *= 10;
         }
 
 
-        const grid = 64;
-        const frontRows = [];
-        for (let y = 0; y<4; y++) {
-            const row = [];
-            for (let x = 0; x<4; x++) {
-                const px = -96 + x * 64;
-                const py = -96 + y * 64;
-                row.push(addVertex([px,py,0],[0,0,-1]));
-            }
-            frontRows.push(row);
-        }
-        for (let y = 0; y<3; y++) {
-            for (let x = 0; x < 3; x++) {
-                if (x === 1 && y === 1) { continue; }
-                const v0 = frontRows[y][x];
-                const v1 = frontRows[y][x+1];
-                const v2 = frontRows[y+1][x];
-                const v3 = frontRows[y+1][x+1]
-                indices.push(v2,v1,v0);
-                indices.push(v1,v2,v3);
-            }
-        }
-
-        const depth = grid * 0.4;
-        {
-            const v0 = addVertex([-grid/2, -grid/2, 0], [1, 0, 0]);
-            const v1 = addVertex([-grid/2, -grid/2, depth], [1, 0, 0]);
-            const v2 = addVertex([-grid/2, grid/2, 0], [1, 0, 0]);
-            const v3 = addVertex([-grid/2, grid/2, depth], [1, 0, 0]);
-            indices.push(v2,v1,v0);
-            indices.push(v1,v2,v3);
-        }
-        {
-            const v0 = addVertex([grid/2, grid/2, 0], [-1, 0, 0]);
-            const v1 = addVertex([grid/2, grid/2, depth], [-1, 0, 0]);
-            const v2 = addVertex([grid/2, -grid/2, 0], [-1, 0, 0]);
-            const v3 = addVertex([grid/2, -grid/2, depth], [-1, 0, 0]);
-            indices.push(v2,v1,v0);
-            indices.push(v1,v2,v3);
-        }
-        {
-            const v0 = addVertex([grid/2, -grid/2, 0], [0, 1, 0]);
-            const v1 = addVertex([grid/2, -grid/2, depth], [0, 1, 0]);
-            const v2 = addVertex([-grid/2, -grid/2, 0], [0, 1, 0]);
-            const v3 = addVertex([-grid/2, -grid/2, depth], [0, 1, 0]);
-            indices.push(v2,v1,v0);
-            indices.push(v1,v2,v3);
-        }
-        {
-            const v0 = addVertex([-grid/2, grid/2, 0], [0, -1, 0]);
-            const v1 = addVertex([-grid/2, grid/2, depth], [0, -1, 0]);
-            const v2 = addVertex([grid/2, grid/2, 0], [0, -1, 0]);
-            const v3 = addVertex([grid/2, grid/2, depth], [0, -1, 0]);
-            indices.push(v2,v1,v0);
-            indices.push(v1,v2,v3);
-        }
-
-        {
-            const v0 = addVertex([grid/2, -grid/2, depth], [0, 0, -1]);
-            const v1 = addVertex([grid/2, grid/2, depth], [0, 0, -1]);
-            const v2 = addVertex([-grid/2, -grid/2, depth], [0, 0, -1]);
-            const v3 = addVertex([-grid/2, grid/2, depth], [0, 0, -1]);
-            indices.push(v2,v1,v0);
-            indices.push(v1,v2,v3);
-        }
-
-
-        const positionAttribute = new THREE.BufferAttribute(new Float32Array(positionArray), 3, false);
-        const normalAttribute = new THREE.BufferAttribute(new Float32Array(normalArray), 3, false);
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute("position", positionAttribute);
-        geometry.setAttribute("normal", normalAttribute);
-        geometry.setIndex(indices);
+        //const normalMap = await loadTexture(normalMapFile);
+        const aoMap = await loadTexture(aoMapFile);
+        const map = await loadTexture(colorMapFile);
+        const roughnessMap = await loadTexture(roughnessMapFile);
 
         const material = new THREE.MeshStandardNodeMaterial({
             roughness: 0.9,
-            metalness:0.1,
+            metalness:0.0,
+            //normalMap,
+            aoMap,
+            map,
+            roughnessMap,
         });
 
         /*material.colorNode = Fn(() => {
@@ -115,10 +67,10 @@ class BackgroundGeometry {
         })();*/
 
         this.object = new THREE.Mesh(geometry, material);
-        //this.object.castShadow = true;
+        this.object.rotation.set(0, Math.PI, 0);
+        this.object.position.set(0, -0.05, 0.2);
+        this.object.castShadow = true;
         this.object.receiveShadow = true;
-
-
     }
 }
 export default BackgroundGeometry;

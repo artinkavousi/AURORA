@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import {Fn, attribute, triNoise3D, time, vec3, float, varying} from "three/tsl";
+import {Fn, attribute, triNoise3D, time, vec3, float, varying,instanceIndex} from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 class ParticleRenderer {
@@ -14,7 +14,7 @@ class ParticleRenderer {
 
 
         const positionAttribute = this.mlsMpmSim.positionBuffer.toAttribute();
-        const densityAttribute = this.mlsMpmSim.densityBuffer.toAttribute();
+        const densityAttribute = this.mlsMpmSim.densityBuffer.toAttribute().mul(4);
         this.material = new THREE.MeshStandardMaterial({
             metalness: 0.15,
             roughness: 0.95,
@@ -22,13 +22,16 @@ class ParticleRenderer {
         const color = varying(0, "vColor");
         this.material.positionNode = Fn(() => {
             color.assign(float(1.0).sub(densityAttribute.mul(0.18)).mul(positionAttribute.z.div(64).oneMinus()));
-            return attribute("position").mul(densityAttribute.mul(0.2)).add(positionAttribute.mul(vec3(1,1,0.4)));
+            return attribute("position").mul(densityAttribute.mul(0.1).add(0.5)).add(positionAttribute.mul(vec3(1,1,0.4)));
         })();
         this.material.colorNode = Fn(() => {
-            return color;
+            return color.mul(vec3(1,0,1));
+        })();
+        this.material.roughnessNode = Fn(() => {
+            return densityAttribute.mul(0.23).oneMinus();
         })();
         /*this.material.emissiveNode = Fn(() => {
-            return densityAttribute.mul(0.0);
+            return densityAttribute.mul(0.03).mul(vec3(1,0,1));
             const noise = triNoise3D(positionAttribute.mul(0.01), time, 0.2);
             return noise;
         })();*/
@@ -37,6 +40,7 @@ class ParticleRenderer {
         this.object.frustumCulled = false;
         this.object.position.set(-32,-32,0);
         this.object.castShadow = true;
+        this.object.receiveShadow = true;
     }
 }
 export default ParticleRenderer;

@@ -82,7 +82,7 @@ class WaterApp {
             const matrix = mat2(c,-s,s,c);
             const uvt = normalWorld.toVar();
             uvt.xz.mulAssign(matrix);
-            return pmremTexture(hdriTexture, uvt).mul(0.5);
+            return pmremTexture(hdriTexture, uvt).mul(0.05);
         })();
 
         this.scene.backgroundNode = bgNode;
@@ -95,7 +95,7 @@ class WaterApp {
 
         await progressCallback(0.5)
 
-        this.mlsMpmSim = new MlsMpmSimulator(this.renderer, 8192*8);
+        this.mlsMpmSim = new MlsMpmSimulator(this.renderer, 8192*2);
         this.particleRenderer = new ParticleRenderer(this.mlsMpmSim);
         this.scene.add(this.particleRenderer.object);
 

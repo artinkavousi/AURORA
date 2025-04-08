@@ -29,7 +29,7 @@ import {
 } from "three/tsl";
 
 const stiffness = 3.;
-const restDensity = 4.;
+const restDensity = 1.;
 const dynamicViscosity = 0.1;
 
 class mlsMpmSimulator {
@@ -287,7 +287,7 @@ class mlsMpmSimulator {
                 triNoise3D(particlePosition.yzx.mul(0.02), time, 0.22),
                 triNoise3D(particlePosition.zxy.mul(0.02), time, 0.23)
             );
-            particleVelocity.subAssign(noise.sub(0.285).mul(1.93).mul(this.uniforms.dt));
+            particleVelocity.subAssign(noise.sub(0.285).mul(0.93).mul(this.uniforms.dt));
 
             /*const dither = vec3(hash(instanceIndex),hash(instanceIndex.add(1337)),hash(instanceIndex.add(2337))).mul(0.0001);
             particleVelocity.addAssign(dither)*/
@@ -333,7 +333,7 @@ class mlsMpmSimulator {
             const wallStiffness = 0.3;
             const xN = particlePosition.add(particleVelocity.mul(this.uniforms.dt).mul(3.0)).toVar("xN");
             const wallMin = vec3(3).toVar("wallMin");
-            const wallMax = this.uniforms.gridSize.sub(4).toVar("wallMax");
+            const wallMax = vec3(this.uniforms.gridSize).sub(4).toVar("wallMax");
             If(xN.x.lessThan(wallMin.x), () => { particleVelocity.x.addAssign(wallMin.x.sub(xN.x).mul(wallStiffness)); });
             If(xN.x.greaterThan(wallMax.x), () => { particleVelocity.x.addAssign(wallMax.x.sub(xN.x).mul(wallStiffness)); });
             If(xN.y.lessThan(wallMin.y), () => { particleVelocity.y.addAssign(wallMin.y.sub(xN.y).mul(wallStiffness)); });

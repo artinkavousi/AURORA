@@ -70,9 +70,17 @@ class WaterApp {
         //this.scene.add(new THREE.Mesh(new THREE.BoxGeometry(64,64,64)), new THREE.MeshBasicNodeMaterial());
 
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.target.set(0,0.5,0);
+        this.controls.target.set(0,0.5,0.2);
         this.controls.enableDamping = true;
         this.controls.enablePan = false;
+        this.controls.touches = {
+            TWO: THREE.TOUCH.DOLLY_ROTATE,
+        }
+        this.controls.maxDistance = 2.0;
+        this.controls.minPolarAngle = 0.2 * Math.PI;
+        this.controls.maxPolarAngle = 0.8 * Math.PI;
+        this.controls.minAzimuthAngle = 0.7 * Math.PI;
+        this.controls.maxAzimuthAngle = 1.3 * Math.PI;
 
         await progressCallback(0.1)
 
@@ -140,7 +148,7 @@ class WaterApp {
 
         this.raycaster = new THREE.Raycaster();
         this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.2);
-        this.renderer.domElement.addEventListener("mousemove", (event) => { this.onMouseMove(event); });
+        this.renderer.domElement.addEventListener("pointermove", (event) => { this.onMouseMove(event); });
 
         await progressCallback(1.0, 100);
     }

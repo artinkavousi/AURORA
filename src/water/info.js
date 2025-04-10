@@ -21,7 +21,11 @@ export class Info {
         });
         info.addBlade({
             view: "infodump",
-            content: "[> Other experiments](https://holtsetio.com)",
+            content: "Realtime MLS-MPM simulation in the Browser, using WebGPU and written in [ThreeJS](https://threejs.org) TSL. Inspired by the works of [Refik Anadol](https://refikanadol.com/).\n\n" +
+                "MLS-MPM implementation is heavily based on [WebGPU-Ocean](https://github.com/matsuoka-601/WebGPU-Ocean) by [matsuoka-601](https://github.com/matsuoka-601).\n\n" +
+                "[HDRi background](https://polyhaven.com/a/autumn_field_puresky) by Jarod Guest and Sergej Majboroda on [Polyhaven.com](https://polyhaven.com).\n\n" +
+                "[Concrete plaster wall texture](https://www.texturecan.com/details/216/) by [texturecan.com](https://texturecan.com).\n\n" +
+                "[> Other experiments](https://holtsetio.com)",
             markdown: true,
         })
     }

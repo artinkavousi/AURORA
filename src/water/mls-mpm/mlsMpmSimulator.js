@@ -25,8 +25,10 @@ import {
     triNoise3D,
     time,
     struct,
-    NodeAccess, mx_cell_noise_float, cross, mix
+    NodeAccess, mx_cell_noise_float, cross, mix, mx_hsvtorgb, select
 } from "three/tsl";
+import {triNoise3Dvec} from "../common/noise";
+import {conf} from "../conf";
 
 const stiffness = 3.;
 const restDensity = 1.;
@@ -43,17 +45,17 @@ class mlsMpmSimulator {
     mousePos = new THREE.Vector3();
     mousePosArray = [];
 
-    constructor(renderer, numParticles) {
+    constructor(renderer) {
+        const { maxParticles } = conf;
         this.renderer = renderer;
-        this.numParticles = numParticles;
         this.gridSize.set(64,64,64);
         this.gridCellSize.set(1,1,1).divideScalar(16);
 
 
-        this.positionArray = new Float32Array(this.numParticles * 3);
-        this.massArray = new Float32Array(this.numParticles);
+        this.positionArray = new Float32Array(maxParticles * 3);
+        this.massArray = new Float32Array(maxParticles);
         const vec = new THREE.Vector3();
-        for (let i = 0; i < this.numParticles; i++) {
+        for (let i = 0; i < maxParticles; i++) {
             let dist = 2;
             while (dist > 1) {
                 vec.set(Math.random(),Math.random(),Math.random()).multiplyScalar(2.0).subScalar(1.0);
@@ -74,10 +76,11 @@ class mlsMpmSimulator {
 
         this.positionBuffer = instancedArray(this.positionArray, "vec3").label("particlePositionBuffer");
         this.massBuffer = instancedArray(this.massArray, "float").label("particleMassBuffer");
-        this.densityBuffer = instancedArray(this.numParticles, "float").label("particleDensityBuffer");
-        this.velocityBuffer = instancedArray(this.numParticles, "vec3").label("particleVelocityBuffer");
-        this.directionBuffer = instancedArray(this.numParticles, "vec3").label("particleDirectionBuffer");
-        this.CBuffer = instancedArray(this.numParticles, "mat3").label("particleCBuffer");
+        this.densityBuffer = instancedArray(maxParticles, "float").label("particleDensityBuffer");
+        this.velocityBuffer = instancedArray(maxParticles, "vec3").label("particleVelocityBuffer");
+        this.directionBuffer = instancedArray(maxParticles, "vec3").label("particleDirectionBuffer");
+        this.colorBuffer = instancedArray(maxParticles, "vec3").label("particleColorBuffer");
+        this.CBuffer = instancedArray(maxParticles, "mat3").label("particleCBuffer");
 
         const cellCount = this.gridSize.x * this.gridSize.y * this.gridSize.z;
 
@@ -89,7 +92,6 @@ class mlsMpmSimulator {
             mass: { type: 'int', atomic: true },
         } );
         this.cellBuffer = instancedArray(cellCount, cellStruct).setPBO(true).label('cellData');
-        console.log(cellStruct, this.cellBuffer);
 
         this.cellBufferF = instancedArray(cellCount, 'vec4').label('cellDataF');
         /*this.cellBufferVx = instancedArray(cellCount, 'int').setPBO(true).toAtomic().label('cellDataVX');
@@ -97,9 +99,15 @@ class mlsMpmSimulator {
         this.cellBufferVz = instancedArray(cellCount, 'int').setPBO(true).toAtomic().label('cellDataVZ');
         this.cellBufferMass = instancedArray(cellCount, 'int').setPBO(true).toAtomic().label('cellDataMass');*/
 
+        this.uniforms.gravity = uniform(0, "uint");
+        this.uniforms.stiffness = uniform(0);
+        this.uniforms.restDensity = uniform(0);
+        this.uniforms.dynamicViscosity = uniform(0);
+
         this.uniforms.gridSize = uniform(this.gridSize, "ivec3");
         this.uniforms.gridCellSize = uniform(this.gridCellSize);
         this.uniforms.dt = uniform(0.1);
+        this.uniforms.numParticles = uniform(0, "uint");
 
         this.uniforms.mouseRayDirection = uniform(new THREE.Vector3());
         this.uniforms.mouseRayOrigin = uniform(new THREE.Vector3());
@@ -124,7 +132,7 @@ class mlsMpmSimulator {
             atomicStore(this.cellBufferVx.element(instanceIndex), 0);
             atomicStore(this.cellBufferVy.element(instanceIndex), 0);
             atomicStore(this.cellBufferVz.element(instanceIndex), 0);*/
-        })().debug().compute(cellCount);
+        })().compute(cellCount);
 
         const encodeFixedPoint = (f32) => {
             return int(f32.mul(this.fixedPointMultiplier));
@@ -139,7 +147,7 @@ class mlsMpmSimulator {
             this.cellBuffer.structTypeNode.membersLayout[2].atomic = true;
             this.cellBuffer.structTypeNode.membersLayout[3].atomic = true;
 
-            If(instanceIndex.greaterThanEqual(uint(this.numParticles)), () => {
+            If(instanceIndex.greaterThanEqual(uint(this.uniforms.numParticles)), () => {
                 Return();
             });
             const gridSize = this.uniforms.gridSize;
@@ -163,7 +171,7 @@ class mlsMpmSimulator {
 
                         const massContrib = weight; // assuming particle mass = 1.0
                         const velContrib = massContrib.mul(particleVelocity.add(Q)).toVar("velContrib");
-                        const cellPtr = int(cellX.x).mul(gridSize.y).mul(gridSize.z).add(int(cellX.y).mul(gridSize.z)).add(int(cellX.z)).toVar("cellIndex");
+                        const cellPtr = int(cellX.x).mul(gridSize.y).mul(gridSize.z).add(int(cellX.y).mul(gridSize.z)).add(int(cellX.z)).toVar("cellPtr");
                         atomicAdd(this.cellBuffer.element(cellPtr).get('x'), encodeFixedPoint(velContrib.x));
                         atomicAdd(this.cellBuffer.element(cellPtr).get('y'), encodeFixedPoint(velContrib.y));
                         atomicAdd(this.cellBuffer.element(cellPtr).get('z'), encodeFixedPoint(velContrib.z));
@@ -171,7 +179,7 @@ class mlsMpmSimulator {
                     });
                 });
             });
-        })().debug().compute(this.numParticles);
+        })().compute(1);
 
 
         this.kernels.p2g2 = Fn(() => {
@@ -180,7 +188,7 @@ class mlsMpmSimulator {
             this.cellBuffer.structTypeNode.membersLayout[2].atomic = true;
             this.cellBuffer.structTypeNode.membersLayout[3].atomic = false;
 
-            If(instanceIndex.greaterThanEqual(uint(this.numParticles)), () => {
+            If(instanceIndex.greaterThanEqual(uint(this.uniforms.numParticles)), () => {
                 Return();
             });
             const gridSize = this.uniforms.gridSize;
@@ -199,7 +207,7 @@ class mlsMpmSimulator {
                     Loop({ start: 0, end: 3, type: 'int', name: 'gz', condition: '<' }, ({gz}) => {
                         const weight = weights.element(gx).x.mul(weights.element(gy).y).mul(weights.element(gz).z);
                         const cellX = cellIndex.add(vec3(gx,gy,gz)).sub(1).toVar();
-                        const cellPtr = int(cellX.x).mul(gridSize.y).mul(gridSize.z).add(int(cellX.y).mul(gridSize.z)).add(int(cellX.z)).toVar("cellIndex");
+                        const cellPtr = int(cellX.x).mul(gridSize.y).mul(gridSize.z).add(int(cellX.y).mul(gridSize.z)).add(int(cellX.z)).toVar("cellPtr");
                         density.addAssign(decodeFixedPoint(this.cellBuffer.element(cellPtr).get('mass')).mul(weight));
                     });
                 });
@@ -209,12 +217,12 @@ class mlsMpmSimulator {
             densityStore.assign(mix(densityStore, density, 0.05));
 
             const volume = float(1).div(density);
-            const pressure = max(0.0, pow(density.div(restDensity), 5.0).sub(1).mul(stiffness));
+            const pressure = max(0.0, pow(density.div(this.uniforms.restDensity), 5.0).sub(1).mul(this.uniforms.stiffness));
             const stress = mat3(pressure.negate(), 0, 0, 0, pressure.negate(), 0, 0, 0, pressure.negate()).toVar();
             const dudv = this.CBuffer.element(instanceIndex);
 
             const strain = dudv.add(dudv.transpose());
-            stress.addAssign(strain.mul(dynamicViscosity));
+            stress.addAssign(strain.mul(this.uniforms.dynamicViscosity));
             const eq16Term0 = volume.mul(-4).mul(stress).mul(this.uniforms.dt);
 
             Loop({ start: 0, end: 3, type: 'int', name: 'gx', condition: '<' }, ({gx}) => {
@@ -223,7 +231,7 @@ class mlsMpmSimulator {
                         const weight = weights.element(gx).x.mul(weights.element(gy).y).mul(weights.element(gz).z);
                         const cellX = cellIndex.add(vec3(gx,gy,gz)).sub(1).toVar();
                         const cellDist = cellX.add(0.5).sub(particlePosition);
-                        const cellPtr = int(cellX.x).mul(gridSize.y).mul(gridSize.z).add(int(cellX.y).mul(gridSize.z)).add(int(cellX.z)).toVar("cellIndex");
+                        const cellPtr = int(cellX.x).mul(gridSize.y).mul(gridSize.z).add(int(cellX.y).mul(gridSize.z)).add(int(cellX.z)).toVar("cellPtr2");
 
                         const momentum = eq16Term0.mul(weight).mul(cellDist).toVar("momentum");
                         atomicAdd(this.cellBuffer.element(cellPtr).get('x'), encodeFixedPoint(momentum.x));
@@ -232,7 +240,7 @@ class mlsMpmSimulator {
                     });
                 });
             });
-        })().debug().compute(this.numParticles);
+        })().compute(1);
 
 
 
@@ -281,25 +289,33 @@ class mlsMpmSimulator {
             this.cellBufferVy.element(instanceIndex).assign(encodeFixedPoint(vy));
             this.cellBufferVz.element(instanceIndex).assign(encodeFixedPoint(vz));*/
             this.cellBufferF.element(instanceIndex).assign(vec4(vx,vy,vz,mass));
-        })().debug().compute(cellCount);
+        })().compute(cellCount);
 
         this.kernels.g2p = Fn(() => {
-            If(instanceIndex.greaterThanEqual(uint(this.numParticles)), () => {
+            If(instanceIndex.greaterThanEqual(uint(this.uniforms.numParticles)), () => {
                 Return();
             });
             const gridSize = this.uniforms.gridSize;
             const particleMass = this.massBuffer.element(instanceIndex).toVar("particleMass");
+            const particleDensity = this.densityBuffer.element(instanceIndex).toVar("particleDensity");
             const particlePosition = this.positionBuffer.element(instanceIndex).xyz.toVar("particlePosition");
             const particleVelocity = vec3(0).toVar();
-            const pn = particlePosition.div(vec3(this.uniforms.gridSize.sub(1))).sub(0.5).normalize().toVar();
-            //particleVelocity.subAssign(pn.mul(0.3).mul(this.uniforms.dt));
-            particleVelocity.z.subAssign(float(-0.2).mul(this.uniforms.dt));
-            const noise = vec3(
+            If(this.uniforms.gravity.equal(uint(2)), () => {
+                const pn = particlePosition.div(vec3(this.uniforms.gridSize.sub(1))).sub(0.5).normalize().toVar();
+                particleVelocity.subAssign(pn.mul(0.3).mul(this.uniforms.dt));
+            }).Else(() => {
+                const gravity = select(this.uniforms.gravity.equal(uint(0)), vec3(0,0,0.2), vec3(0,-0.2,0));
+                particleVelocity.addAssign(gravity.mul(this.uniforms.dt));
+            });
+
+
+            /*const noise = vec3(
                 triNoise3D(particlePosition.mul(0.015), time, 0.21),
                 triNoise3D(particlePosition.yzx.mul(0.015), time, 0.22),
                 triNoise3D(particlePosition.zxy.mul(0.015), time, 0.23)
-            );
-            particleVelocity.subAssign(noise.sub(0.285).mul(1.93).mul(this.uniforms.dt));
+            ).sub(0.285).normalize().mul(0.15).toVar();*/
+            const noise = triNoise3Dvec(particlePosition.mul(0.015), time, 0.11).sub(0.285).normalize().mul(0.15).toVar();
+            particleVelocity.subAssign(noise.mul(1.93).mul(this.uniforms.dt));
 
             /*const dither = vec3(hash(instanceIndex),hash(instanceIndex.add(1337)),hash(instanceIndex.add(2337))).mul(0.0001);
             particleVelocity.addAssign(dither)*/
@@ -318,7 +334,7 @@ class mlsMpmSimulator {
                         const weight = weights.element(gx).x.mul(weights.element(gy).y).mul(weights.element(gz).z);
                         const cellX = cellIndex.add(vec3(gx,gy,gz)).sub(1).toVar();
                         const cellDist = cellX.add(0.5).sub(particlePosition).toVar("cellDist");
-                        const cellPtr = int(cellX.x).mul(gridSize.y).mul(gridSize.z).add(int(cellX.y).mul(gridSize.z)).add(int(cellX.z)).toVar("cellIndex");
+                        const cellPtr = int(cellX.x).mul(gridSize.y).mul(gridSize.z).add(int(cellX.y).mul(gridSize.z)).add(int(cellX.z)).toVar("cellPtr");
 
                         const weightedVelocity = this.cellBufferF.element(cellPtr).xyz.mul(weight).toVar("weightedVelocity");
                         const term = mat3(
@@ -332,7 +348,7 @@ class mlsMpmSimulator {
                 });
             });
 
-            const dist = cross(this.uniforms.mouseRayDirection, particlePosition.sub(this.uniforms.mouseRayOrigin)).length()
+            const dist = cross(this.uniforms.mouseRayDirection, particlePosition.mul(vec3(1,1,0.4)).sub(this.uniforms.mouseRayOrigin)).length()
             const force = dist.mul(0.1).oneMinus().max(0.0).pow(2);
             //particleVelocity.assign(mix(particleVelocity, this.uniforms.mouseForce.mul(6), force));
             particleVelocity.addAssign(this.uniforms.mouseForce.mul(1).mul(force));
@@ -361,19 +377,47 @@ class mlsMpmSimulator {
             const direction = this.directionBuffer.element(instanceIndex);
             direction.assign(mix(direction,particleVelocity, 0.1));
 
-        })().debug().compute(this.numParticles);
+            const color = mx_hsvtorgb(vec3(particleDensity.div(this.uniforms.restDensity).mul(0.25).add(time.mul(0.05)), particleVelocity.length().mul(0.5).clamp(0,1).mul(0.3).add(0.7), force.mul(0.3).add(0.7)));
+            this.colorBuffer.element(instanceIndex).assign(color);
+
+        })().compute(1);
     }
 
     setMouseRay(origin, direction, pos) {
         origin.multiplyScalar(64);
         pos.multiplyScalar(64);
-        origin.add(new THREE.Vector3(32,2,0));
-        this.uniforms.mouseRayDirection.value.copy(direction);
+        //direction.setZ(direction.z / 0.4);
+        origin.add(new THREE.Vector3(32,0,0));
+        this.uniforms.mouseRayDirection.value.copy(direction.normalize());
         this.uniforms.mouseRayOrigin.value.copy(origin);
         this.mousePos.copy(pos);
     }
 
     async update(interval, elapsed) {
+        const { particles, run, dynamicViscosity, stiffness, restDensity, speed, gravity } = conf;
+
+        this.uniforms.stiffness.value = stiffness;
+        this.uniforms.gravity.value = gravity;
+        this.uniforms.dynamicViscosity.value = dynamicViscosity;
+        this.uniforms.restDensity.value = restDensity;
+
+        if (particles !== this.numParticles) {
+            this.numParticles = particles;
+            this.uniforms.numParticles.value = particles;
+            this.kernels.p2g1.count = particles;
+            this.kernels.p2g1.updateDispatchCount();
+            this.kernels.p2g2.count = particles;
+            this.kernels.p2g2.updateDispatchCount();
+            this.kernels.g2p.count = particles;
+            this.kernels.g2p.updateDispatchCount();
+        }
+
+
+        interval = Math.min(interval, 1/60);
+        const dt = interval * 6 * speed;
+        this.uniforms.dt.value = dt;
+
+
         this.mousePosArray.push(this.mousePos.clone())
         if (this.mousePosArray.length > 3) { this.mousePosArray.shift(); }
         //this.mousePos.set(0,0,0);
@@ -382,14 +426,15 @@ class mlsMpmSimulator {
         }
 
 
-        await this.renderer.computeAsync(this.kernels.clearGrid);
-        await this.renderer.computeAsync(this.kernels.p2g1);
-        await this.renderer.computeAsync(this.kernels.p2g2);
-
-
-        await this.renderer.computeAsync(this.kernels.updateGrid);
-
-        await this.renderer.computeAsync(this.kernels.g2p);
+        if (run) {
+            for (let i = 0; i < 1; i++) {
+                await this.renderer.computeAsync(this.kernels.clearGrid);
+                await this.renderer.computeAsync(this.kernels.p2g1);
+                await this.renderer.computeAsync(this.kernels.p2g2);
+                await this.renderer.computeAsync(this.kernels.updateGrid);
+                await this.renderer.computeAsync(this.kernels.g2p);
+            }
+        }
 
         //console.log(this.cellBufferMass, this.renderer.backend.get(this.cellBufferMass.value));
         //const result = new Int32Array(await this.renderer.getArrayBufferAsync(this.cellBufferMass.value));

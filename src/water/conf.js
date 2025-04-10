@@ -1,13 +1,44 @@
 import {Pane} from 'tweakpane';
 import * as EssentialsPlugin from '@tweakpane/plugin-essentials';
+import mobile from "is-mobile";
 
 class Conf {
     gui = null;
 
     wireframe = false;
 
-    constructor() {
+    maxParticles = 8192 * 16;
+    particles = 8192 * 4;
 
+    bloom = true;
+
+    run = true;
+    speed = 1;
+    stiffness = 3.;
+    restDensity = 1.;
+    density = 1;
+    dynamicViscosity = 0.1;
+    gravity = 0;
+    actualSize = 1;
+    size = 1;
+
+    roughness = 0.5;
+    metalness = 0.95;
+
+    constructor() {
+        if (mobile()) {
+            this.maxParticles = 8192 * 4;
+            this.particles = 4096;
+        }
+        this.updateParams();
+
+    }
+
+    updateParams() {
+        const level = Math.max(this.particles / 8192,1);
+        const size = 1.6/Math.pow(level, 1/3);
+        this.actualSize = size * this.size;
+        this.restDensity = 0.25 * level * this.density;
     }
 
     init() {
@@ -28,7 +59,35 @@ class Conf {
             title: "settings",
             expanded: false,
         });
-        settings.addBinding(this, "wireframe");
+        settings.addBinding(this, "particles", { min: 4096, max: this.maxParticles, step: 4096 }).on('change', () => { this.updateParams(); });
+        settings.addBinding(this, "size", { min: 0.5, max: 2, step: 0.1 }).on('change', () => { this.updateParams(); });
+        settings.addBinding(this, "bloom");
+
+        const simulation = settings.addFolder({
+            title: "simulation",
+            expanded: false,
+        });
+        simulation.addBinding(this, "run");
+        simulation.addBinding(this, "speed", { min: 0.1, max: 2, step: 0.1 });
+        simulation.addBlade({
+            view: 'list',
+            label: 'gravity',
+            options: [
+                {text: 'back', value: 0},
+                {text: 'down', value: 1},
+                {text: 'center', value: 2},
+            ],
+            value: 0,
+        }).on('change', (ev) => {
+            this.gravity = ev.value;
+        });
+        simulation.addBinding(this, "density", { min: 0.4, max: 2, step: 0.1 }).on('change', () => { this.updateParams(); });;
+        /*simulation.addBinding(this, "stiffness", { min: 0.5, max: 10, step: 0.1 });
+        simulation.addBinding(this, "restDensity", { min: 0.5, max: 10, step: 0.1 });
+        simulation.addBinding(this, "dynamicViscosity", { min: 0.01, max: 0.4, step: 0.01 });*/
+
+        /*settings.addBinding(this, "roughness", { min: 0.0, max: 1, step: 0.01 });
+        settings.addBinding(this, "metalness", { min: 0.0, max: 1, step: 0.01 });*/
 
         this.gui = gui;
     }

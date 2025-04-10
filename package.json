@@ -1,5 +1,5 @@
 {
-  "name": "softbody",
+  "name": "enigma",
   "version": "0.0.1",
   "description": "",
   "browserslist": "> 0.5%, last 2 versions, not dead",
@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@tweakpane/plugin-essentials": "^0.2.1",
+    "is-mobile": "^5.0.0",
     "three": "^0.175.0",
     "tweakpane": "^4.0.5",
     "tweakpane-plugin-infodump": "^4.0.2"

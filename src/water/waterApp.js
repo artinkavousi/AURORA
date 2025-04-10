@@ -8,20 +8,21 @@ import {
     dot, float,
     Fn,
     fog, mat2,
-    mix,
+    mix, mrt,
     normalView,
-    normalWorld,
+    normalWorld, output, pass,
     pmremTexture,
     rangeFogFactor,
     smoothstep,
     varying,
-    vec3
+    vec3, vec4
 } from "three/tsl";
 import {conf} from "./conf";
 import {Info} from "./info";
 import MlsMpmSimulator from "./mls-mpm/mlsMpmSimulator";
 import ParticleRenderer from "./mls-mpm/particleRenderer";
 import BackgroundGeometry from "./backgroundGeometry";
+import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
 
 const loadHdr = async (file) => {
     const texture = await new Promise(resolve => {
@@ -71,6 +72,7 @@ class WaterApp {
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.target.set(0,0.5,0);
         this.controls.enableDamping = true;
+        this.controls.enablePan = false;
 
         await progressCallback(0.1)
 
@@ -82,12 +84,12 @@ class WaterApp {
             const matrix = mat2(c,-s,s,c);
             const uvt = normalWorld.toVar();
             uvt.xz.mulAssign(matrix);
-            return pmremTexture(hdriTexture, uvt).mul(0.5);
+            return pmremTexture(hdriTexture, uvt).mul(0.51);
         })();
 
-        this.scene.backgroundNode = bgNode.div(0.5);
+        this.scene.backgroundNode = bgNode.mul(2);
         this.scene.environmentNode = bgNode;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        //this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 0.66;
 
         this.renderer.shadowMap.enabled = true;
@@ -95,7 +97,7 @@ class WaterApp {
 
         await progressCallback(0.5)
 
-        this.mlsMpmSim = new MlsMpmSimulator(this.renderer, 8192*8);
+        this.mlsMpmSim = new MlsMpmSimulator(this.renderer);
         this.particleRenderer = new ParticleRenderer(this.mlsMpmSim);
         this.scene.add(this.particleRenderer.object);
 
@@ -105,6 +107,36 @@ class WaterApp {
         const backgroundGeometry = new BackgroundGeometry();
         await backgroundGeometry.init();
         this.scene.add(backgroundGeometry.object);
+
+
+        const scenePass = pass(this.scene, this.camera);
+        scenePass.setMRT( mrt( {
+            output,
+            bloomIntensity: float( 0 ) // default bloom intensity
+        } ) );
+        const outputPass = scenePass.getTextureNode();
+        const bloomIntensityPass = scenePass.getTextureNode( 'bloomIntensity' );
+        const bloomPass = bloom( outputPass.mul( bloomIntensityPass ) );
+        const postProcessing = new THREE.PostProcessing(this.renderer);
+        postProcessing.outputColorTransform = false;
+        //postProcessing.outputNode = vec4(outputPass.rgb, 1).add( vec4(bloomPass.mul(bloomIntensityPass.sign().oneMinus()).rgb, 0.0) ).renderOutput();
+        //postProcessing.outputNode = outputPass.renderOutput();
+        //(1-2b)*a*a + 2ba
+        postProcessing.outputNode = Fn(() => {
+            const a = outputPass.rgb.clamp(0,1).toVar();
+            const b = bloomPass.rgb.clamp(0,1).mul(bloomIntensityPass.r.sign().oneMinus()).toVar();
+            //return vec4(vec3(1).sub(b).sub(b).mul(a).mul(a).mul(0.0),1.0);
+            //return b;
+            //return a.div(b.oneMinus().max(0.0001)).clamp(0,1);
+            return vec4(vec3(1).sub(b).sub(b).mul(a).mul(a).add(b.mul(a).mul(2)).clamp(0,1),1.0);
+        })().renderOutput();
+
+        this.postProcessing = postProcessing;
+        this.bloomPass = bloomPass;
+        this.bloomPass.threshold.value = 0.001;
+        this.bloomPass.strength.value = 0.94;
+        this.bloomPass.radius.value = 0.8;
+
 
         this.raycaster = new THREE.Raycaster();
         this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.2);
@@ -135,10 +167,16 @@ class WaterApp {
         conf.begin();
         this.controls.update(delta);
         this.lights.update(elapsed);
+        this.particleRenderer.update();
 
         await this.mlsMpmSim.update(delta,elapsed);
 
-        await this.renderer.renderAsync(this.scene, this.camera);
+        if (conf.bloom) {
+            await this.postProcessing.renderAsync();
+        } else {
+            await this.renderer.renderAsync(this.scene, this.camera);
+        }
+
         conf.end();
     }
 }

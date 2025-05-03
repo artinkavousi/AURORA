@@ -2,7 +2,7 @@ import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import {Lights} from "./lights";
-import hdri from "../assets/autumn_field_puresky_1k.hdr";
+import hdri from "./assets/autumn_field_puresky_1k.hdr";
 
 import {
     dot, float,
@@ -41,7 +41,7 @@ const loadTexture = (file) => {
     });
 }
 
-class WaterApp {
+class App {
     renderer = null;
 
     camera = null;
@@ -51,6 +51,10 @@ class WaterApp {
     controls = null;
 
     lights = null;
+
+    duration = [0,0,0,0,0];
+
+    framenum = 0;
 
     constructor(renderer) {
         this.renderer = renderer;
@@ -86,10 +90,10 @@ class WaterApp {
 
         const hdriTexture = await loadHdr(hdri);
 
+        const angle = -2.15;
+        const s = Math.sin(angle), c = Math.cos(angle);
         const bgNode = Fn(() => {
-            const angle = -2.15;
-            const s = Math.sin(angle), c = Math.cos(angle);
-            const matrix = mat2(c,-s,s,c);
+            const matrix = mat2(c,s,s,c);
             const uvt = normalWorld.toVar();
             uvt.xz.mulAssign(matrix);
             return pmremTexture(hdriTexture, uvt).mul(0.51);
@@ -106,6 +110,7 @@ class WaterApp {
         await progressCallback(0.5)
 
         this.mlsMpmSim = new MlsMpmSimulator(this.renderer);
+        await this.mlsMpmSim.init();
         this.particleRenderer = new ParticleRenderer(this.mlsMpmSim);
         this.scene.add(this.particleRenderer.object);
 
@@ -177,7 +182,7 @@ class WaterApp {
         this.lights.update(elapsed);
         this.particleRenderer.update();
 
-        await this.mlsMpmSim.update(delta,elapsed);
+        await this.mlsMpmSim.update(delta,elapsed,this.framenum);
 
         if (conf.bloom) {
             await this.postProcessing.renderAsync();
@@ -185,7 +190,23 @@ class WaterApp {
             await this.renderer.renderAsync(this.scene, this.camera);
         }
 
+
+        this.renderer.resolveTimestampsAsync( THREE.TimestampQuery.COMPUTE );
+        this.renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER );
+        this.duration[this.framenum % 5] = 0.9*this.duration[this.framenum % 5] + 0.1*this.renderer.info.render.timestamp;
+        let infotext = '';
+        for (let i=0; i<5; i++) {
+            infotext += this.duration[i].toFixed( 2 ) + "ms\n\n";
+        }
+        this.info.setText(infotext);
+        //console.log(this.renderer.info);
+        //console.log(this.framenum % 5, this.renderer.info.compute.frameCalls);
+        //this.info.setText(`Compute ${this.renderer.info.compute.frameCalls} pass in ${this.duration.toFixed( 2 )}ms (${this.renderer.info.compute.timestamp})`);
+
+
         conf.end();
+
+        this.framenum++;
     }
 }
-export default WaterApp;
+export default App;

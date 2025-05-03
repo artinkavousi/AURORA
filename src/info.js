@@ -19,7 +19,7 @@ export class Info {
             title: "info",
             expanded: false,
         });
-        info.addBlade({
+        this.textBlade = info.addBlade({
             view: "infodump",
             content: "Realtime MLS-MPM simulation in the Browser, using WebGPU and written in [ThreeJS](https://threejs.org) TSL. Inspired by the works of [Refik Anadol](https://refikanadol.com/).\n\n" +
                 "MLS-MPM implementation is heavily based on [WebGPU-Ocean](https://github.com/matsuoka-601/WebGPU-Ocean) by [matsuoka-601](https://github.com/matsuoka-601).\n\n" +
@@ -28,5 +28,9 @@ export class Info {
                 "[> Other experiments](https://holtsetio.com)",
             markdown: true,
         })
+    }
+    setText(c) {
+        this.textBlade.controller.view.element.innerHTML = '<div class="tp-induv_t"><p>' + c + '</p></div>';
+        this.pane.refresh();
     }
 }

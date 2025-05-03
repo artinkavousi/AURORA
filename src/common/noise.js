@@ -61,7 +61,7 @@ export const triNoise3Dvec = /*@__PURE__*/ Fn( ( [ position, speed, time ] ) => 
         z.mulAssign( 1.5 );
         p.mulAssign( 1.2 );
 
-        const t = trivec( p.zxy.add( tri( p.xyz.add( tri( p.yzx ) ) ) ) ).toVar();
+        const t = trivec( p.zxy.add( trivec( p.xyz.add( trivec( p.yzx ) ) ) ) ).toVar();
         rz.addAssign( t.div( z ) );
         bp.addAssign( 0.14 );
 

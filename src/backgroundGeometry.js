@@ -20,12 +20,12 @@ import {
 import {OBJLoader} from "three/examples/jsm/loaders/OBJLoader";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 //import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
-import boxObj from 'bundle-text:../assets/boxSlightlySmooth.obj';
+import boxObj from './assets/boxSlightlySmooth.obj';
 
-import normalMapFile from '../assets/concrete_0016_normal_opengl_1k.png';
-import aoMapFile from '../assets/concrete_0016_ao_1k.jpg';
-import colorMapFile from '../assets/concrete_0016_color_1k.jpg';
-import roughnessMapFile from '../assets/concrete_0016_roughness_1k.jpg';
+import normalMapFile from './assets/concrete_0016_normal_opengl_1k.png';
+import aoMapFile from './assets/concrete_0016_ao_1k.jpg';
+import colorMapFile from './assets/concrete_0016_color_1k.jpg';
+import roughnessMapFile from './assets/concrete_0016_roughness_1k.jpg';
 
 /*import metalNormalMapFile from '../assets/metal_0056_normal_opengl_1k.png';
 import metalAoMapFile from '../assets/metal_0056_ao_1k.jpg';
@@ -89,7 +89,7 @@ class BackgroundGeometry {
         this.box.receiveShadow = true;
 
         this.object = new THREE.Object3D();
-        this.object.add(this.box);
+        //this.object.add(this.box);
 
         /*
         const mnormalMap = await loadTexture(metalNormalMapFile);

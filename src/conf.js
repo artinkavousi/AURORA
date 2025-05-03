@@ -7,12 +7,13 @@ class Conf {
 
     wireframe = false;
 
-    maxParticles = 8192 * 16;
+    maxParticles = 8192 * 128;
     particles = 8192 * 4;
 
     bloom = true;
 
     run = true;
+    noise = 1.0;
     speed = 1;
     stiffness = 3.;
     restDensity = 1.;
@@ -68,6 +69,7 @@ class Conf {
             expanded: false,
         });
         simulation.addBinding(this, "run");
+        simulation.addBinding(this, "noise", { min: 0, max: 2, step: 0.01 });
         simulation.addBinding(this, "speed", { min: 0.1, max: 2, step: 0.1 });
         simulation.addBlade({
             view: 'list',

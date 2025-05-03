@@ -182,7 +182,7 @@ class App {
         this.lights.update(elapsed);
         this.particleRenderer.update();
 
-        await this.mlsMpmSim.update(delta,elapsed,this.framenum);
+        await this.mlsMpmSim.update(delta,elapsed);
 
         if (conf.bloom) {
             await this.postProcessing.renderAsync();
@@ -190,7 +190,7 @@ class App {
             await this.renderer.renderAsync(this.scene, this.camera);
         }
 
-
+        /*
         this.renderer.resolveTimestampsAsync( THREE.TimestampQuery.COMPUTE );
         this.renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER );
         this.duration[this.framenum % 5] = 0.9*this.duration[this.framenum % 5] + 0.1*this.renderer.info.render.timestamp;
@@ -202,6 +202,7 @@ class App {
         //console.log(this.renderer.info);
         //console.log(this.framenum % 5, this.renderer.info.compute.frameCalls);
         //this.info.setText(`Compute ${this.renderer.info.compute.frameCalls} pass in ${this.duration.toFixed( 2 )}ms (${this.renderer.info.compute.timestamp})`);
+        */
 
 
         conf.end();

@@ -89,7 +89,7 @@ class BackgroundGeometry {
         this.box.receiveShadow = true;
 
         this.object = new THREE.Object3D();
-        //this.object.add(this.box);
+        this.object.add(this.box);
 
         /*
         const mnormalMap = await loadTexture(metalNormalMapFile);

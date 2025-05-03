@@ -28,7 +28,7 @@ class Conf {
 
     constructor() {
         if (mobile()) {
-            this.maxParticles = 8192 * 4;
+            this.maxParticles = 8192 * 8;
             this.particles = 4096;
         }
         this.updateParams();

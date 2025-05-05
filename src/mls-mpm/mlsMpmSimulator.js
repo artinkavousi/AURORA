@@ -24,6 +24,7 @@ import {
 import {triNoise3Dvec} from "../common/noise";
 import {conf} from "../conf";
 import {StructuredArray} from "./structuredArray.js";
+import {hsvtorgb} from "../common/hsv.js";
 
 class mlsMpmSimulator {
     renderer = null;
@@ -337,7 +338,7 @@ class mlsMpmSimulator {
             const direction = this.particleBuffer.element(instanceIndex).get('direction');
             direction.assign(mix(direction,particleVelocity, 0.1));
 
-            const color = mx_hsvtorgb(vec3(particleDensity.div(this.uniforms.restDensity).mul(0.25).add(time.mul(0.05)), particleVelocity.length().mul(0.5).clamp(0,1).mul(0.3).add(0.7), force.mul(0.3).add(0.7)));
+            const color = hsvtorgb(vec3(particleDensity.div(this.uniforms.restDensity).mul(0.25).add(time.mul(0.05)), particleVelocity.length().mul(0.5).clamp(0,1).mul(0.3).add(0.7), force.mul(0.3).add(0.7)));
             this.particleBuffer.element(instanceIndex).get('color').assign(color);
         })().compute(1);
     }

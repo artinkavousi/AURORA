@@ -92,8 +92,8 @@ class App {
 
         const angle = -2.15;
         const s = Math.sin(angle), c = Math.cos(angle);
+        const matrix = mat2(c,-s,s,c);
         const bgNode = Fn(() => {
-            const matrix = mat2(c,s,s,c);
             const uvt = normalWorld.toVar();
             uvt.xz.mulAssign(matrix);
             return pmremTexture(hdriTexture, uvt).mul(0.51);

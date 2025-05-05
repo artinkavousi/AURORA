@@ -1,12 +1,10 @@
 import * as THREE from "three/webgpu";
 import {Fn, attribute, triNoise3D, time, vec3, float, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform} from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import {conf} from "../conf";
 
 
 export const calcLookAtMatrix = /*#__PURE__*/ Fn( ( [ target_immutable ] ) => {
-
     const target = vec3( target_immutable ).toVar();
     const rr = vec3( 0,0,1.0 ).toVar();
     const ww = vec3( normalize( target ) ).toVar();
@@ -14,7 +12,6 @@ export const calcLookAtMatrix = /*#__PURE__*/ Fn( ( [ target_immutable ] ) => {
     const vv = vec3( normalize( cross( uu, ww ) ).negate() ).toVar();
 
     return mat3( uu, vv, ww );
-
 } ).setLayout( {
     name: 'calcLookAtMatrix',
     type: 'mat3',
@@ -42,9 +39,7 @@ const createRoundedBox = (width, height, depth, radius) => {
         vertex.id = i;
         vertex.faces = [];
         vertex.posHash = oldPosition.toArray().map(v => Math.round(v / epsilon)).join("_");
-        const posMapEntry = posMap[vertex.posHash] || [];
-        posMapEntry.push(vertex);
-        posMap[vertex.posHash] = posMapEntry;
+        posMap[vertex.posHash] = [...(posMap[vertex.posHash] || []), vertex];
         vertices.push(vertex);
     }
     vertices.forEach(vertex => {
@@ -110,8 +105,6 @@ class ParticleRenderer {
             return this.mlsMpmSim.particleBuffer.element(instanceIndex).get('position').mul(vec3(1,1,0.4));
         })();*/
 
-        this.geometry = createRoundedBox(0.7,0.7,3,0.1);
-
         /*const box = new THREE.BoxGeometry(0.7, 0.7,3);
         const cone = new THREE.ConeGeometry( 0.5, 3.0, 8 );
         cone.applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI* 0.5, 0, 0)))
@@ -133,10 +126,6 @@ class ParticleRenderer {
         this.geometry.setDrawRange(0, this.defaultIndexCount);
         this.geometry.instanceCount = this.mlsMpmSim.numParticles;
 
-        const positionAttribute = this.mlsMpmSim.particleBuffer.element(instanceIndex).get('position');
-        const colorAttribute = this.mlsMpmSim.particleBuffer.element(instanceIndex).get('color');
-        const directionAttribute = this.mlsMpmSim.particleBuffer.element(instanceIndex).get('direction');
-        const densityAttribute = this.mlsMpmSim.particleBuffer.element(instanceIndex).get('density');
         this.material = new THREE.MeshPhysicalNodeMaterial({
             metalness: 0.970035,
             roughness: 0.5095,
@@ -146,16 +135,21 @@ class ParticleRenderer {
         this.uniforms.size = uniform(1);
         const vAo = varying(0, "vAo");
         const vNormal = varying(vec3(0), "v_normalView");
-        const vColor = varying(vec3(0), "v_color");
+
+        const particle = this.mlsMpmSim.particleBuffer.element(instanceIndex);
         this.material.positionNode = Fn(() => {
+            const particlePosition = particle.get("position");
+            const particleDensity = particle.get("density");
+            const particleDirection = particle.get("direction");
+
             //return attribute("position").xyz.mul(10).add(vec3(32,32,0));
             //return attribute("position").xyz.mul(0.1).add(positionAttribute.mul(vec3(1,1,0.4)));
-            const mat = calcLookAtMatrix(directionAttribute.xyz);
+            const mat = calcLookAtMatrix(particleDirection.xyz);
             vNormal.assign(transformNormalToView(mat.mul(normalLocal)));
-            vAo.assign(float(1.0).mul(positionAttribute.z.div(64).pow(2).oneMinus())); //sub(densityAttribute.mul(0.18)).max(0).
-            return mat.mul(attribute("position").xyz.mul(this.uniforms.size)).mul(densityAttribute.mul(0.4).add(0.5).clamp(0,1)).mul(1).add(positionAttribute.mul(vec3(1,1,0.4)));
+            vAo.assign(float(1.0).mul(particlePosition.z.div(64).pow(2).oneMinus())); //sub(densityAttribute.mul(0.18)).max(0).
+            return mat.mul(attribute("position").xyz.mul(this.uniforms.size)).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1)).mul(1).add(particlePosition.mul(vec3(1,1,0.4)));
         })();
-        this.material.colorNode = colorAttribute;
+        this.material.colorNode = particle.get("color");
         this.material.aoNode = vAo;
         //this.material.envNode = vec3(0.5);
 

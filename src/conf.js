@@ -7,7 +7,7 @@ class Conf {
 
     wireframe = false;
 
-    maxParticles = 8192 * 128;
+    maxParticles = 8192 * 16;
     particles = 8192 * 4;
 
     bloom = true;

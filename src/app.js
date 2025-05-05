@@ -4,19 +4,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import {Lights} from "./lights";
 import hdri from "./assets/autumn_field_puresky_1k.hdr";
 
-import {
-    dot, float,
-    Fn,
-    fog, mat2,
-    mix, mrt,
-    normalView,
-    normalWorld, output, pass,
-    pmremTexture,
-    rangeFogFactor,
-    smoothstep,
-    varying,
-    vec3, vec4
-} from "three/tsl";
+import { float, Fn, mrt, output, pass, vec3, vec4 } from "three/tsl";
 import {conf} from "./conf";
 import {Info} from "./info";
 import MlsMpmSimulator from "./mls-mpm/mlsMpmSimulator";
@@ -26,7 +14,11 @@ import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
 
 const loadHdr = async (file) => {
     const texture = await new Promise(resolve => {
-        new RGBELoader().load(file, result => { resolve(result); });
+        new RGBELoader().load(file, result => {
+            result.mapping = THREE.EquirectangularReflectionMapping;
+            result.colo
+            resolve(result);
+        });
     });
     return texture;
 }
@@ -71,8 +63,6 @@ class App {
 
         this.scene = new THREE.Scene();
 
-        //this.scene.add(new THREE.Mesh(new THREE.BoxGeometry(64,64,64)), new THREE.MeshBasicNodeMaterial());
-
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.target.set(0,0.5,0.2);
         this.controls.enableDamping = true;
@@ -90,17 +80,11 @@ class App {
 
         const hdriTexture = await loadHdr(hdri);
 
-        const angle = -2.15;
-        const s = Math.sin(angle), c = Math.cos(angle);
-        const matrix = mat2(c,-s,s,c);
-        const bgNode = Fn(() => {
-            const uvt = normalWorld.toVar();
-            uvt.xz.mulAssign(matrix);
-            return pmremTexture(hdriTexture, uvt).mul(0.51);
-        })();
-
-        this.scene.backgroundNode = bgNode.mul(2);
-        this.scene.environmentNode = bgNode;
+        this.scene.background = hdriTexture; //bgNode.mul(2);
+        this.scene.backgroundRotation = new THREE.Euler(0,2.15,0);
+        this.scene.environment = hdriTexture;
+        this.scene.environmentRotation = new THREE.Euler(0,-2.15,0);
+        this.scene.environmentIntensity = 0.5;
         //this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 0.66;
 
@@ -177,6 +161,8 @@ class App {
 
 
     async update(delta, elapsed) {
+
+        //this.scene.environmentRotation = new THREE.Euler(0,elapsed,0);
         conf.begin();
         this.controls.update(delta);
         this.lights.update(elapsed);

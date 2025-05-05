@@ -65,7 +65,7 @@ class BackgroundGeometry {
         const material = new THREE.MeshStandardNodeMaterial({
             roughness: 0.9,
             metalness:0.0,
-            normalScale: new THREE.Vector3(2.0, 2.0),
+            normalScale: new THREE.Vector3(1.0, 1.0),
             normalMap,
             aoMap,
             map,

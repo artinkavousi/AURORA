@@ -6,7 +6,7 @@ It started as an implementation of MLS-MPM guided by [matsuoka-601](https://gith
 
 See it running live [here](https://holtsetio.com/lab/flow/)!
 
-[![flow](https://github.com/user-attachments/assets/c499ba90-34b2-4029-a663-f5518d756e60)]((https://holtsetio.com/lab/flow/))
+[![flow](https://github.com/user-attachments/assets/c499ba90-34b2-4029-a663-f5518d756e60)](https://holtsetio.com/lab/flow/)
 
 ## Credits
 

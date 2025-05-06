@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import {Fn, attribute, triNoise3D, time, vec3, float, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform} from "three/tsl";
+import {Fn, attribute, triNoise3D, time, vec3, vec4, float, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform} from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {conf} from "../conf";
 
@@ -21,6 +21,7 @@ export const calcLookAtMatrix = /*#__PURE__*/ Fn( ( [ target_immutable ] ) => {
 } );
 
 const createRoundedBox = (width, height, depth, radius) => {
+    //completely overengineered late night programming lol
     const box = new THREE.BoxGeometry(width - radius*2, height - radius*2, depth - radius*2);
     const epsilon = Math.min(width, height, depth) * 0.01;
     const positionArray = box.attributes.position.array;
@@ -93,17 +94,9 @@ class ParticleRenderer {
     object = null;
     bloom = false;
     uniforms = {};
+
     constructor(mlsMpmSim) {
         this.mlsMpmSim = mlsMpmSim;
-
-        /*this.geometry = new THREE.InstancedBufferGeometry();
-        const positionBuffer = new THREE.BufferAttribute(new Float32Array(3), 3, false);
-        const material = new THREE.PointsNodeMaterial();
-        this.geometry.setAttribute('position', positionBuffer);
-        this.object = new THREE.Points(this.geometry, material);
-        material.positionNode = Fn(() => {
-            return this.mlsMpmSim.particleBuffer.element(instanceIndex).get('position').mul(vec3(1,1,0.4));
-        })();*/
 
         /*const box = new THREE.BoxGeometry(0.7, 0.7,3);
         const cone = new THREE.ConeGeometry( 0.5, 3.0, 8 );
@@ -126,10 +119,10 @@ class ParticleRenderer {
         this.geometry.setDrawRange(0, this.defaultIndexCount);
         this.geometry.instanceCount = this.mlsMpmSim.numParticles;
 
-        this.material = new THREE.MeshPhysicalNodeMaterial({
-            metalness: 0.970035,
-            roughness: 0.5095,
-            iridescence: 1.0,
+        this.material = new THREE.MeshStandardNodeMaterial({
+            metalness: 0.900,
+            roughness: 0.50,
+            //iridescence: 1.0,
         });
 
         this.uniforms.size = uniform(1);
@@ -146,11 +139,14 @@ class ParticleRenderer {
             //return attribute("position").xyz.mul(0.1).add(positionAttribute.mul(vec3(1,1,0.4)));
             const mat = calcLookAtMatrix(particleDirection.xyz);
             vNormal.assign(transformNormalToView(mat.mul(normalLocal)));
-            vAo.assign(float(1.0).mul(particlePosition.z.div(64).pow(2).oneMinus())); //sub(densityAttribute.mul(0.18)).max(0).
-            return mat.mul(attribute("position").xyz.mul(this.uniforms.size)).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1)).mul(1).add(particlePosition.mul(vec3(1,1,0.4)));
+            vAo.assign(particlePosition.z.div(64));
+            vAo.assign(vAo.mul(vAo).oneMinus());
+            return mat.mul(attribute("position").xyz.mul(this.uniforms.size)).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1)).add(particlePosition.mul(vec3(1,1,0.4)));
         })();
         this.material.colorNode = particle.get("color");
         this.material.aoNode = vAo;
+
+        //this.material.fragmentNode = vec4(0,0,0,1);
         //this.material.envNode = vec3(0.5);
 
         this.object = new THREE.Mesh(this.geometry, this.material);
@@ -161,26 +157,16 @@ class ParticleRenderer {
         this.object.frustumCulled = false;
 
         const s = (1/64);
-        const matrix = new THREE.Matrix4().makeScale(s,s,s);
-        matrix.multiply(new THREE.Matrix4().makeTranslation(-32.0, -0, 0));
-        const position = new THREE.Vector3();
-        const rotation = new THREE.Quaternion();
-        const scale = new THREE.Vector3();
-        matrix.decompose(position, rotation, scale);
-
-        this.object.position.copy(position);
-        this.object.scale.copy(scale);
+        this.object.position.set(-32.0*s,0,0);
+        this.object.scale.set(s,s,s);
         this.object.castShadow = true;
         this.object.receiveShadow = true;
-
-
     }
+
     update() {
-        const { particles, bloom, actualSize, roughness, metalness } = conf;
+        const { particles, bloom, actualSize } = conf;
         this.uniforms.size.value = actualSize;
         this.geometry.instanceCount = particles;
-        //this.material.roughness = roughness;
-        //this.material.metalness = metalness;
 
         if (bloom !== this.bloom) {
             this.bloom = bloom;

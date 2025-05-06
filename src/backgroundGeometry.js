@@ -1,37 +1,18 @@
 import * as THREE from "three/webgpu";
 import {
     Fn,
-    attribute,
-    triNoise3D,
-    time,
-    positionLocal,
-    smoothstep,
-    vec3,
-    pow,
-    min,
-    mat3,
-    mrt,
     texture,
     uv,
-    positionWorld,
-    lights,
-    reflector, positionView
+    positionWorld
 } from "three/tsl";
 import {OBJLoader} from "three/examples/jsm/loaders/OBJLoader";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-//import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import boxObj from './assets/boxSlightlySmooth.obj';
 
 import normalMapFile from './assets/concrete_0016_normal_opengl_1k.png';
 import aoMapFile from './assets/concrete_0016_ao_1k.jpg';
 import colorMapFile from './assets/concrete_0016_color_1k.jpg';
 import roughnessMapFile from './assets/concrete_0016_roughness_1k.jpg';
-
-/*import metalNormalMapFile from '../assets/metal_0056_normal_opengl_1k.png';
-import metalAoMapFile from '../assets/metal_0056_ao_1k.jpg';
-import metalColorMapFile from '../assets/metal_0056_color_1k.jpg';
-import metalRoughnessMapFile from '../assets/metal_0056_roughness_1k.jpg';
-import metalMetalnessMapFile from '../assets/metal_0056_metallic_1k.jpg';*/
 
 const textureLoader = new THREE.TextureLoader();
 const loadTexture = (file) => {
@@ -90,55 +71,6 @@ class BackgroundGeometry {
 
         this.object = new THREE.Object3D();
         this.object.add(this.box);
-
-        /*
-        const mnormalMap = await loadTexture(metalNormalMapFile);
-        const maoMap = await loadTexture(metalAoMapFile);
-        const mmap = await loadTexture(metalColorMapFile);
-        const mroughnessMap = await loadTexture(metalRoughnessMapFile);
-        const mmetalnessMap = await loadTexture(metalMetalnessMapFile);
-
-        const planeMaterial = new THREE.MeshStandardNodeMaterial({
-            normalMap: mnormalMap,
-            aoMap: maoMap,
-            map: mmap,
-            roughnessMap: mroughnessMap,
-            metalnessMap: mmetalnessMap,
-            normalScale: new THREE.Vector3(6.0, 6.0),
-            //transparent: true,
-           // lights: false,
-        });
-        planeMaterial.receivedShadowNode = Fn( ( [shadow]) => {
-            return vec3(0);
-        });
-
-        const planeGeometry = new THREE.PlaneGeometry(10, 10);
-        const planeUvArray = planeGeometry.attributes.uv.array;
-        for (let i=0; i<planeUvArray.length; i++) {
-            planeUvArray[i] *= 10;
-        }
-        this.plane = new THREE.Mesh(planeGeometry, planeMaterial);
-        this.plane.rotation.set(-Math.PI*0.5,0,0);
-        this.plane.position.set(0, -0.05, 0);
-        this.plane.receiveShadow = true;
-        this.plane.renderOrder = 20;
-        this.object.add(this.plane);*/
-
-
-        /*THREE.RectAreaLightNode.setLTC( RectAreaLightTexturesLib.init() );
-        const rectLight1 = new THREE.RectAreaLight( 0xff0000, 1, 1, 1.1 );
-        rectLight1.position.set( 0, 0.55, 0.0 );
-        this.object.add( rectLight1 );*/
-
-
-        /*const reflection = reflector( { resolution: 0.5 } ); // 0.5 is half of the rendering view
-        reflection.target.rotateX( - Math.PI / 2 );
-        reflection.target.position.setY(-0.05);
-        this.object.add(reflection.target);
-        const floorNormalOffset = texture( mnormalMap, uv() ).xy.mul( 2 ).sub( 1 ).mul( .5 ).mul(texture( mroughnessMap, uv() ));
-        reflection.uvNode = reflection.uvNode.add( floorNormalOffset );
-        planeMaterial.colorNode = texture( mmap, uv() ).add( reflection.mul(texture( mmetalnessMap, uv() )).mul(1.0) );*/
-
     }
 }
 export default BackgroundGeometry;

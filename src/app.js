@@ -11,6 +11,7 @@ import MlsMpmSimulator from "./mls-mpm/mlsMpmSimulator";
 import ParticleRenderer from "./mls-mpm/particleRenderer";
 import BackgroundGeometry from "./backgroundGeometry";
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
+import PointRenderer from "./mls-mpm/pointRenderer.js";
 
 const loadHdr = async (file) => {
     const texture = await new Promise(resolve => {
@@ -21,16 +22,6 @@ const loadHdr = async (file) => {
         });
     });
     return texture;
-}
-const textureLoader = new THREE.TextureLoader();
-const loadTexture = (file) => {
-    return new Promise(resolve => {
-        textureLoader.load(file, texture => {
-            texture.wrapS = THREE.RepeatWrapping;
-            texture.wrapT = THREE.RepeatWrapping;
-            resolve(texture);
-        });
-    });
 }
 
 class App {
@@ -44,10 +35,6 @@ class App {
 
     lights = null;
 
-    duration = [0,0,0,0,0];
-
-    framenum = 0;
-
     constructor(renderer) {
         this.renderer = renderer;
     }
@@ -57,7 +44,6 @@ class App {
         this.info = new Info();
 
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 5);
-        //this.camera.position.set(32,32, -64);
         this.camera.position.set(0, 0.5, -1);
         this.camera.updateProjectionMatrix()
 
@@ -97,6 +83,8 @@ class App {
         await this.mlsMpmSim.init();
         this.particleRenderer = new ParticleRenderer(this.mlsMpmSim);
         this.scene.add(this.particleRenderer.object);
+        this.pointRenderer = new PointRenderer(this.mlsMpmSim);
+        this.scene.add(this.pointRenderer.object);
 
         this.lights = new Lights();
         this.scene.add(this.lights.object);
@@ -161,12 +149,15 @@ class App {
 
 
     async update(delta, elapsed) {
-
-        //this.scene.environmentRotation = new THREE.Euler(0,elapsed,0);
         conf.begin();
+
+        this.particleRenderer.object.visible = !conf.points;
+        this.pointRenderer.object.visible = conf.points;
+
         this.controls.update(delta);
         this.lights.update(elapsed);
         this.particleRenderer.update();
+        this.pointRenderer.update();
 
         await this.mlsMpmSim.update(delta,elapsed);
 
@@ -176,24 +167,7 @@ class App {
             await this.renderer.renderAsync(this.scene, this.camera);
         }
 
-        /*
-        this.renderer.resolveTimestampsAsync( THREE.TimestampQuery.COMPUTE );
-        this.renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER );
-        this.duration[this.framenum % 5] = 0.9*this.duration[this.framenum % 5] + 0.1*this.renderer.info.render.timestamp;
-        let infotext = '';
-        for (let i=0; i<5; i++) {
-            infotext += this.duration[i].toFixed( 2 ) + "ms\n\n";
-        }
-        this.info.setText(infotext);
-        //console.log(this.renderer.info);
-        //console.log(this.framenum % 5, this.renderer.info.compute.frameCalls);
-        //this.info.setText(`Compute ${this.renderer.info.compute.frameCalls} pass in ${this.duration.toFixed( 2 )}ms (${this.renderer.info.compute.timestamp})`);
-        */
-
-
         conf.end();
-
-        this.framenum++;
     }
 }
 export default App;

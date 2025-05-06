@@ -4,9 +4,6 @@ import mobile from "is-mobile";
 
 class Conf {
     gui = null;
-
-    wireframe = false;
-
     maxParticles = 8192 * 16;
     particles = 8192 * 4;
 
@@ -23,8 +20,7 @@ class Conf {
     actualSize = 1;
     size = 1;
 
-    roughness = 0.5;
-    metalness = 0.95;
+    points = false;
 
     constructor() {
         if (mobile()) {
@@ -63,6 +59,7 @@ class Conf {
         settings.addBinding(this, "particles", { min: 4096, max: this.maxParticles, step: 4096 }).on('change', () => { this.updateParams(); });
         settings.addBinding(this, "size", { min: 0.5, max: 2, step: 0.1 }).on('change', () => { this.updateParams(); });
         settings.addBinding(this, "bloom");
+        //settings.addBinding(this, "points");
 
         const simulation = settings.addFolder({
             title: "simulation",

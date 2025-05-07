@@ -78,7 +78,8 @@ class mlsMpmSimulator {
         this.cellBuffer = new StructuredArray(cellStruct, cellCount, "cellData");
         this.cellBufferF = instancedArray(cellCount, 'vec4').label('cellDataF');
 
-        this.uniforms.gravity = uniform(0, "uint");
+        this.uniforms.gravityType = uniform(0, "uint");
+        this.uniforms.gravity = uniform(new THREE.Vector3());
         this.uniforms.stiffness = uniform(0);
         this.uniforms.restDensity = uniform(0);
         this.uniforms.dynamicViscosity = uniform(0);
@@ -270,12 +271,11 @@ class mlsMpmSimulator {
             const particleDensity = this.particleBuffer.element(instanceIndex).get('density').toConst("particleDensity");
             const particlePosition = this.particleBuffer.element(instanceIndex).get('position').xyz.toVar("particlePosition");
             const particleVelocity = vec3(0).toVar();
-            If(this.uniforms.gravity.equal(uint(2)), () => {
+            If(this.uniforms.gravityType.equal(uint(2)), () => {
                 const pn = particlePosition.div(vec3(this.uniforms.gridSize.sub(1))).sub(0.5).normalize().toConst();
                 particleVelocity.subAssign(pn.mul(0.3).mul(this.uniforms.dt));
             }).Else(() => {
-                const gravity = select(this.uniforms.gravity.equal(uint(0)), vec3(0,0,0.2), vec3(0,-0.2,0));
-                particleVelocity.addAssign(gravity.mul(this.uniforms.dt));
+                particleVelocity.addAssign(this.uniforms.gravity.mul(this.uniforms.dt));
             });
 
 
@@ -353,11 +353,18 @@ class mlsMpmSimulator {
     }
 
     async update(interval, elapsed) {
-        const { particles, run, noise, dynamicViscosity, stiffness, restDensity, speed, gravity } = conf;
+        const { particles, run, noise, dynamicViscosity, stiffness, restDensity, speed, gravity, gravitySensorReading, accelerometerReading } = conf;
 
         this.uniforms.noise.value = noise;
         this.uniforms.stiffness.value = stiffness;
-        this.uniforms.gravity.value = gravity;
+        this.uniforms.gravityType.value = gravity;
+        if (gravity === 0) {
+            this.uniforms.gravity.value.set(0,0,0.2);
+        } else if (gravity === 1) {
+            this.uniforms.gravity.value.set(0,-0.2,0);
+        } else if (gravity === 3) {
+            this.uniforms.gravity.value.copy(gravitySensorReading).add(accelerometerReading);
+        }
         this.uniforms.dynamicViscosity.value = dynamicViscosity;
         this.uniforms.restDensity.value = restDensity;
 

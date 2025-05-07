@@ -1,6 +1,7 @@
 import {Pane} from 'tweakpane';
 import * as EssentialsPlugin from '@tweakpane/plugin-essentials';
 import mobile from "is-mobile";
+import * as THREE from "three/webgpu";
 
 class Conf {
     gui = null;
@@ -17,12 +18,14 @@ class Conf {
     density = 1;
     dynamicViscosity = 0.1;
     gravity = 0;
+    gravitySensorReading = new THREE.Vector3();
+    accelerometerReading = new THREE.Vector3();
     actualSize = 1;
     size = 1;
 
     points = false;
 
-    constructor() {
+    constructor(info) {
         if (mobile()) {
             this.maxParticles = 8192 * 8;
             this.particles = 4096;
@@ -36,6 +39,16 @@ class Conf {
         const size = 1.6/Math.pow(level, 1/3);
         this.actualSize = size * this.size;
         this.restDensity = 0.25 * level * this.density;
+    }
+
+    setupGravitySensor() {
+        if (this.gravitySensor) { return; }
+        this.gravitySensor = new GravitySensor({ frequency: 60 });
+        this.gravitySensor.addEventListener("reading", (e) => {
+            this.gravitySensorReading.copy(this.gravitySensor).divideScalar(50);
+            this.gravitySensorReading.setY(this.gravitySensorReading.y * -1);
+        });
+        this.gravitySensor.start();
     }
 
     init() {
@@ -75,9 +88,13 @@ class Conf {
                 {text: 'back', value: 0},
                 {text: 'down', value: 1},
                 {text: 'center', value: 2},
+                {text: 'device gravity', value: 3},
             ],
             value: 0,
         }).on('change', (ev) => {
+            if (ev.value === 3) {
+                this.setupGravitySensor();
+            }
             this.gravity = ev.value;
         });
         simulation.addBinding(this, "density", { min: 0.4, max: 2, step: 0.1 }).on('change', () => { this.updateParams(); });;

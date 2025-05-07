@@ -40,8 +40,8 @@ class App {
     }
 
     async init(progressCallback) {
-        conf.init();
         this.info = new Info();
+        conf.init();
 
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 5);
         this.camera.position.set(0, 0.5, -1);

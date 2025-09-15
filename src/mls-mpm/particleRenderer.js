@@ -126,25 +126,34 @@ class ParticleRenderer {
         });
 
         this.uniforms.size = uniform(1);
+        this.uniforms.zScale = uniform(0.4);
         const vAo = varying(0, "vAo");
         const vNormal = varying(vec3(0), "v_normalView");
+        const vThickness = varying(0, "v_thickness");
 
         const particle = this.mlsMpmSim.particleBuffer.element(instanceIndex);
         this.material.positionNode = Fn(() => {
             const particlePosition = particle.get("position");
             const particleDensity = particle.get("density");
             const particleDirection = particle.get("direction");
+            const particleVelocity = particle.get("velocity").xyz;
 
-            //return attribute("position").xyz.mul(10).add(vec3(32,32,0));
-            //return attribute("position").xyz.mul(0.1).add(positionAttribute.mul(vec3(1,1,0.4)));
             const mat = calcLookAtMatrix(particleDirection.xyz);
-            vNormal.assign(transformNormalToView(mat.mul(normalLocal)));
+            const nView = transformNormalToView(mat.mul(normalLocal));
+            vNormal.assign(nView);
             vAo.assign(particlePosition.z.div(64));
             vAo.assign(vAo.mul(vAo).oneMinus());
-            return mat.mul(attribute("position").xyz.mul(this.uniforms.size)).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1)).add(particlePosition.mul(vec3(1,1,0.4)));
+            // thickness: more with grazing angles and velocity magnitude
+            const thickness = nView.z.abs().oneMinus().mul(particleVelocity.length().clamp(0,1).mul(0.5).add(0.5));
+            vThickness.assign(thickness);
+            return mat.mul(attribute("position").xyz.mul(this.uniforms.size)).mul(particleDensity.mul(0.4).add(0.5).clamp(0,1))
+                .add( particlePosition.sub(vec3(32,32,32)).mul( vec3(1,1,this.uniforms.zScale) ) );
         })();
         this.material.colorNode = particle.get("color");
         this.material.aoNode = vAo;
+        this.material.metalnessNode = this.material.metalness; // keep
+        this.material.roughnessNode = this.material.roughness; // keep
+        this.material.opacityNode = vThickness.remap(0,1,0.7,1.0).clamp(0.6,1.0);
 
         //this.material.fragmentNode = vec4(0,0,0,1);
         //this.material.envNode = vec3(0.5);
@@ -157,15 +166,16 @@ class ParticleRenderer {
         this.object.frustumCulled = false;
 
         const s = (1/64);
-        this.object.position.set(-32.0*s,0,0);
+        this.object.position.set(0,0,0);
         this.object.scale.set(s,s,s);
         this.object.castShadow = true;
         this.object.receiveShadow = true;
     }
 
     update() {
-        const { particles, bloom, actualSize } = conf;
+        const { particles, bloom, actualSize, worldScale, zScale } = conf;
         this.uniforms.size.value = actualSize;
+        this.uniforms.zScale.value = zScale;
         this.geometry.instanceCount = particles;
 
         if (bloom !== this.bloom) {
@@ -174,6 +184,11 @@ class ParticleRenderer {
                 bloomIntensity: 1
             } ) : null;
         }
+
+        // Fit domain to view by scaling the 64^3 to world mapping
+        const s = (1/64) * (worldScale || 1);
+        this.object.position.set(0,0,0);
+        this.object.scale.set(s,s,s);
     }
 }
 export default ParticleRenderer;

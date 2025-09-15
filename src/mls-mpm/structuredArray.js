@@ -34,7 +34,7 @@ export class StructuredArray {
         this.structNode = struct(this.layout);
         this.floatArray = new Float32Array(this.structSize * this.length);
         this.intArray = new Int32Array(this.floatArray.buffer);
-        this.buffer = instancedArray(this.floatArray, this.structNode).label(label);
+        this.buffer = instancedArray(this.floatArray, this.structNode).setName(label);
     }
 
     setAtomic(element, value) {

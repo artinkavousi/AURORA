@@ -1,39 +1,26 @@
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
-import {Lights} from "./lights";
-import hdri from "./assets/autumn_field_puresky_1k.hdr";
-
-import { float, Fn, mrt, output, pass, vec3, vec4 } from "three/tsl";
 import {conf} from "./conf";
 import {Info} from "./info";
 import MlsMpmSimulator from "./mls-mpm/mlsMpmSimulator";
 import ParticleRenderer from "./mls-mpm/particleRenderer";
+import GlyphRenderer from "./mls-mpm/glyphRenderer";
 import BackgroundGeometry from "./backgroundGeometry";
-import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import PointRenderer from "./mls-mpm/pointRenderer.js";
+import Stage from "./stage";
+import AudioEngine from "./audio/audioEngine";
+import LensPipeline from "./lens/LensPipeline";
+// PostFX pipeline is initialized dynamically inside init
 
-const loadHdr = async (file) => {
-    const texture = await new Promise(resolve => {
-        new RGBELoader().load(file, result => {
-            result.mapping = THREE.EquirectangularReflectionMapping;
-            result.colo
-            resolve(result);
-        });
-    });
-    return texture;
-}
+// Stage handles camera/scene/environment & controls
 
 class App {
     renderer = null;
 
-    camera = null;
-
-    scene = null;
-
-    controls = null;
-
-    lights = null;
+    stage = null;
+    audio = null;
+    lens = null;
 
     constructor(renderer) {
         this.renderer = renderer;
@@ -43,107 +30,227 @@ class App {
         this.info = new Info();
         conf.init();
 
-        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 5);
-        this.camera.position.set(0, 0.5, -1);
-        this.camera.updateProjectionMatrix()
-
-        this.scene = new THREE.Scene();
-
-        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.target.set(0,0.5,0.2);
-        this.controls.enableDamping = true;
-        this.controls.enablePan = false;
-        this.controls.touches = {
-            TWO: THREE.TOUCH.DOLLY_ROTATE,
-        }
-        this.controls.maxDistance = 2.0;
-        this.controls.minPolarAngle = 0.2 * Math.PI;
-        this.controls.maxPolarAngle = 0.8 * Math.PI;
-        this.controls.minAzimuthAngle = 0.7 * Math.PI;
-        this.controls.maxAzimuthAngle = 1.3 * Math.PI;
-
-        await progressCallback(0.1)
-
-        const hdriTexture = await loadHdr(hdri);
-
-        this.scene.background = hdriTexture; //bgNode.mul(2);
-        this.scene.backgroundRotation = new THREE.Euler(0,2.15,0);
-        this.scene.environment = hdriTexture;
-        this.scene.environmentRotation = new THREE.Euler(0,-2.15,0);
-        this.scene.environmentIntensity = 0.5;
-        //this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 0.66;
-
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.stage = new Stage(this.renderer);
+        await this.stage.init(progressCallback);
+        // Store environment rotation base for audio sway
+        this._envBase = { bg: conf.bgRotY, env: conf.envRotY };
 
         await progressCallback(0.5)
 
         this.mlsMpmSim = new MlsMpmSimulator(this.renderer);
         await this.mlsMpmSim.init();
         this.particleRenderer = new ParticleRenderer(this.mlsMpmSim);
-        this.scene.add(this.particleRenderer.object);
+        this.stage.scene.add(this.particleRenderer.object);
         this.pointRenderer = new PointRenderer(this.mlsMpmSim);
-        this.scene.add(this.pointRenderer.object);
+        this.stage.scene.add(this.pointRenderer.object);
+        this.glyphRenderer = new GlyphRenderer(this.mlsMpmSim);
+        this.stage.scene.add(this.glyphRenderer.object);
 
-        this.lights = new Lights();
-        this.scene.add(this.lights.object);
+        // Stage already adds lights
 
         const backgroundGeometry = new BackgroundGeometry();
         await backgroundGeometry.init();
-        this.scene.add(backgroundGeometry.object);
+        this.stage.scene.add(backgroundGeometry.object);
+        this.boundary = backgroundGeometry;
 
+        // Wire glass parameter live updates
+        const updateGlass = () => {
+            backgroundGeometry.setGlassParams({
+                ior: conf.glassIor,
+                thickness: conf.glassThickness,
+                roughness: conf.glassRoughness,
+                dispersion: conf.glassDispersion,
+                attenuationDistance: conf.glassAttenuationDistance,
+                attenuationColor: conf.glassAttenuationColor,
+            });
+        };
+        updateGlass();
+        // Set up a small interval to reflect control changes without heavy listeners
+        this._glassSync = setInterval(updateGlass, 150);
 
-        const scenePass = pass(this.scene, this.camera);
-        scenePass.setMRT( mrt( {
-            output,
-            bloomIntensity: float( 0 ) // default bloom intensity
-        } ) );
-        const outputPass = scenePass.getTextureNode();
-        const bloomIntensityPass = scenePass.getTextureNode( 'bloomIntensity' );
-        const bloomPass = bloom( outputPass.mul( bloomIntensityPass ) );
-        const postProcessing = new THREE.PostProcessing(this.renderer);
-        postProcessing.outputColorTransform = false;
-        //postProcessing.outputNode = vec4(outputPass.rgb, 1).add( vec4(bloomPass.mul(bloomIntensityPass.sign().oneMinus()).rgb, 0.0) ).renderOutput();
-        //postProcessing.outputNode = outputPass.renderOutput();
-        //(1-2b)*a*a + 2ba
-        postProcessing.outputNode = Fn(() => {
-            const a = outputPass.rgb.clamp(0,1).toVar();
-            const b = bloomPass.rgb.clamp(0,1).mul(bloomIntensityPass.r.sign().oneMinus()).toVar();
-            //return vec4(vec3(1).sub(b).sub(b).mul(a).mul(a).mul(0.0),1.0);
-            //return b;
-            //return a.div(b.oneMinus().max(0.0001)).clamp(0,1);
-            return vec4(vec3(1).sub(b).sub(b).mul(a).mul(a).add(b.mul(a).mul(2)).clamp(0,1),1.0);
-        })().renderOutput();
+        // Shape sync
+        const updateShape = () => {
+            // Toggle all boundary visuals
+            if (this.boundary && this.boundary.object) {
+                this.boundary.object.visible = !!conf.boundariesEnabled;
+            }
+            backgroundGeometry.setShape(conf.boundaryShape);
+            // Bind collision mode: 0 box, 1 sphere, 2 dodeca planes
+            if (conf.boundariesEnabled && conf.boundaryShape === 'dodeca') {
+                this.mlsMpmSim.uniforms.sdfSphere.value = 2; // dodeca planes
+                const mesh = backgroundGeometry.glass;
+                if (mesh && mesh.geometry) {
+                    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+                    const worldR = mesh.geometry.boundingSphere.radius;
+                    const s = 1/64; // simulation to world scale used in renderers
+                    const gridR = worldR / s;
+                    const shrink = conf.collisionShrink || 0.98;
+                    this.mlsMpmSim.uniforms.sdfRadius.value = gridR * 0.8 * shrink; // inradius with shrink
+                    this.mlsMpmSim.uniforms.sdfCenter.value.set(
+                        this.mlsMpmSim.uniforms.gridSize.value.x * 0.5,
+                        this.mlsMpmSim.uniforms.gridSize.value.y * 0.5,
+                        this.mlsMpmSim.uniforms.gridSize.value.z * 0.5,
+                    );
+                }
+            } else if (conf.boundariesEnabled && conf.boundaryShape === 'sphere') {
+                this.mlsMpmSim.uniforms.sdfSphere.value = 1; // sphere
+                const mesh = backgroundGeometry.glass;
+                if (mesh && mesh.geometry) {
+                    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+                    const worldR = mesh.geometry.boundingSphere.radius;
+                    const s = 1/64;
+                    const gridR = worldR / s;
+                    const shrink = conf.collisionShrink || 0.98;
+                    this.mlsMpmSim.uniforms.sdfRadius.value = gridR * shrink;
+                    this.mlsMpmSim.uniforms.sdfCenter.value.set(
+                        this.mlsMpmSim.uniforms.gridSize.value.x * 0.5,
+                        this.mlsMpmSim.uniforms.gridSize.value.y * 0.5,
+                        this.mlsMpmSim.uniforms.gridSize.value.z * 0.5,
+                    );
+                }
+            } else {
+                // Boundaries disabled: choose world border behavior
+                if ((conf.borderMode || 'bounce') === 'bounce') {
+                    this.mlsMpmSim.uniforms.sdfSphere.value = 0; // use box wall bounce at grid edges
+                } else {
+                    this.mlsMpmSim.uniforms.sdfSphere.value = 3; // wrap: no collisions
+                }
+            }
+        };
+        updateShape();
+        this._shapeSync = setInterval(updateShape, 200);
 
-        this.postProcessing = postProcessing;
-        this.bloomPass = bloomPass;
-        this.bloomPass.threshold.value = 0.001;
-        this.bloomPass.strength.value = 0.94;
-        this.bloomPass.radius.value = 0.8;
+        // Upload hook: open file input and load as boundary mesh
+        conf.registerBoundaryUpload(() => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.obj,.glb,.gltf,.fbx,.ply,.stl';
+            input.onchange = async () => {
+                const file = input.files && input.files[0];
+                if (!file) return;
+                try {
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    let newMesh = null;
+                    if (ext === 'obj') {
+                        const text = await file.text();
+                        const obj = new (await import('three/examples/jsm/loaders/OBJLoader.js')).OBJLoader().parse(text);
+                        const geo = BufferGeometryUtils.mergeVertices(obj.children[0].geometry);
+                        newMesh = new THREE.Mesh(geo, this.boundary.glass.material);
+                    } else if (ext === 'gltf' || ext === 'glb') {
+                        const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+                        const loader = new GLTFLoader();
+                        const arrayBuffer = await file.arrayBuffer();
+                        const gltf = await new Promise((resolve, reject) => loader.parse(arrayBuffer, '', resolve, reject));
+                        const mesh = gltf.scene.getObjectByProperty('type', 'Mesh') || gltf.scene.children.find(c => c.isMesh);
+                        const geo = mesh.geometry;
+                        newMesh = new THREE.Mesh(geo, this.boundary.glass.material);
+                    } else if (ext === 'ply') {
+                        const { PLYLoader } = await import('three/examples/jsm/loaders/PLYLoader.js');
+                        const loader = new PLYLoader();
+                        const arrayBuffer = await file.arrayBuffer();
+                        const geometry = loader.parse(arrayBuffer);
+                        geometry.computeVertexNormals();
+                        const geo = BufferGeometryUtils.mergeVertices(geometry);
+                        newMesh = new THREE.Mesh(geo, this.boundary.glass.material);
+                    } else if (ext === 'stl') {
+                        const { STLLoader } = await import('three/examples/jsm/loaders/STLLoader.js');
+                        const loader = new STLLoader();
+                        const arrayBuffer = await file.arrayBuffer();
+                        const geometry = loader.parse(arrayBuffer);
+                        geometry.computeVertexNormals();
+                        const geo = BufferGeometryUtils.mergeVertices(geometry);
+                        newMesh = new THREE.Mesh(geo, this.boundary.glass.material);
+                    } else {
+                        alert('Unsupported file type');
+                        return;
+                    }
+                    if (newMesh) {
+                        if (this.boundary.glass.parent) this.boundary.glass.parent.remove(this.boundary.glass);
+                        newMesh.castShadow = true;
+                        newMesh.receiveShadow = true;
+                        this.boundary.glass = newMesh;
+                        this.boundary.object.add(newMesh);
+                        updateGlass();
+                        // After custom upload, switch to sphere SDF bound and recompute radius
+                        conf.boundaryShape = 'sphere';
+                        updateShape();
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+            input.click();
+        });
+        // Audio upload hook
+        conf.registerAudioUpload(async () => {
+            try {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'audio/*';
+                input.onchange = async (ev) => {
+                    const file = input.files && input.files[0];
+                    if (!file) return;
+                    const ab = await file.arrayBuffer();
+                    if (!this.audio) this.audio = new AudioEngine();
+                    await this.audio.connectFile(ab);
+                };
+                input.click();
+            } catch (e) { console.error(e); }
+        });
+
+        this.postFX = new (await import('./postfx')).default(this.renderer);
+        await this.postFX.init(this.stage);
+        this.lens = new LensPipeline(this.stage, this.postFX);
 
 
         this.raycaster = new THREE.Raycaster();
-        this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.2);
         this.renderer.domElement.addEventListener("pointermove", (event) => { this.onMouseMove(event); });
 
         await progressCallback(1.0, 100);
     }
 
     resize(width, height) {
-        this.camera.aspect = width / height;
-        this.camera.updateProjectionMatrix();
+        this.stage.resize(width, height);
+        if (this.postFX) this.postFX.resize(width, height);
     }
 
     onMouseMove(event) {
         const pointer = new THREE.Vector2();
         pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
         pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-        this.raycaster.setFromCamera(pointer, this.camera);
+        const camera = this.stage.camera;
+        this.raycaster.setFromCamera(pointer, camera);
+
+        const s = (1/64) * (conf.worldScale || 1);
+        const zScale = conf.zScale || 0.4;
+        // Domain center at world origin
+        const centerWorld = new THREE.Vector3(0, 0, 0);
+        const normal = new THREE.Vector3();
+        camera.getWorldDirection(normal);
+        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, centerWorld);
         const intersect = new THREE.Vector3();
-        this.raycaster.ray.intersectPlane(this.plane, intersect);
-        if (intersect) {
-            this.mlsMpmSim.setMouseRay(this.raycaster.ray.origin, this.raycaster.ray.direction, intersect);
+        this.raycaster.ray.intersectPlane(plane, intersect);
+        if (!intersect) return;
+
+        // Map world -> simulation-projected space used in compute (0..64, with z compressed by zScale)
+        const worldToSimProjected = (v) => {
+            const out = v.clone().divideScalar(s);
+            out.z /= zScale;
+            out.add(new THREE.Vector3(32,32,32));
+            return out;
+        };
+        const originSim = worldToSimProjected(this.raycaster.ray.origin);
+        const posSim = worldToSimProjected(intersect);
+        const dirSim = this.raycaster.ray.direction.clone();
+        dirSim.divideScalar(s); dirSim.z /= zScale; dirSim.normalize();
+
+        this.mlsMpmSim.setMouseRay(originSim, dirSim, posSim);
+
+        // Auto focus DOF to pointer via LensPipeline
+        if (conf.dofEnabled && conf.dofAutoFocus && this.lens) {
+            const camSpace = intersect.clone().applyMatrix4(camera.matrixWorldInverse);
+            const viewDist = Math.abs(camSpace.z);
+            this.lens.onPointerFocus(viewDist);
         }
     }
 
@@ -151,23 +258,103 @@ class App {
     async update(delta, elapsed) {
         conf.begin();
 
-        this.particleRenderer.object.visible = !conf.points;
-        this.pointRenderer.object.visible = conf.points;
+        // Render mode visibility control
+        const mode = conf.renderMode || 'surface';
+        this.particleRenderer.object.visible = (mode === 'surface');
+        this.pointRenderer.object.visible = (mode === 'points');
+        if (this.glyphRenderer) this.glyphRenderer.object.visible = (mode === 'glyphs');
 
-        this.controls.update(delta);
-        this.lights.update(elapsed);
+        this.stage.update(delta, elapsed);
         this.particleRenderer.update();
         this.pointRenderer.update();
+        if (this.glyphRenderer) this.glyphRenderer.update();
+
+        // Audio update and mapping
+        if (conf.audioEnabled) {
+            try {
+                if (!this.audio) this.audio = new AudioEngine();
+                // Start mic if needed
+                if (!this._audioStarted) {
+                    if (conf.audioSource === 'mic') {
+                        await this.audio.connectMic();
+                    }
+                    this._audioStarted = true;
+                }
+                this.audio.setSmoothing(conf.audioAttack, conf.audioRelease);
+                const f = this.audio.update(delta);
+                // Normalize features and apply user gains
+                const sens = conf.audioSensitivity;
+                conf._audioLevel = clamp( f.level * sens, 0.0, 1.0 );
+                conf._audioBeat = clamp( f.beat * conf.audioBeatBoost, 0.0, 1.0 );
+                conf._audioBass = clamp( f.bass * conf.audioBassGain * sens, 0.0, 1.0 );
+                conf._audioMid = clamp( f.mid * conf.audioMidGain * sens, 0.0, 1.0 );
+                conf._audioTreble = clamp( f.treble * conf.audioTrebleGain * sens, 0.0, 1.0 );
+
+                // Optional: modulate fields for extra motion
+                if (conf.jetEnabled) {
+                    conf.jetStrength = Math.max(0, conf.jetStrength * 0.9 + (conf._audioBass * 1.2) * 0.1);
+                }
+                if (conf.vortexEnabled) {
+                    conf.vortexStrength = Math.max(0, conf.vortexStrength * 0.9 + (conf._audioMid * 1.0) * 0.1);
+                }
+                // Subtle noise modulation
+                conf.noise = Math.max(0, Math.min(2.0, conf.noise * 0.95 + conf._audioTreble * 0.2 ));
+
+                // Environment micro-sway synced to music
+                const sway = (conf._audioLevel * 0.05) * Math.sin(elapsed * 1.6) + conf._audioBeat * 0.06;
+                conf.bgRotY = this._envBase.bg + sway;
+                conf.envRotY = this._envBase.env - sway * 0.8;
+            } catch (e) { /* noop */ }
+        } else {
+            conf._audioLevel = conf._audioBeat = conf._audioBass = conf._audioMid = conf._audioTreble = 0;
+            // Reset environment rotations when audio off
+            if (this._envBase) { conf.bgRotY = this._envBase.bg; conf.envRotY = this._envBase.env; }
+        }
 
         await this.mlsMpmSim.update(delta,elapsed);
 
-        if (conf.bloom) {
-            await this.postProcessing.renderAsync();
+        // Sync post FX from control panel and motion direction
+        if (this.postFX) this.postFX.updateFromConf(conf);
+        if (this.lens) this.lens.update();
+        if (!this._prevCamPos) this._prevCamPos = this.stage.camera.position.clone();
+        if (this.postFX) this.postFX.updateMotionDirection(this.stage.camera, this._prevCamPos);
+        this._prevCamPos.copy(this.stage.camera.position);
+
+        if (conf.postFxEnabled && this.postFX) {
+            await this.postFX.renderAsync();
         } else {
-            await this.renderer.renderAsync(this.scene, this.camera);
+            await this.renderer.renderAsync(this.stage.scene, this.stage.camera);
         }
 
         conf.end();
+
+        // Auto performance governor: adapt particle count
+        if (!this._perf) this._perf = { t: 0, frames: 0, fps: 60, lastAdjust: 0 };
+        this._perf.t += delta;
+        this._perf.frames += 1;
+        if (this._perf.t >= 0.5) {
+            const fps = this._perf.frames / this._perf.t;
+            // simple smoothing
+            this._perf.fps = this._perf.fps * 0.6 + fps * 0.4;
+            this._perf.t = 0;
+            this._perf.frames = 0;
+        }
+        if (conf.autoPerf) {
+            const now = performance.now() / 1000;
+            if (now - this._perf.lastAdjust > 1.2) {
+                if (this._perf.fps < conf.perfMinFps && conf.particles > 4096) {
+                    conf.particles = Math.max(4096, conf.particles - conf.perfStep);
+                    conf.updateParams();
+                    if (conf.gui) conf.gui.refresh();
+                    this._perf.lastAdjust = now;
+                } else if (this._perf.fps > conf.perfMaxFps && conf.particles + conf.perfStep <= conf.maxParticles) {
+                    conf.particles = Math.min(conf.maxParticles, conf.particles + conf.perfStep);
+                    conf.updateParams();
+                    if (conf.gui) conf.gui.refresh();
+                    this._perf.lastAdjust = now;
+                }
+            }
+        }
     }
 }
 export default App;

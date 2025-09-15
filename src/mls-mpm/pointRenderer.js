@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import {Fn, vec3,instanceIndex} from "three/tsl";
+import {Fn, vec3, instanceIndex, float} from "three/tsl";
 import {conf} from "../conf";
 
 class PointRenderer {

@@ -10,10 +10,14 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import PointRenderer from "./mls-mpm/pointRenderer.js";
 import Stage from "./stage";
 import AudioEngine from "./audio/audioEngine";
+import AudioRouter from "./audio/router";
+import AudioPanel from "./ui/audioPanel";
 import LensPipeline from "./lens/LensPipeline";
 // PostFX pipeline is initialized dynamically inside init
 
 // Stage handles camera/scene/environment & controls
+
+function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 
 class App {
     renderer = null;
@@ -21,6 +25,8 @@ class App {
     stage = null;
     audio = null;
     lens = null;
+    router = null;
+    audioPanel = null;
 
     constructor(renderer) {
         this.renderer = renderer;
@@ -181,22 +187,15 @@ class App {
             };
             input.click();
         });
-        // Audio upload hook
-        conf.registerAudioUpload(async () => {
-            try {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'audio/*';
-                input.onchange = async (ev) => {
-                    const file = input.files && input.files[0];
-                    if (!file) return;
-                    const ab = await file.arrayBuffer();
-                    if (!this.audio) this.audio = new AudioEngine();
-                    await this.audio.connectFile(ab);
-                };
-                input.click();
-            } catch (e) { console.error(e); }
-        });
+        // Old audio upload hook removed; AudioPanel handles file input
+
+        // Audio engine + router + dedicated panel
+        this.audio = new AudioEngine();
+        this.router = new AudioRouter();
+        // Register router with conf so presets can include routing
+        if (conf.registerRouter) conf.registerRouter(this.router);
+        this.audioPanel = new AudioPanel(this.audio, conf, this.router);
+        this.audioPanel.init('bottom-right');
 
         this.postFX = new (await import('./postfx')).default(this.renderer);
         await this.postFX.init(this.stage);
@@ -272,7 +271,6 @@ class App {
         // Audio update and mapping
         if (conf.audioEnabled) {
             try {
-                if (!this.audio) this.audio = new AudioEngine();
                 // Start mic if needed
                 if (!this._audioStarted) {
                     if (conf.audioSource === 'mic') {
@@ -289,21 +287,24 @@ class App {
                 conf._audioBass = clamp( f.bass * conf.audioBassGain * sens, 0.0, 1.0 );
                 conf._audioMid = clamp( f.mid * conf.audioMidGain * sens, 0.0, 1.0 );
                 conf._audioTreble = clamp( f.treble * conf.audioTrebleGain * sens, 0.0, 1.0 );
-
-                // Optional: modulate fields for extra motion
-                if (conf.jetEnabled) {
-                    conf.jetStrength = Math.max(0, conf.jetStrength * 0.9 + (conf._audioBass * 1.2) * 0.1);
-                }
-                if (conf.vortexEnabled) {
-                    conf.vortexStrength = Math.max(0, conf.vortexStrength * 0.9 + (conf._audioMid * 1.0) * 0.1);
-                }
-                // Subtle noise modulation
-                conf.noise = Math.max(0, Math.min(2.0, conf.noise * 0.95 + conf._audioTreble * 0.2 ));
-
-                // Environment micro-sway synced to music
-                const sway = (conf._audioLevel * 0.05) * Math.sin(elapsed * 1.6) + conf._audioBeat * 0.06;
-                conf.bgRotY = this._envBase.bg + sway;
-                conf.envRotY = this._envBase.env - sway * 0.8;
+                conf._audioTempoPhase = f.tempoPhase01 || 0.0;
+                conf._audioTempoBpm = f.tempoBpm || 0.0;
+                // Router applies mappings and environment sway
+                this.router.apply({
+                    level: conf._audioLevel,
+                    beat: conf._audioBeat,
+                    bass: conf._audioBass,
+                    mid: conf._audioMid,
+                    treble: conf._audioTreble,
+                    centroid: f.centroid,
+                    flux: f.flux,
+                    fluxBass: f.fluxBass,
+                    fluxMid: f.fluxMid,
+                    fluxTreble: f.fluxTreble,
+                    tempoBpm: f.tempoBpm,
+                    tempoPhase01: f.tempoPhase01,
+                    tempoConf: f.tempoConf,
+                }, conf, elapsed, this._envBase);
             } catch (e) { /* noop */ }
         } else {
             conf._audioLevel = conf._audioBeat = conf._audioBass = conf._audioMid = conf._audioTreble = 0;

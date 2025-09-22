@@ -25,22 +25,48 @@ class Conf {
     lensResolutionScale = 0.85;
     lensFocusReadout = 1.0;
 
+    // PostFX defaults (match postfx.js expectations)
     postFxEnabled = true;
-    postBloomEnabled = true;
-    postBloomIntensity = 0.9;
-    postBloomRadius = 0.6;
-    postBloomThreshold = 0.85;
-    postVignetteEnabled = false;
-    postVignetteAmount = 0.25;
-    postGrainEnabled = false;
-    postGrainAmount = 0.06;
-    postChromaticEnabled = false;
-    postChromaticAmount = 0.0025;
-    postToneSaturation = 1.0;
-    postToneContrast = 1.0;
-    postToneLift = 0.0;
-    postMotionBlurEnabled = false;
-    postMotionBlurAmount = 0.35;
+    // Bloom
+    bloom = true;
+    bloomStrength = 1.2;
+    bloomRadius = 1.0;
+    bloomThreshold = 0.0005;
+    // Depth of field (node-based)
+    dofEnabled = true;
+    dofHighQuality = true;
+    dofAutoFocus = true;
+    dofFocus = 1.0;
+    dofRange = 0.25;
+    dofAmount = 0.85;
+    dofNearBoost = 1.0;
+    dofFarBoost = 1.0;
+    dofHighlightThreshold = 0.8;
+    dofHighlightGain = 0.6;
+    apertureBlades = 7;
+    apertureRotation = 0.0;
+    aperturePetal = 1.0;
+    anamorphic = 0.0;
+    // Vignette
+    vignetteEnabled = false;
+    vignetteAmount = 0.25;
+    // Film grain
+    grainEnabled = false;
+    grainAmount = 0.06;
+    // Chromatic aberration
+    chromaEnabled = false;
+    chromaAmount = 0.0025;
+    chromaCenter = { x: 0.5, y: 0.5 };
+    chromaScale = 1.0;
+    // Motion blur
+    motionBlurEnabled = false;
+    motionBlurAmount = 0.35;
+    // Grading
+    postSaturation = 1.0;
+    postContrast = 1.0;
+    postLift = 0.0;
+    // Anti-aliasing mode: off|fxaa|smaa|traa
+    aaMode = 'fxaa';
 
     // World/domain scaling (visual mapping of 64^3 grid to world units)
     worldScale = 2.0; // scale up domain to fill more of the page by default
@@ -266,10 +292,10 @@ class Conf {
             ],
             value: this.borderMode || 'bounce',
         }).on('change', (ev) => { this.borderMode = ev.value; });
-
+        
         const lens = settings.addFolder({ title: 'lens', expanded: false });
-        lens.addBinding(this, 'lensEnabled', { label: 'enable' });
-        lens.addBinding(this, 'lensDriveFov', { label: 'drive fov' });
+        lens.addBinding(this, 'lensEnabled', { view: 'checkbox', label: 'enable' });
+        lens.addBinding(this, 'lensDriveFov', { view: 'checkbox', label: 'drive fov' });
         lens.addBinding(this, 'lensSensorSize', { min: 10.0, max: 70.0, step: 0.1, label: 'sensor (mm)' });
         lens.addBinding(this, 'lensFocalLength', { min: 8.0, max: 120.0, step: 0.1, label: 'focal (mm)' });
         lens.addBinding(this, 'lensAperture', { min: 0.7, max: 16.0, step: 0.1, label: 'aperture f/' });
@@ -291,46 +317,16 @@ class Conf {
         lens.addBinding(this, 'lensFocusNear', { min: 0.01, max: 1.0, step: 0.01, label: 'focus min' });
         lens.addBinding(this, 'lensFocusFar', { min: 0.5, max: 12.0, step: 0.1, label: 'focus max' });
         this.lensFocusReadout = this.lensFocusDistance;
-        lens.addMonitor(this, 'lensFocusReadout', { label: 'auto focus', interval: 0 });
+        // Tweakpane v4 removed addMonitor; use a read-only binding instead
+        lens.addBinding(this, 'lensFocusReadout', { label: 'auto focus', readonly: true });
 
-        lens.addBlade({ view: 'button', label: 'preset', title: 'Macro Lens' }).on('click', () => {
-            this.lensEnabled = true;
-            this.lensDriveFov = true;
-            this.lensSensorSize = 36.0;
-            this.lensFocalLength = 50.0;
-            this.lensAperture = 1.8;
-            this.lensFocusDistance = 0.75;
-            this.lensFocusRange = 0.08;
-            this.lensBokehScale = 2.0;
-            this.lensAnamorphic = 0.1;
-            this.lensFocusMode = 'auto';
-            if (this.gui) this.gui.refresh();
-        });
-        lens.addBlade({ view: 'button', label: 'preset', title: 'Cinematic Wide' }).on('click', () => {
-            this.lensEnabled = true;
-            this.lensDriveFov = true;
-            this.lensSensorSize = 36.0;
-            this.lensFocalLength = 28.0;
-            this.lensAperture = 2.8;
-            this.lensFocusDistance = 1.6;
-            this.lensFocusRange = 0.22;
-            this.lensBokehScale = 1.1;
-            this.lensAnamorphic = 0.0;
-            this.lensFocusMode = 'auto';
-            if (this.gui) this.gui.refresh();
-        });
-        lens.addBlade({ view: 'button', label: 'preset', title: 'Deep Focus' }).on('click', () => {
-            this.lensEnabled = true;
-            this.lensDriveFov = false;
-            this.lensFocalLength = 24.0;
-            this.lensAperture = 5.6;
-            this.lensFocusDistance = 2.4;
-            this.lensFocusRange = 0.6;
-            this.lensBokehScale = 0.6;
-            this.lensFocusMode = 'manual';
-            if (this.gui) this.gui.refresh();
-        });
+        const perf = settings.addFolder({ title: 'performance', expanded: false });
+        perf.addBinding(this, 'autoPerf', { label: 'auto adjust' });
+        perf.addBinding(this, 'perfMinFps', { min: 20, max: 80, step: 1, label: 'min fps' });
+        perf.addBinding(this, 'perfMaxFps', { min: 30, max: 120, step: 1, label: 'max fps' });
+        perf.addBinding(this, 'perfStep', { min: 1024, max: 16384, step: 1024, label: 'step' });
 
+        
         const environment = settings.addFolder({
             title: "environment",
             expanded: false,

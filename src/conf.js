@@ -8,18 +8,39 @@ class Conf {
     maxParticles = 8192 * 16;
     particles = 8192 * 4;
 
-    bloom = true;
-    bloomStrength = 1.2;
-    bloomRadius = 1.0;
-    bloomThreshold = 0.0005;
+    // Lens & imaging defaults
+    lensEnabled = true;
+    lensDriveFov = true;
+    lensSensorSize = 36.0;
+    lensFocalLength = 35.0;
+    lensAperture = 2.4;
+    lensFocusMode = 'auto';
+    lensFocusDistance = 1.0;
+    lensFocusRange = 0.12;
+    lensFocusSmoothing = 0.2;
+    lensFocusNear = 0.12;
+    lensFocusFar = 8.0;
+    lensBokehScale = 1.2;
+    lensAnamorphic = 0.0;
+    lensResolutionScale = 0.85;
+    lensFocusReadout = 1.0;
 
-    // Depth of Field (approx)
-    dofEnabled = true;
-    dofAutoFocus = true; // focus distance follows pointer
-    dofFocus = 0.8;      // macro default
-    dofRange = 0.08;     // shallow macro range
-    dofAmount = 1.15;    // larger bokeh
-    dofHighQuality = true; // HQ by default
+    postFxEnabled = true;
+    postBloomEnabled = true;
+    postBloomIntensity = 0.9;
+    postBloomRadius = 0.6;
+    postBloomThreshold = 0.85;
+    postVignetteEnabled = false;
+    postVignetteAmount = 0.25;
+    postGrainEnabled = false;
+    postGrainAmount = 0.06;
+    postChromaticEnabled = false;
+    postChromaticAmount = 0.0025;
+    postToneSaturation = 1.0;
+    postToneContrast = 1.0;
+    postToneLift = 0.0;
+    postMotionBlurEnabled = false;
+    postMotionBlurAmount = 0.35;
 
     // World/domain scaling (visual mapping of 64^3 grid to world units)
     worldScale = 2.0; // scale up domain to fill more of the page by default
@@ -127,47 +148,6 @@ class Conf {
     // Runtime audio features (read-only; set by app)
     _audioLevel = 0.0; _audioBeat = 0.0; _audioBass = 0.0; _audioMid = 0.0; _audioTreble = 0.0;
     _audioTempoPhase = 0.0; _audioTempoBpm = 0.0;
-
-    // Post FX extras
-    postFxEnabled = true;
-    vignetteEnabled = false;
-    vignetteAmount = 0.25;
-    grainEnabled = false;
-    grainAmount = 0.08;
-    chromaEnabled = false;
-    chromaAmount = 0.0025;
-    // Motion blur (temporal screen direction approx)
-    motionBlurEnabled = false;
-    motionBlurAmount = 0.35;
-    // Color grade controls
-    postSaturation = 1.0;
-    postContrast = 1.0;
-    postLift = 0.0;
-    // Anti-aliasing
-    aaMode = 'off'; // 'off' | 'fxaa' | 'smaa' | 'traa'
-    aaAmount = 1.0;
-    // GTAO
-    gtaoEnabled = false;
-    gtaoRadius = 0.25;
-    gtaoThickness = 1.0;
-    gtaoDistanceExponent = 1.0;
-    gtaoScale = 1.0;
-    gtaoSamples = 16;
-    gtaoResolutionScale = 1.0;
-    // SSGI
-    ssgiEnabled = false;
-    ssgiSlices = 2;
-    ssgiSteps = 8;
-    ssgiIntensity = 0.6;
-    ssgiResolutionScale = 1.0;
-    ssgiDenoise = true;
-    // SSR
-    ssrEnabled = false;
-    ssrOpacity = 0.2;
-    ssrMaxDistance = 1.0;
-    ssrThickness = 0.1;
-    ssrResolutionScale = 0.75;
-    ssrMetalness = 0.8;
 
     constructor(info) {
         if (mobile()) {
@@ -282,80 +262,67 @@ class Conf {
             value: this.borderMode || 'bounce',
         }).on('change', (ev) => { this.borderMode = ev.value; });
 
-        // DOF controls moved under Post FX
-        const dofMacro = () => {
-            this.zScale = 0.18;
-            this.dofEnabled = true;
-            this.dofHighQuality = true;
-            this.dofAutoFocus = true;
-            this.dofRange = 0.06;
-            this.dofAmount = 1.30;
-            this.fov = Math.max(60, this.fov);
-            this.updateParams();
-            if (this.gui) this.gui.refresh();
-        };
-
-        const perf = settings.addFolder({ title: 'performance', expanded: false });
-        perf.addBinding(this, 'autoPerf', { label: 'auto adjust' });
-        perf.addBinding(this, 'perfMinFps', { min: 20, max: 80, step: 1, label: 'min fps' });
-        perf.addBinding(this, 'perfMaxFps', { min: 30, max: 120, step: 1, label: 'max fps' });
-        perf.addBinding(this, 'perfStep', { min: 1024, max: 16384, step: 1024, label: 'step' });
-
-        const camera = settings.addFolder({
-            title: "camera",
-            expanded: false,
-        });
-        camera.addBinding(this, "fov", { min: 30, max: 100, step: 1 });
-        // Lens controls (approximate mapping to DOF params)
-        const lens = settings.addFolder({ title: 'lens & dof', expanded: false });
-        this.lensEnabled = false;
-        this.sensorWidth = 36.0; // mm (full-frame)
-        this.focalLength = 24.0; // mm
-        this.fStop = 1.8;
-        this.lensDriveFov = true;
-        this.focusSmooth = 0.2;
+        const lens = settings.addFolder({ title: 'lens', expanded: false });
         lens.addBinding(this, 'lensEnabled', { label: 'enable' });
-        lens.addBinding(this, 'sensorWidth', { min: 12.0, max: 70.0, step: 0.1, label: 'sensor (mm)' });
-        lens.addBinding(this, 'focalLength', { min: 8.0, max: 120.0, step: 0.1, label: 'focal (mm)' });
-        lens.addBinding(this, 'fStop', { min: 0.7, max: 16.0, step: 0.1, label: 'f‑stop' });
-        lens.addBinding(this, 'lensDriveFov', { label: 'drive FOV' });
-        lens.addBinding(this, 'focusSmooth', { min: 0.0, max: 0.9, step: 0.01, label: 'focus smooth' });
-        // DOF controls (moved here)
-        lens.addBinding(this, 'dofEnabled', { label: 'dof enable' });
-        lens.addBinding(this, 'dofAutoFocus', { label: 'auto focus (pointer)' });
-        lens.addBinding(this, 'dofHighQuality', { label: 'high quality' });
-        lens.addBinding(this, 'dofFocus', { min: 0.1, max: 3.0, step: 0.01 });
-        lens.addBinding(this, 'dofRange', { min: 0.02, max: 2.0, step: 0.01 });
-        lens.addBinding(this, 'dofAmount', { min: 0.0, max: 2.0, step: 0.01 });
-        // DOF quality (0.25..1.0)
-        this.dofQuality = 1.0;
-        lens.addBinding(this, 'dofQuality', { min: 0.25, max: 1.0, step: 0.01, label: 'dof quality' });
-        lens.addBlade({ view: 'button', label: 'macro', title: 'Macro Shot' }).on('click', dofMacro);
-        // Advanced bokeh controls
-        this.dofNearBoost = this.dofNearBoost ?? 1.0;
-        this.dofFarBoost = this.dofFarBoost ?? 1.0;
-        this.dofHighlightThreshold = this.dofHighlightThreshold ?? 0.8;
-        this.dofHighlightGain = this.dofHighlightGain ?? 0.6;
-        lens.addBinding(this, 'dofNearBoost', { min: 0.5, max: 3.0, step: 0.01, label: 'near boost' });
-        lens.addBinding(this, 'dofFarBoost', { min: 0.5, max: 3.0, step: 0.01, label: 'far boost' });
-        lens.addBinding(this, 'dofHighlightThreshold', { min: 0.0, max: 1.0, step: 0.01, label: 'hi thresh' });
-        lens.addBinding(this, 'dofHighlightGain', { min: 0.0, max: 2.0, step: 0.01, label: 'hi gain' });
-        // Aperture & anamorphic
-        this.apertureBlades = 7; // polygon blades
-        this.apertureRotation = 0.0; // radians
-        this.aperturePetal = 1.0; // sharpness of polygon weighting
-        this.anamorphic = 0.0; // -1..1 (negative vertical, positive horizontal)
-        lens.addBinding(this, 'apertureBlades', { min: 3, max: 12, step: 1, label: 'blades' });
-        lens.addBinding(this, 'apertureRotation', { min: -3.1416, max: 3.1416, step: 0.01, label: 'apert rot' });
-        lens.addBinding(this, 'aperturePetal', { min: 0.2, max: 2.5, step: 0.01, label: 'apert petal' });
-        lens.addBinding(this, 'anamorphic', { min: -1.0, max: 1.0, step: 0.01, label: 'anamorphic' });
-        // Creative presets
-        lens.addBlade({ view: 'button', label: 'preset', title: 'Creamy Wide' }).on('click', () => {
-            this.lensEnabled = true; this.lensDriveFov = true;
-            this.sensorWidth = 36.0; this.focalLength = 24.0; this.fStop = 1.4;
-            this.dofEnabled = true; this.dofAutoFocus = true; this.dofHighQuality = true;
-            this.dofRange = 0.06; this.dofAmount = 1.4; this.dofFarBoost = 2.2; this.dofNearBoost = 1.2;
-            this.dofHighlightThreshold = 0.8; this.dofHighlightGain = 1.1; this.focusSmooth = 0.25;
+        lens.addBinding(this, 'lensDriveFov', { label: 'drive fov' });
+        lens.addBinding(this, 'lensSensorSize', { min: 10.0, max: 70.0, step: 0.1, label: 'sensor (mm)' });
+        lens.addBinding(this, 'lensFocalLength', { min: 8.0, max: 120.0, step: 0.1, label: 'focal (mm)' });
+        lens.addBinding(this, 'lensAperture', { min: 0.7, max: 16.0, step: 0.1, label: 'aperture f/' });
+        lens.addBinding(this, 'lensFocusRange', { min: 0.02, max: 2.0, step: 0.01, label: 'focus range' });
+        lens.addBinding(this, 'lensBokehScale', { min: 0.1, max: 3.5, step: 0.01, label: 'bokeh scale' });
+        lens.addBinding(this, 'lensAnamorphic', { min: -1.0, max: 1.0, step: 0.01, label: 'anamorphic' });
+        lens.addBinding(this, 'lensResolutionScale', { min: 0.35, max: 1.0, step: 0.01, label: 'quality' });
+        lens.addBlade({
+            view: 'list',
+            label: 'focus mode',
+            options: [
+                { text: 'auto (pointer)', value: 'auto' },
+                { text: 'manual', value: 'manual' },
+            ],
+            value: this.lensFocusMode,
+        }).on('change', (ev) => { this.lensFocusMode = ev.value; });
+        lens.addBinding(this, 'lensFocusDistance', { min: 0.05, max: 10.0, step: 0.01, label: 'focus distance' });
+        lens.addBinding(this, 'lensFocusSmoothing', { min: 0.0, max: 0.9, step: 0.01, label: 'focus smooth' });
+        lens.addBinding(this, 'lensFocusNear', { min: 0.01, max: 1.0, step: 0.01, label: 'focus min' });
+        lens.addBinding(this, 'lensFocusFar', { min: 0.5, max: 12.0, step: 0.1, label: 'focus max' });
+        this.lensFocusReadout = this.lensFocusDistance;
+        lens.addMonitor(this, 'lensFocusReadout', { label: 'auto focus', interval: 0 });
+
+        lens.addBlade({ view: 'button', label: 'preset', title: 'Macro Lens' }).on('click', () => {
+            this.lensEnabled = true;
+            this.lensDriveFov = true;
+            this.lensSensorSize = 36.0;
+            this.lensFocalLength = 50.0;
+            this.lensAperture = 1.8;
+            this.lensFocusDistance = 0.75;
+            this.lensFocusRange = 0.08;
+            this.lensBokehScale = 2.0;
+            this.lensAnamorphic = 0.1;
+            this.lensFocusMode = 'auto';
+            if (this.gui) this.gui.refresh();
+        });
+        lens.addBlade({ view: 'button', label: 'preset', title: 'Cinematic Wide' }).on('click', () => {
+            this.lensEnabled = true;
+            this.lensDriveFov = true;
+            this.lensSensorSize = 36.0;
+            this.lensFocalLength = 28.0;
+            this.lensAperture = 2.8;
+            this.lensFocusDistance = 1.6;
+            this.lensFocusRange = 0.22;
+            this.lensBokehScale = 1.1;
+            this.lensAnamorphic = 0.0;
+            this.lensFocusMode = 'auto';
+            if (this.gui) this.gui.refresh();
+        });
+        lens.addBlade({ view: 'button', label: 'preset', title: 'Deep Focus' }).on('click', () => {
+            this.lensEnabled = true;
+            this.lensDriveFov = false;
+            this.lensFocalLength = 24.0;
+            this.lensAperture = 5.6;
+            this.lensFocusDistance = 2.4;
+            this.lensFocusRange = 0.6;
+            this.lensBokehScale = 0.6;
+            this.lensFocusMode = 'manual';
             if (this.gui) this.gui.refresh();
         });
 
@@ -489,83 +456,34 @@ class Conf {
 
         // Post FX unified panel
         const fx = settings.addFolder({ title: 'post fx', expanded: false });
-        // Master toggle
         fx.addBinding(this, 'postFxEnabled', { label: 'enable all' });
-        // Bloom
-        const fxBloom = fx.addFolder({ title: 'bloom', expanded: false });
-        fxBloom.addBinding(this, "bloom", { label: 'enable' });
-        fxBloom.addBinding(this, "bloomStrength", { min: 0, max: 2, step: 0.01 });
-        fxBloom.addBinding(this, "bloomRadius", { min: 0, max: 1.2, step: 0.01 });
-        fxBloom.addBinding(this, "bloomThreshold", { min: 0, max: 1, step: 0.001 });
-        // Depth of field
-        // DOF controls moved into Lens panel for cohesion
-        // Vignette
-        const fxVig = fx.addFolder({ title: 'vignette', expanded: false });
-        fxVig.addBinding(this, 'vignetteEnabled', { label: 'enable' });
-        fxVig.addBinding(this, 'vignetteAmount', { min: 0.0, max: 1.0, step: 0.01, label: 'amount' });
-        // Grain
-        const fxGrain = fx.addFolder({ title: 'grain', expanded: false });
-        fxGrain.addBinding(this, 'grainEnabled', { label: 'enable' });
-        fxGrain.addBinding(this, 'grainAmount', { min: 0.0, max: 0.5, step: 0.01, label: 'amount' });
-        // Chromatic aberration
-        const fxCA = fx.addFolder({ title: 'chroma ab', expanded: false });
-        fxCA.addBinding(this, 'chromaEnabled', { label: 'enable' });
-        fxCA.addBinding(this, 'chromaAmount', { min: 0.0, max: 0.01, step: 0.0001, label: 'amount' });
-        this.chromaCenter = this.chromaCenter || { x: 0.5, y: 0.5 };
-        this.chromaScale = this.chromaScale || 1.0;
-        fxCA.addBinding(this, 'chromaCenter', { x: { min: 0.0, max: 1.0, step: 0.001 }, y: { min: 0.0, max: 1.0, step: 0.001 } });
-        fxCA.addBinding(this, 'chromaScale', { min: 0.2, max: 3.0, step: 0.01, label: 'scale' });
-        // Motion blur
-        const fxMB = fx.addFolder({ title: 'motion blur', expanded: false });
-        fxMB.addBinding(this, 'motionBlurEnabled', { label: 'enable' });
-        fxMB.addBinding(this, 'motionBlurAmount', { min: 0.0, max: 1.0, step: 0.01, label: 'amount' });
-        // Grading
-        const fxGrade = fx.addFolder({ title: 'grading', expanded: false });
-        fxGrade.addBinding(this, 'postSaturation', { min: 0.0, max: 2.0, step: 0.01, label: 'saturation' });
-        fxGrade.addBinding(this, 'postContrast', { min: 0.5, max: 2.0, step: 0.01, label: 'contrast' });
-        fxGrade.addBinding(this, 'postLift', { min: -0.3, max: 0.3, step: 0.005, label: 'lift' });
-        // Anti-aliasing
-        const fxAA = fx.addFolder({ title: 'anti aliasing', expanded: false });
-        fxAA.addBlade({
-            view: 'list',
-            label: 'mode',
-            options: [
-                { text: 'off', value: 'off' },
-                { text: 'fxaa', value: 'fxaa' },
-                { text: 'smaa', value: 'smaa' },
-                { text: 'traa', value: 'traa' },
-            ],
-            value: this.aaMode,
-        }).on('change', (ev) => { this.aaMode = ev.value; });
-        fxAA.addBinding(this, 'aaAmount', { min: 0.2, max: 2.0, step: 0.05, label: 'amount' });
-        // Ambient Occlusion (GTAO)
-        const fxAO = fx.addFolder({ title: 'ambient occlusion', expanded: false });
-        fxAO.addBinding(this, 'gtaoEnabled', { label: 'enable' });
-        fxAO.addBinding(this, 'gtaoRadius', { min: 0.05, max: 2.0, step: 0.01, label: 'radius' });
-        fxAO.addBinding(this, 'gtaoThickness', { min: 0.1, max: 4.0, step: 0.1, label: 'thickness' });
-        fxAO.addBinding(this, 'gtaoDistanceExponent', { min: 0.5, max: 3.0, step: 0.05, label: 'distance exp' });
-        fxAO.addBinding(this, 'gtaoScale', { min: 0.1, max: 2.0, step: 0.05, label: 'scale' });
-        fxAO.addBinding(this, 'gtaoSamples', { min: 4, max: 32, step: 1, label: 'samples' });
-        fxAO.addBinding(this, 'gtaoResolutionScale', { min: 0.25, max: 1.0, step: 0.05, label: 'res scale' });
-        // Global Illumination (SSGI)
-        const fxGI = fx.addFolder({ title: 'global illumination', expanded: false });
-        fxGI.addBinding(this, 'ssgiEnabled', { label: 'enable' });
-        fxGI.addBinding(this, 'ssgiSlices', { min: 1, max: 4, step: 1, label: 'slices' });
-        fxGI.addBinding(this, 'ssgiSteps', { min: 1, max: 32, step: 1, label: 'steps' });
-        fxGI.addBinding(this, 'ssgiIntensity', { min: 0.0, max: 2.0, step: 0.01, label: 'intensity' });
-        fxGI.addBinding(this, 'ssgiResolutionScale', { min: 0.25, max: 1.0, step: 0.05, label: 'res scale' });
-        fxGI.addBinding(this, 'ssgiDenoise', { label: 'denoise' });
-        // Reflections (SSR)
-        const fxSSR = fx.addFolder({ title: 'reflections', expanded: false });
-        fxSSR.addBinding(this, 'ssrEnabled', { label: 'enable' });
-        fxSSR.addBinding(this, 'ssrOpacity', { min: 0.0, max: 1.0, step: 0.01, label: 'opacity' });
-        fxSSR.addBinding(this, 'ssrMaxDistance', { min: 0.1, max: 4.0, step: 0.05, label: 'max dist' });
-        fxSSR.addBinding(this, 'ssrThickness', { min: 0.01, max: 1.0, step: 0.01, label: 'thickness' });
-        fxSSR.addBinding(this, 'ssrResolutionScale', { min: 0.25, max: 1.0, step: 0.05, label: 'res scale' });
-        fxSSR.addBinding(this, 'ssrMetalness', { min: 0.0, max: 1.0, step: 0.01, label: 'metalness' });
 
-        /*settings.addBinding(this, "roughness", { min: 0.0, max: 1, step: 0.01 });
-        settings.addBinding(this, "metalness", { min: 0.0, max: 1, step: 0.01 });*/
+        const fxBloom = fx.addFolder({ title: 'bloom', expanded: false });
+        fxBloom.addBinding(this, 'postBloomEnabled', { label: 'enable' });
+        fxBloom.addBinding(this, 'postBloomIntensity', { min: 0.0, max: 2.5, step: 0.01, label: 'intensity' });
+        fxBloom.addBinding(this, 'postBloomRadius', { min: 0.0, max: 1.5, step: 0.01, label: 'radius' });
+        fxBloom.addBinding(this, 'postBloomThreshold', { min: 0.0, max: 1.0, step: 0.001, label: 'threshold' });
+
+        const fxGrade = fx.addFolder({ title: 'grade', expanded: false });
+        fxGrade.addBinding(this, 'postToneSaturation', { min: 0.0, max: 2.0, step: 0.01, label: 'saturation' });
+        fxGrade.addBinding(this, 'postToneContrast', { min: 0.5, max: 2.0, step: 0.01, label: 'contrast' });
+        fxGrade.addBinding(this, 'postToneLift', { min: -0.3, max: 0.3, step: 0.005, label: 'lift' });
+
+        const fxVig = fx.addFolder({ title: 'vignette', expanded: false });
+        fxVig.addBinding(this, 'postVignetteEnabled', { label: 'enable' });
+        fxVig.addBinding(this, 'postVignetteAmount', { min: 0.0, max: 1.0, step: 0.01, label: 'amount' });
+
+        const fxGrain = fx.addFolder({ title: 'grain', expanded: false });
+        fxGrain.addBinding(this, 'postGrainEnabled', { label: 'enable' });
+        fxGrain.addBinding(this, 'postGrainAmount', { min: 0.0, max: 0.5, step: 0.01, label: 'amount' });
+
+        const fxCA = fx.addFolder({ title: 'chromatic ab.', expanded: false });
+        fxCA.addBinding(this, 'postChromaticEnabled', { label: 'enable' });
+        fxCA.addBinding(this, 'postChromaticAmount', { min: 0.0, max: 0.01, step: 0.0001, label: 'amount' });
+
+        const fxMB = fx.addFolder({ title: 'motion blur', expanded: false });
+        fxMB.addBinding(this, 'postMotionBlurEnabled', { label: 'enable' });
+        fxMB.addBinding(this, 'postMotionBlurAmount', { min: 0.0, max: 1.0, step: 0.01, label: 'amount' });
 
         // Presets
         const presets = gui.addFolder({
@@ -681,8 +599,10 @@ class Conf {
     _exportPreset() {
         // Whitelist of presettable fields
         const keys = [
-            'particles','size','points','bloom','bloomStrength','bloomRadius','bloomThreshold',
-            'worldScale','autoWorldFit','fitMode','fitMargin','zScale','borderMode','dofEnabled','dofHighQuality','dofFocus','dofRange','dofAmount','dofNearBoost','dofFarBoost','dofHighlightThreshold','dofHighlightGain','colorMode',
+            'particles','size','points',
+            'postFxEnabled','postBloomEnabled','postBloomIntensity','postBloomRadius','postBloomThreshold',
+            'worldScale','autoWorldFit','fitMode','fitMargin','zScale','borderMode',
+            'lensEnabled','lensDriveFov','lensSensorSize','lensFocalLength','lensAperture','lensFocusMode','lensFocusDistance','lensFocusRange','lensFocusSmoothing','lensFocusNear','lensFocusFar','lensBokehScale','lensAnamorphic','lensResolutionScale',
             'fov','envIntensity','exposure','bgRotY','envRotY',
             'boundariesEnabled','boundaryShape','glassIor','glassThickness','glassRoughness','glassDispersion','glassAttenuationDistance','glassAttenuationColor','collisionShrink','collisionRestitution','collisionFriction',
             'run','noise','speed','substeps','apicBlend','physMaxVelocity','cflSafety','vorticityEnabled','vorticityEps','xsphEnabled','xsphEps','sdfSphere','sdfCenterZ','sdfRadius','gravity','density','stiffness','dynamicViscosity',
@@ -691,7 +611,7 @@ class Conf {
             'orbitEnabled','orbitStrength','orbitRadius','orbitAxis',
             'waveEnabled','waveAmplitude','waveScale','waveSpeed','waveAxis',
             'audioEnabled','audioSource','audioSensitivity','audioAttack','audioRelease','audioBassGain','audioMidGain','audioTrebleGain','audioBeatBoost',
-            'vignetteEnabled','vignetteAmount','grainEnabled','grainAmount','chromaEnabled','chromaAmount','motionBlurEnabled','motionBlurAmount','postSaturation','postContrast','postLift','aaMode','aaAmount','gtaoEnabled','gtaoRadius','gtaoThickness','gtaoDistanceExponent','gtaoScale','gtaoSamples','gtaoResolutionScale','ssgiEnabled','ssgiSlices','ssgiSteps','ssgiIntensity','ssgiResolutionScale','ssgiDenoise','ssrEnabled','ssrOpacity','ssrMaxDistance','ssrThickness','ssrResolutionScale','ssrMetalness','lensEnabled','sensorWidth','focalLength','fStop','lensDriveFov','focusSmooth','dofQuality','apertureBlades','apertureRotation','aperturePetal','anamorphic'
+            'postVignetteEnabled','postVignetteAmount','postGrainEnabled','postGrainAmount','postChromaticEnabled','postChromaticAmount','postMotionBlurEnabled','postMotionBlurAmount','postToneSaturation','postToneContrast','postToneLift'
         ];
         const out = {};
         keys.forEach(k => { out[k] = this[k]; });
@@ -745,8 +665,8 @@ class Conf {
                 worldScale: 2.0,
                 boundariesEnabled: false,
                 renderMode: 'surface',
-                bloom: true, bloomStrength: 1.2, bloomRadius: 1.0, bloomThreshold: 0.0005,
-                dofEnabled: true, dofFocus: 1.1, dofRange: 0.25, dofAmount: 0.85,
+                postBloomEnabled: true, postBloomIntensity: 1.2, postBloomRadius: 1.0, postBloomThreshold: 0.0005,
+                lensEnabled: true, lensFocusDistance: 1.1, lensFocusRange: 0.25, lensBokehScale: 0.85,
                 fov: 60, exposure: 0.66, envIntensity: 0.9,
                 gravity: 2, speed: 1.6, density: 1.4, substeps: 2, apicBlend: 0.2,
                 particles: 8192 * 4,
@@ -754,33 +674,33 @@ class Conf {
             'Glass Dodeca': {
                 boundariesEnabled: true, boundaryShape: 'dodeca',
                 glassIor: 1.52, glassThickness: 0.38, glassRoughness: 0.04, glassDispersion: 0.28,
-                bloom: true, bloomStrength: 0.9, bloomRadius: 0.9, bloomThreshold: 0.001,
-                dofEnabled: true, dofFocus: 1.2, dofRange: 0.35, dofAmount: 0.7,
+                postBloomEnabled: true, postBloomIntensity: 0.9, postBloomRadius: 0.9, postBloomThreshold: 0.001,
+                lensEnabled: true, lensFocusDistance: 1.2, lensFocusRange: 0.35, lensBokehScale: 0.7,
                 worldScale: 1.3, renderMode: 'surface', gravity: 1, speed: 1.2, density: 1.0,
             },
             'Glyph Motion': {
                 renderMode: 'glyphs', worldScale: 1.8,
-                bloom: true, bloomStrength: 0.8, bloomRadius: 0.8, bloomThreshold: 0.002,
-                dofEnabled: true, dofFocus: 1.0, dofRange: 0.2, dofAmount: 0.8,
+                postBloomEnabled: true, postBloomIntensity: 0.8, postBloomRadius: 0.8, postBloomThreshold: 0.002,
+                lensEnabled: true, lensFocusDistance: 1.0, lensFocusRange: 0.2, lensBokehScale: 0.8,
                 boundariesEnabled: false, gravity: 0, speed: 1.4, density: 1.1, apicBlend: 0.35,
             },
             'Points Storm': {
                 renderMode: 'points', particles: 8192 * 8, size: 0.9,
-                bloom: false, dofEnabled: false,
+                postBloomEnabled: false, lensEnabled: false,
                 worldScale: 2.2, boundariesEnabled: false, gravity: 3, speed: 1.5, density: 0.9,
             },
             'Sphere Tank': {
                 boundariesEnabled: true, boundaryShape: 'sphere', sdfSphere: true, sdfRadius: 18, sdfCenterZ: 20,
                 worldScale: 1.2, renderMode: 'surface',
-                bloom: true, bloomStrength: 0.7, bloomRadius: 0.6, bloomThreshold: 0.002,
-                dofEnabled: false, gravity: 1, speed: 1.0, density: 1.2,
+                postBloomEnabled: true, postBloomIntensity: 0.7, postBloomRadius: 0.6, postBloomThreshold: 0.002,
+                lensEnabled: false, gravity: 1, speed: 1.0, density: 1.2,
             },
             'Vortex Jet': {
                 boundariesEnabled: false, worldScale: 1.8,
                 jetEnabled: true, jetStrength: 1.0, jetRadius: 10.0, jetPos: { x: 20, y: 54, z: 28 }, jetDir: { x: 0, y: -1, z: 0 },
                 vortexEnabled: true, vortexStrength: 0.8, vortexRadius: 22.0, vortexCenter: { x: 32, y: 32 },
-                bloom: true, bloomStrength: 1.1, bloomRadius: 0.9, bloomThreshold: 0.001,
-                dofEnabled: true, dofFocus: 1.05, dofRange: 0.3, dofAmount: 0.75,
+                postBloomEnabled: true, postBloomIntensity: 1.1, postBloomRadius: 0.9, postBloomThreshold: 0.001,
+                lensEnabled: true, lensFocusDistance: 1.05, lensFocusRange: 0.3, lensBokehScale: 0.75,
                 gravity: 0, speed: 1.8, density: 1.1,
             },
             'Bass Jet': {
@@ -790,8 +710,8 @@ class Conf {
                 jetEnabled: true, jetStrength: 0.9, jetRadius: 12.0, jetPos: { x: 32, y: 58, z: 28 }, jetDir: { x: 0, y: -1, z: 0 },
                 vortexEnabled: false,
                 apicBlend: 0.25, physMaxVelocity: 2.6, cflSafety: 0.5,
-                bloom: true, bloomStrength: 1.0, bloomRadius: 0.9, bloomThreshold: 0.0015,
-                dofEnabled: true, dofFocus: 1.0, dofRange: 0.22, dofAmount: 0.85,
+                postBloomEnabled: true, postBloomIntensity: 1.0, postBloomRadius: 0.9, postBloomThreshold: 0.0015,
+                lensEnabled: true, lensFocusDistance: 1.0, lensFocusRange: 0.22, lensBokehScale: 0.85,
                 gravity: 0, speed: 1.7, density: 1.2,
             },
             'Dance Surface': {
@@ -800,8 +720,8 @@ class Conf {
                 boundariesEnabled: false, renderMode: 'surface', worldScale: 2.0,
                 jetEnabled: false, vortexEnabled: true, vortexStrength: 0.9, vortexRadius: 20.0, vortexCenter: { x: 32, y: 32 },
                 apicBlend: 0.35, physMaxVelocity: 2.8, cflSafety: 0.5,
-                bloom: true, bloomStrength: 0.9, bloomRadius: 0.9, bloomThreshold: 0.002,
-                dofEnabled: true, dofFocus: 1.0, dofRange: 0.25, dofAmount: 0.8,
+                postBloomEnabled: true, postBloomIntensity: 0.9, postBloomRadius: 0.9, postBloomThreshold: 0.002,
+                lensEnabled: true, lensFocusDistance: 1.0, lensFocusRange: 0.25, lensBokehScale: 0.8,
                 gravity: 0, speed: 1.8, density: 1.1,
             },
             'Audio Showcase': {
@@ -815,8 +735,8 @@ class Conf {
                 vortexEnabled: true, vortexStrength: 0.7, vortexRadius: 20.0, vortexCenter: { x: 32, y: 32 },
                 // Visuals
                 renderMode: 'surface', worldScale: 2.0,
-                bloom: true, bloomStrength: 1.0, bloomRadius: 0.9, bloomThreshold: 0.0013,
-                dofEnabled: true, dofFocus: 1.05, dofRange: 0.24, dofAmount: 0.85,
+                postBloomEnabled: true, postBloomIntensity: 1.0, postBloomRadius: 0.9, postBloomThreshold: 0.0013,
+                lensEnabled: true, lensFocusDistance: 1.05, lensFocusRange: 0.24, lensBokehScale: 0.85,
                 gravity: 0, speed: 1.7, density: 1.2,
             },
             'Nebula Curl': {
@@ -826,8 +746,8 @@ class Conf {
                 waveEnabled: false,
                 renderMode: 'surface', worldScale: 1.9,
                 vorticityEnabled: true, vorticityEps: 0.18, xsphEnabled: true, xsphEps: 0.06,
-                bloom: true, bloomStrength: 1.0, bloomRadius: 0.9, bloomThreshold: 0.0015,
-                dofEnabled: true, dofFocus: 1.1, dofRange: 0.22, dofAmount: 0.85,
+                postBloomEnabled: true, postBloomIntensity: 1.0, postBloomRadius: 0.9, postBloomThreshold: 0.0015,
+                lensEnabled: true, lensFocusDistance: 1.1, lensFocusRange: 0.22, lensBokehScale: 0.85,
                 gravity: 0, speed: 1.6, density: 1.2,
             },
             'Orbit Dance': {
@@ -836,8 +756,8 @@ class Conf {
                 curlEnabled: true, curlStrength: 0.6, curlScale: 0.02, curlTime: 0.7,
                 waveEnabled: false,
                 renderMode: 'glyphs', worldScale: 1.8,
-                bloom: true, bloomStrength: 0.9, bloomRadius: 0.9, bloomThreshold: 0.001,
-                dofEnabled: true, dofFocus: 1.0, dofRange: 0.25, dofAmount: 0.8,
+                postBloomEnabled: true, postBloomIntensity: 0.9, postBloomRadius: 0.9, postBloomThreshold: 0.001,
+                lensEnabled: true, lensFocusDistance: 1.0, lensFocusRange: 0.25, lensBokehScale: 0.8,
                 gravity: 0, speed: 1.7, density: 1.1,
             },
             'Beat Waves': {
@@ -846,8 +766,8 @@ class Conf {
                 orbitEnabled: true, orbitAxis: 'y', orbitRadius: 18.0, orbitStrength: 0.6,
                 curlEnabled: false,
                 renderMode: 'surface', worldScale: 2.0,
-                bloom: true, bloomStrength: 0.95, bloomRadius: 0.9, bloomThreshold: 0.001,
-                dofEnabled: true, dofFocus: 1.0, dofRange: 0.22, dofAmount: 0.8,
+                postBloomEnabled: true, postBloomIntensity: 0.95, postBloomRadius: 0.9, postBloomThreshold: 0.001,
+                lensEnabled: true, lensFocusDistance: 1.0, lensFocusRange: 0.22, lensBokehScale: 0.8,
                 gravity: 0, speed: 1.6, density: 1.2,
             },
             'Bass Storm': {
@@ -857,8 +777,8 @@ class Conf {
                 curlEnabled: true, curlStrength: 0.7, curlScale: 0.024, curlTime: 0.8,
                 waveEnabled: false,
                 renderMode: 'surface', worldScale: 1.9,
-                bloom: true, bloomStrength: 1.1, bloomRadius: 0.95, bloomThreshold: 0.001,
-                dofEnabled: true, dofFocus: 1.05, dofRange: 0.2, dofAmount: 0.85,
+                postBloomEnabled: true, postBloomIntensity: 1.1, postBloomRadius: 0.95, postBloomThreshold: 0.001,
+                lensEnabled: true, lensFocusDistance: 1.05, lensFocusRange: 0.2, lensBokehScale: 0.85,
                 gravity: 0, speed: 1.8, density: 1.25,
             },
             'Perc Glitch': {
@@ -867,8 +787,8 @@ class Conf {
                 curlEnabled: true, curlStrength: 0.5, curlScale: 0.03, curlTime: 1.2,
                 orbitEnabled: false,
                 renderMode: 'glyphs', worldScale: 1.7,
-                bloom: true, bloomStrength: 0.9, bloomRadius: 0.85, bloomThreshold: 0.0015,
-                dofEnabled: false,
+                postBloomEnabled: true, postBloomIntensity: 0.9, postBloomRadius: 0.85, postBloomThreshold: 0.0015,
+                lensEnabled: false,
                 gravity: 0, speed: 1.9, density: 1.1,
             },
             'Ambient Wash': {
@@ -877,8 +797,8 @@ class Conf {
                 orbitEnabled: true, orbitAxis: 'y', orbitRadius: 28.0, orbitStrength: 0.5,
                 waveEnabled: true, waveAxis: 'z', waveAmplitude: 0.25, waveScale: 0.09, waveSpeed: 0.9,
                 renderMode: 'surface', worldScale: 2.0,
-                bloom: true, bloomStrength: 0.8, bloomRadius: 0.8, bloomThreshold: 0.002,
-                dofEnabled: true, dofFocus: 1.2, dofRange: 0.3, dofAmount: 0.7,
+                postBloomEnabled: true, postBloomIntensity: 0.8, postBloomRadius: 0.8, postBloomThreshold: 0.002,
+                lensEnabled: true, lensFocusDistance: 1.2, lensFocusRange: 0.3, lensBokehScale: 0.7,
                 gravity: 0, speed: 1.4, density: 1.1,
             },
             'Chillwave Drift': {
@@ -887,8 +807,8 @@ class Conf {
                 curlEnabled: true, curlStrength: 0.6, curlScale: 0.024, curlTime: 0.7,
                 waveEnabled: true, waveAxis: 'y', waveAmplitude: 0.35, waveScale: 0.12, waveSpeed: 1.0,
                 renderMode: 'surface', worldScale: 2.1,
-                bloom: true, bloomStrength: 0.9, bloomRadius: 0.9, bloomThreshold: 0.001,
-                dofEnabled: true, dofFocus: 1.1, dofRange: 0.28, dofAmount: 0.75,
+                postBloomEnabled: true, postBloomIntensity: 0.9, postBloomRadius: 0.9, postBloomThreshold: 0.001,
+                lensEnabled: true, lensFocusDistance: 1.1, lensFocusRange: 0.28, lensBokehScale: 0.75,
                 gravity: 0, speed: 1.6, density: 1.15,
             },
             'Trance Swirl': {
@@ -898,8 +818,8 @@ class Conf {
                 curlEnabled: false,
                 waveEnabled: true, waveAxis: 'y', waveAmplitude: 0.4, waveScale: 0.12, waveSpeed: 1.4,
                 renderMode: 'surface', worldScale: 2.0,
-                bloom: true, bloomStrength: 1.0, bloomRadius: 0.95, bloomThreshold: 0.0012,
-                dofEnabled: true, dofFocus: 1.0, dofRange: 0.22, dofAmount: 0.8,
+                postBloomEnabled: true, postBloomIntensity: 1.0, postBloomRadius: 0.95, postBloomThreshold: 0.0012,
+                lensEnabled: true, lensFocusDistance: 1.0, lensFocusRange: 0.22, lensBokehScale: 0.8,
                 gravity: 0, speed: 1.8, density: 1.2,
             },
         };

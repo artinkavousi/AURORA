@@ -8,18 +8,65 @@ class Conf {
     maxParticles = 8192 * 16;
     particles = 8192 * 4;
 
+    // Lens & imaging defaults
+    lensEnabled = true;
+    lensDriveFov = true;
+    lensSensorSize = 36.0;
+    lensFocalLength = 35.0;
+    lensAperture = 2.4;
+    lensFocusMode = 'auto';
+    lensFocusDistance = 1.0;
+    lensFocusRange = 0.12;
+    lensFocusSmoothing = 0.2;
+    lensFocusNear = 0.12;
+    lensFocusFar = 8.0;
+    lensBokehScale = 1.2;
+    lensAnamorphic = 0.0;
+    lensResolutionScale = 0.85;
+    lensFocusReadout = 1.0;
+
+    // PostFX defaults (match postfx.js expectations)
+    postFxEnabled = true;
+    // Bloom
     bloom = true;
     bloomStrength = 1.2;
     bloomRadius = 1.0;
     bloomThreshold = 0.0005;
-
-    // Depth of Field (approx)
+    // Depth of field (node-based)
     dofEnabled = true;
-    dofAutoFocus = true; // focus distance follows pointer
-    dofFocus = 0.8;      // macro default
-    dofRange = 0.08;     // shallow macro range
-    dofAmount = 1.15;    // larger bokeh
-    dofHighQuality = true; // HQ by default
+    dofHighQuality = true;
+    dofAutoFocus = true;
+    dofFocus = 1.0;
+    dofRange = 0.25;
+    dofAmount = 0.85;
+    dofNearBoost = 1.0;
+    dofFarBoost = 1.0;
+    dofHighlightThreshold = 0.8;
+    dofHighlightGain = 0.6;
+    apertureBlades = 7;
+    apertureRotation = 0.0;
+    aperturePetal = 1.0;
+    anamorphic = 0.0;
+    // Vignette
+    vignetteEnabled = false;
+    vignetteAmount = 0.25;
+    // Film grain
+    grainEnabled = false;
+    grainAmount = 0.06;
+    // Chromatic aberration
+    chromaEnabled = false;
+    chromaAmount = 0.0025;
+    chromaCenter = { x: 0.5, y: 0.5 };
+    chromaScale = 1.0;
+    // Motion blur
+    motionBlurEnabled = false;
+    motionBlurAmount = 0.35;
+    // Grading
+    postSaturation = 1.0;
+    postContrast = 1.0;
+    postLift = 0.0;
+    // Anti-aliasing mode: off|fxaa|smaa|traa
+    aaMode = 'fxaa';
 
     // World/domain scaling (visual mapping of 64^3 grid to world units)
     worldScale = 2.0; // scale up domain to fill more of the page by default
@@ -286,19 +333,33 @@ class Conf {
             ],
             value: this.borderMode || 'bounce',
         }).on('change', (ev) => { this.borderMode = ev.value; });
-
-        // DOF controls moved under Post FX
-        const dofMacro = () => {
-            this.zScale = 0.18;
-            this.dofEnabled = true;
-            this.dofHighQuality = true;
-            this.dofAutoFocus = true;
-            this.dofRange = 0.06;
-            this.dofAmount = 1.30;
-            this.fov = Math.max(60, this.fov);
-            this.updateParams();
-            if (this.gui) this.gui.refresh();
-        };
+        
+        const lens = settings.addFolder({ title: 'lens', expanded: false });
+        lens.addBinding(this, 'lensEnabled', { view: 'checkbox', label: 'enable' });
+        lens.addBinding(this, 'lensDriveFov', { view: 'checkbox', label: 'drive fov' });
+        lens.addBinding(this, 'lensSensorSize', { min: 10.0, max: 70.0, step: 0.1, label: 'sensor (mm)' });
+        lens.addBinding(this, 'lensFocalLength', { min: 8.0, max: 120.0, step: 0.1, label: 'focal (mm)' });
+        lens.addBinding(this, 'lensAperture', { min: 0.7, max: 16.0, step: 0.1, label: 'aperture f/' });
+        lens.addBinding(this, 'lensFocusRange', { min: 0.02, max: 2.0, step: 0.01, label: 'focus range' });
+        lens.addBinding(this, 'lensBokehScale', { min: 0.1, max: 3.5, step: 0.01, label: 'bokeh scale' });
+        lens.addBinding(this, 'lensAnamorphic', { min: -1.0, max: 1.0, step: 0.01, label: 'anamorphic' });
+        lens.addBinding(this, 'lensResolutionScale', { min: 0.35, max: 1.0, step: 0.01, label: 'quality' });
+        lens.addBlade({
+            view: 'list',
+            label: 'focus mode',
+            options: [
+                { text: 'auto (pointer)', value: 'auto' },
+                { text: 'manual', value: 'manual' },
+            ],
+            value: this.lensFocusMode,
+        }).on('change', (ev) => { this.lensFocusMode = ev.value; });
+        lens.addBinding(this, 'lensFocusDistance', { min: 0.05, max: 10.0, step: 0.01, label: 'focus distance' });
+        lens.addBinding(this, 'lensFocusSmoothing', { min: 0.0, max: 0.9, step: 0.01, label: 'focus smooth' });
+        lens.addBinding(this, 'lensFocusNear', { min: 0.01, max: 1.0, step: 0.01, label: 'focus min' });
+        lens.addBinding(this, 'lensFocusFar', { min: 0.5, max: 12.0, step: 0.1, label: 'focus max' });
+        this.lensFocusReadout = this.lensFocusDistance;
+        // Tweakpane v4 removed addMonitor; use a read-only binding instead
+        lens.addBinding(this, 'lensFocusReadout', { label: 'auto focus', readonly: true });
 
         const perf = settings.addFolder({ title: 'performance', expanded: false });
         perf.addBinding(this, 'autoPerf', { label: 'auto adjust' });
@@ -306,64 +367,7 @@ class Conf {
         perf.addBinding(this, 'perfMaxFps', { min: 30, max: 120, step: 1, label: 'max fps' });
         perf.addBinding(this, 'perfStep', { min: 1024, max: 16384, step: 1024, label: 'step' });
 
-        const camera = settings.addFolder({
-            title: "camera",
-            expanded: false,
-        });
-        camera.addBinding(this, "fov", { min: 30, max: 100, step: 1 });
-        // Lens controls (approximate mapping to DOF params)
-        const lens = settings.addFolder({ title: 'lens & dof', expanded: false });
-        this.lensEnabled = false;
-        this.sensorWidth = 36.0; // mm (full-frame)
-        this.focalLength = 24.0; // mm
-        this.fStop = 1.8;
-        this.lensDriveFov = true;
-        this.focusSmooth = 0.2;
-        lens.addBinding(this, 'lensEnabled', { label: 'enable' });
-        lens.addBinding(this, 'sensorWidth', { min: 12.0, max: 70.0, step: 0.1, label: 'sensor (mm)' });
-        lens.addBinding(this, 'focalLength', { min: 8.0, max: 120.0, step: 0.1, label: 'focal (mm)' });
-        lens.addBinding(this, 'fStop', { min: 0.7, max: 16.0, step: 0.1, label: 'f‑stop' });
-        lens.addBinding(this, 'lensDriveFov', { label: 'drive FOV' });
-        lens.addBinding(this, 'focusSmooth', { min: 0.0, max: 0.9, step: 0.01, label: 'focus smooth' });
-        // DOF controls (moved here)
-        lens.addBinding(this, 'dofEnabled', { label: 'dof enable' });
-        lens.addBinding(this, 'dofAutoFocus', { label: 'auto focus (pointer)' });
-        lens.addBinding(this, 'dofHighQuality', { label: 'high quality' });
-        lens.addBinding(this, 'dofFocus', { min: 0.1, max: 3.0, step: 0.01 });
-        lens.addBinding(this, 'dofRange', { min: 0.02, max: 2.0, step: 0.01 });
-        lens.addBinding(this, 'dofAmount', { min: 0.0, max: 2.0, step: 0.01 });
-        // DOF quality (0.25..1.0)
-        this.dofQuality = 1.0;
-        lens.addBinding(this, 'dofQuality', { min: 0.25, max: 1.0, step: 0.01, label: 'dof quality' });
-        lens.addBlade({ view: 'button', label: 'macro', title: 'Macro Shot' }).on('click', dofMacro);
-        // Advanced bokeh controls
-        this.dofNearBoost = this.dofNearBoost ?? 1.0;
-        this.dofFarBoost = this.dofFarBoost ?? 1.0;
-        this.dofHighlightThreshold = this.dofHighlightThreshold ?? 0.8;
-        this.dofHighlightGain = this.dofHighlightGain ?? 0.6;
-        lens.addBinding(this, 'dofNearBoost', { min: 0.5, max: 3.0, step: 0.01, label: 'near boost' });
-        lens.addBinding(this, 'dofFarBoost', { min: 0.5, max: 3.0, step: 0.01, label: 'far boost' });
-        lens.addBinding(this, 'dofHighlightThreshold', { min: 0.0, max: 1.0, step: 0.01, label: 'hi thresh' });
-        lens.addBinding(this, 'dofHighlightGain', { min: 0.0, max: 2.0, step: 0.01, label: 'hi gain' });
-        // Aperture & anamorphic
-        this.apertureBlades = 7; // polygon blades
-        this.apertureRotation = 0.0; // radians
-        this.aperturePetal = 1.0; // sharpness of polygon weighting
-        this.anamorphic = 0.0; // -1..1 (negative vertical, positive horizontal)
-        lens.addBinding(this, 'apertureBlades', { min: 3, max: 12, step: 1, label: 'blades' });
-        lens.addBinding(this, 'apertureRotation', { min: -3.1416, max: 3.1416, step: 0.01, label: 'apert rot' });
-        lens.addBinding(this, 'aperturePetal', { min: 0.2, max: 2.5, step: 0.01, label: 'apert petal' });
-        lens.addBinding(this, 'anamorphic', { min: -1.0, max: 1.0, step: 0.01, label: 'anamorphic' });
-        // Creative presets
-        lens.addBlade({ view: 'button', label: 'preset', title: 'Creamy Wide' }).on('click', () => {
-            this.lensEnabled = true; this.lensDriveFov = true;
-            this.sensorWidth = 36.0; this.focalLength = 24.0; this.fStop = 1.4;
-            this.dofEnabled = true; this.dofAutoFocus = true; this.dofHighQuality = true;
-            this.dofRange = 0.06; this.dofAmount = 1.4; this.dofFarBoost = 2.2; this.dofNearBoost = 1.2;
-            this.dofHighlightThreshold = 0.8; this.dofHighlightGain = 1.1; this.focusSmooth = 0.25;
-            if (this.gui) this.gui.refresh();
-        });
-
+        
         const environment = settings.addFolder({
             title: "environment",
             expanded: false,

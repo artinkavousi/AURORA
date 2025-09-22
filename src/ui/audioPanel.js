@@ -119,17 +119,18 @@ export default class AudioPanel {
 
     // Diagnostics
     const diag = gui.addFolder({ title: 'meters', expanded: false });
+    // Tweakpane v4: use bindings with graph view instead of addMonitor
     const meterOpts = { view: 'graph', min: 0, max: 1, interval: 60 };
-    diag.addMonitor(this.conf, '_audioLevel', { ...meterOpts, label: 'level' });
-    diag.addMonitor(this.conf, '_audioSub', { ...meterOpts, label: 'sub' });
-    diag.addMonitor(this.conf, '_audioBass', { ...meterOpts, label: 'bass' });
-    diag.addMonitor(this.conf, '_audioMid', { ...meterOpts, label: 'mid' });
-    diag.addMonitor(this.conf, '_audioPresence', { ...meterOpts, label: 'presence' });
-    diag.addMonitor(this.conf, '_audioAir', { ...meterOpts, label: 'air' });
-    diag.addMonitor(this.conf, '_audioBeat', { ...meterOpts, label: 'beat' });
-    diag.addMonitor(this.conf, '_audioFluxNorm', { ...meterOpts, label: 'flux' });
-    diag.addMonitor(this.conf, '_audioDynamics', { ...meterOpts, label: 'dynamics' });
-    diag.addMonitor(this.conf, '_audioStereo', { ...meterOpts, label: 'stereo' });
+    diag.addBinding(this.conf, '_audioLevel', { ...meterOpts, readonly: true, label: 'level' });
+    diag.addBinding(this.conf, '_audioSub', { ...meterOpts, readonly: true, label: 'sub' });
+    diag.addBinding(this.conf, '_audioBass', { ...meterOpts, readonly: true, label: 'bass' });
+    diag.addBinding(this.conf, '_audioMid', { ...meterOpts, readonly: true, label: 'mid' });
+    diag.addBinding(this.conf, '_audioPresence', { ...meterOpts, readonly: true, label: 'presence' });
+    diag.addBinding(this.conf, '_audioAir', { ...meterOpts, readonly: true, label: 'air' });
+    diag.addBinding(this.conf, '_audioBeat', { ...meterOpts, readonly: true, label: 'beat' });
+    diag.addBinding(this.conf, '_audioFluxNorm', { ...meterOpts, readonly: true, label: 'flux' });
+    diag.addBinding(this.conf, '_audioDynamics', { ...meterOpts, readonly: true, label: 'dynamics' });
+    diag.addBinding(this.conf, '_audioStereo', { ...meterOpts, readonly: true, label: 'stereo' });
     diag.addBinding(this.conf, '_audioTempoBpm', { readonly: true, label: 'tempo bpm' });
     diag.addBinding(this.conf, '_audioTempoConf', { readonly: true, label: 'tempo conf' });
     diag.addBinding(this.conf, '_audioTempoPhase', { readonly: true, label: 'tempo phase' });

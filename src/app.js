@@ -282,13 +282,36 @@ class App {
                 const f = this.audio.update(delta);
                 // Normalize features and apply user gains
                 const sens = conf.audioSensitivity;
-                conf._audioLevel = clamp( f.level * sens, 0.0, 1.0 );
-                conf._audioBeat = clamp( f.beat * conf.audioBeatBoost, 0.0, 1.0 );
-                conf._audioBass = clamp( f.bass * conf.audioBassGain * sens, 0.0, 1.0 );
-                conf._audioMid = clamp( f.mid * conf.audioMidGain * sens, 0.0, 1.0 );
-                conf._audioTreble = clamp( f.treble * conf.audioTrebleGain * sens, 0.0, 1.0 );
+                const clamp01 = (v) => clamp(v ?? 0, 0, 1);
+                const bassGain = conf.audioBassGain * sens;
+                const midGain = conf.audioMidGain * sens;
+                const trebleGain = conf.audioTrebleGain * sens;
+                conf._audioLevel = clamp01(f.level * sens);
+                conf._audioBeat = clamp01(f.beat * conf.audioBeatBoost);
+                conf._audioBass = clamp01(f.bass * bassGain);
+                conf._audioMid = clamp01(f.mid * midGain);
+                conf._audioTreble = clamp01(f.treble * trebleGain);
+                conf._audioSub = clamp01((f.sub ?? f.bass) * bassGain);
+                conf._audioLowMid = clamp01((f.lowMid ?? f.mid) * midGain);
+                conf._audioHighMid = clamp01((f.highMid ?? f.mid) * midGain);
+                conf._audioPresence = clamp01((f.presence ?? f.treble) * trebleGain);
+                conf._audioAir = clamp01((f.air ?? f.treble) * trebleGain);
+                conf._audioFlux = Math.max(0, f.flux || 0);
+                conf._audioFluxNorm = clamp01(f.fluxNorm ?? 0);
+                conf._audioDynamics = clamp01(f.dynamics ?? 0);
+                conf._audioCrest = clamp01(f.crest ?? 0);
+                conf._audioRms = clamp01(f.rms ?? 0);
+                conf._audioLoudness = clamp01(f.loudness ?? f.level ?? 0);
+                conf._audioTilt = clamp01(f.tilt ?? 0.5);
+                conf._audioStereo = clamp01(f.stereo ?? 0.5);
+                conf._audioStereoSigned = Math.max(-1, Math.min(1, f.stereoSigned ?? 0));
+                conf._audioStereoWidth = clamp01(f.stereoWidth ?? 0);
+                conf._audioBeatConfidence = clamp01(f.beatConfidence ?? 0);
+                conf._audioDominant = clamp01(f.dominant ?? 0);
                 conf._audioTempoPhase = f.tempoPhase01 || 0.0;
                 conf._audioTempoBpm = f.tempoBpm || 0.0;
+                conf._audioTempoConf = f.tempoConf || 0.0;
+                conf._audioTempoNorm = clamp01(f.tempoNorm ?? 0);
                 // Router applies mappings and environment sway
                 this.router.apply({
                     level: conf._audioLevel,
@@ -296,18 +319,46 @@ class App {
                     bass: conf._audioBass,
                     mid: conf._audioMid,
                     treble: conf._audioTreble,
+                    sub: conf._audioSub,
+                    lowMid: conf._audioLowMid,
+                    highMid: conf._audioHighMid,
+                    presence: conf._audioPresence,
+                    air: conf._audioAir,
                     centroid: f.centroid,
+                    tilt: f.tilt,
+                    tiltSigned: f.tiltSigned,
                     flux: f.flux,
+                    fluxNorm: f.fluxNorm,
                     fluxBass: f.fluxBass,
                     fluxMid: f.fluxMid,
                     fluxTreble: f.fluxTreble,
+                    beatConfidence: f.beatConfidence,
+                    rms: f.rms,
+                    loudness: f.loudness,
+                    crest: f.crest,
+                    dynamics: f.dynamics,
+                    stereo: f.stereo,
+                    stereoSigned: f.stereoSigned,
+                    stereoWidth: f.stereoWidth,
+                    dominant: f.dominant,
                     tempoBpm: f.tempoBpm,
                     tempoPhase01: f.tempoPhase01,
                     tempoConf: f.tempoConf,
+                    tempoNorm: f.tempoNorm,
+                    tempoPulse: f.tempoPulse,
+                    bandEnergies: f.bandEnergies,
                 }, conf, elapsed, this._envBase);
             } catch (e) { /* noop */ }
         } else {
             conf._audioLevel = conf._audioBeat = conf._audioBass = conf._audioMid = conf._audioTreble = 0;
+            conf._audioSub = conf._audioLowMid = conf._audioHighMid = conf._audioPresence = conf._audioAir = 0;
+            conf._audioFlux = conf._audioFluxNorm = conf._audioDynamics = conf._audioCrest = 0;
+            conf._audioRms = conf._audioLoudness = 0;
+            conf._audioTilt = 0.5;
+            conf._audioStereo = 0.5; conf._audioStereoSigned = 0; conf._audioStereoWidth = 0;
+            conf._audioDominant = 0; conf._audioBeatConfidence = 0;
+            conf._audioTempoPhase = conf._audioTempoBpm = 0;
+            conf._audioTempoConf = conf._audioTempoNorm = 0;
             // Reset environment rotations when audio off
             if (this._envBase) { conf.bgRotY = this._envBase.bg; conf.envRotY = this._envBase.env; }
         }

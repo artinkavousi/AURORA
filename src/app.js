@@ -12,7 +12,7 @@ import Stage from "./stage";
 import AudioEngine from "./audio/audioEngine";
 import AudioRouter from "./audio/router";
 import AudioPanel from "./ui/audioPanel";
-import LensPipeline from "./lens/LensPipeline";
+import LensSystem from "./lens/LensSystem";
 // PostFX pipeline is initialized dynamically inside init
 
 // Stage handles camera/scene/environment & controls
@@ -199,7 +199,7 @@ class App {
 
         this.postFX = new (await import('./postfx')).default(this.renderer);
         await this.postFX.init(this.stage);
-        this.lens = new LensPipeline(this.stage, this.postFX);
+        this.lens = new LensSystem(this.stage, this.postFX);
 
 
         this.raycaster = new THREE.Raycaster();
@@ -246,10 +246,10 @@ class App {
         this.mlsMpmSim.setMouseRay(originSim, dirSim, posSim);
 
         // Auto focus DOF to pointer via LensPipeline
-        if (conf.dofEnabled && conf.dofAutoFocus && this.lens) {
+        if (conf.lensEnabled && (conf.lensFocusMode || 'auto') === 'auto' && this.lens) {
             const camSpace = intersect.clone().applyMatrix4(camera.matrixWorldInverse);
             const viewDist = Math.abs(camSpace.z);
-            this.lens.onPointerFocus(viewDist);
+            this.lens.focusFromPointer(viewDist);
         }
     }
 

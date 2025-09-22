@@ -147,7 +147,12 @@ class Conf {
     __onAudioUpload = null;
     // Runtime audio features (read-only; set by app)
     _audioLevel = 0.0; _audioBeat = 0.0; _audioBass = 0.0; _audioMid = 0.0; _audioTreble = 0.0;
-    _audioTempoPhase = 0.0; _audioTempoBpm = 0.0;
+    _audioSub = 0.0; _audioLowMid = 0.0; _audioHighMid = 0.0; _audioPresence = 0.0; _audioAir = 0.0;
+    _audioFlux = 0.0; _audioFluxNorm = 0.0; _audioDynamics = 0.0; _audioCrest = 0.0;
+    _audioRms = 0.0; _audioLoudness = 0.0; _audioTilt = 0.5;
+    _audioStereo = 0.5; _audioStereoSigned = 0.0; _audioStereoWidth = 0.0;
+    _audioDominant = 0.0; _audioBeatConfidence = 0.0;
+    _audioTempoPhase = 0.0; _audioTempoBpm = 0.0; _audioTempoConf = 0.0; _audioTempoNorm = 0.0;
 
     constructor(info) {
         if (mobile()) {

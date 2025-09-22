@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { Fn, attribute, instanceIndex, mat3, normalize, vec3, varying, uniform, mrt } from "three/tsl";
+import { Fn, attribute, instanceIndex, mat3, normalize, vec3, varying, uniform, mrt, float } from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { conf } from "../conf";
 import { calcLookAtMatrix } from "./particleRenderer";

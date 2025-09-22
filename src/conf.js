@@ -96,6 +96,23 @@ class Conf {
     vortexRadius = 14.0;
     vortexCenter = { x: 32, y: 32 };
 
+    // New volumetric fields
+    curlEnabled = false;
+    curlStrength = 0.6;
+    curlScale = 0.02;      // spatial scale
+    curlTime = 0.6;        // time evolution factor
+
+    orbitEnabled = false;
+    orbitStrength = 0.5;
+    orbitRadius = 22.0;
+    orbitAxis = 'z'; // 'x' | 'y' | 'z'
+
+    waveEnabled = false;
+    waveAmplitude = 0.35;
+    waveScale = 0.12;     // spatial frequency
+    waveSpeed = 1.2;
+    waveAxis = 'y';       // 'x' | 'y' | 'z'
+
     // Audio
     audioEnabled = false;
     audioAttack = 0.5;
@@ -109,6 +126,7 @@ class Conf {
     __onAudioUpload = null;
     // Runtime audio features (read-only; set by app)
     _audioLevel = 0.0; _audioBeat = 0.0; _audioBass = 0.0; _audioMid = 0.0; _audioTreble = 0.0;
+    _audioTempoPhase = 0.0; _audioTempoBpm = 0.0;
 
     // Post FX extras
     postFxEnabled = true;
@@ -430,23 +448,44 @@ class Conf {
         vortex.addBinding(this, 'vortexRadius', { min: 1.0, max: 64.0, step: 0.1 });
         vortex.addBinding(this, 'vortexCenter', { x: { min: 0, max: 64, step: 1 }, y: { min: 0, max: 64, step: 1 } });
 
-        // Audio Panel
-        const audio = settings.addFolder({ title: 'audio', expanded: false });
-        audio.addBinding(this, 'audioEnabled', { label: 'enable' });
-        audio.addBlade({ view: 'list', label: 'source', options: [
-            { text: 'mic', value: 'mic' },
-            { text: 'file', value: 'file' },
-        ], value: this.audioSource }).on('change', ev => { this.audioSource = ev.value; });
-        audio.addBinding(this, 'audioSensitivity', { min: 0.2, max: 3.0, step: 0.05, label: 'sensitivity' });
-        audio.addBinding(this, 'audioAttack', { min: 0.05, max: 0.95, step: 0.01, label: 'attack' });
-        audio.addBinding(this, 'audioRelease', { min: 0.05, max: 0.95, step: 0.01, label: 'release' });
-        audio.addBinding(this, 'audioBassGain', { min: 0.0, max: 3.0, step: 0.05, label: 'bass gain' });
-        audio.addBinding(this, 'audioMidGain', { min: 0.0, max: 3.0, step: 0.05, label: 'mid gain' });
-        audio.addBinding(this, 'audioTrebleGain', { min: 0.0, max: 3.0, step: 0.05, label: 'treble gain' });
-        audio.addBinding(this, 'audioBeatBoost', { min: 0.0, max: 3.0, step: 0.05, label: 'beat boost' });
-        audio.addBlade({ view: 'button', label: 'input', title: 'Choose Audio File' }).on('click', () => {
-            if (this.__onAudioUpload) this.__onAudioUpload();
-        });
+        const turb = fields.addFolder({ title: 'curl turbulence', expanded: false });
+        turb.addBinding(this, 'curlEnabled', { label: 'enable' });
+        turb.addBinding(this, 'curlStrength', { min: 0.0, max: 3.0, step: 0.01, label: 'strength' });
+        turb.addBinding(this, 'curlScale', { min: 0.002, max: 0.08, step: 0.001, label: 'scale' });
+        turb.addBinding(this, 'curlTime', { min: 0.05, max: 3.0, step: 0.01, label: 'time' });
+
+        const orbit = fields.addFolder({ title: 'orbit', expanded: false });
+        orbit.addBinding(this, 'orbitEnabled', { label: 'enable' });
+        orbit.addBinding(this, 'orbitStrength', { min: 0.0, max: 3.0, step: 0.01, label: 'strength' });
+        orbit.addBinding(this, 'orbitRadius', { min: 4.0, max: 64.0, step: 0.1, label: 'radius' });
+        orbit.addBlade({
+            view: 'list',
+            label: 'axis',
+            options: [
+                { text: 'x', value: 'x' },
+                { text: 'y', value: 'y' },
+                { text: 'z', value: 'z' },
+            ],
+            value: this.orbitAxis,
+        }).on('change', (ev) => { this.orbitAxis = ev.value; });
+
+        const wave = fields.addFolder({ title: 'wave', expanded: false });
+        wave.addBinding(this, 'waveEnabled', { label: 'enable' });
+        wave.addBinding(this, 'waveAmplitude', { min: 0.0, max: 2.0, step: 0.01, label: 'amplitude' });
+        wave.addBinding(this, 'waveScale', { min: 0.02, max: 1.0, step: 0.01, label: 'scale' });
+        wave.addBinding(this, 'waveSpeed', { min: 0.1, max: 4.0, step: 0.01, label: 'speed' });
+        wave.addBlade({
+            view: 'list',
+            label: 'axis',
+            options: [
+                { text: 'x', value: 'x' },
+                { text: 'y', value: 'y' },
+                { text: 'z', value: 'z' },
+            ],
+            value: this.waveAxis,
+        }).on('change', (ev) => { this.waveAxis = ev.value; });
+
+        // Audio controls moved to dedicated AudioPanel (src/ui/audioPanel.js)
 
         // Post FX unified panel
         const fx = settings.addFolder({ title: 'post fx', expanded: false });
@@ -547,6 +586,15 @@ class Conf {
                 { text: 'Vortex Jet', value: 'Vortex Jet' },
                 { text: 'Bass Jet', value: 'Bass Jet' },
                 { text: 'Dance Surface', value: 'Dance Surface' },
+                { text: 'Audio Showcase', value: 'Audio Showcase' },
+                { text: 'Nebula Curl', value: 'Nebula Curl' },
+                { text: 'Orbit Dance', value: 'Orbit Dance' },
+                { text: 'Beat Waves', value: 'Beat Waves' },
+                { text: 'Bass Storm', value: 'Bass Storm' },
+                { text: 'Perc Glitch', value: 'Perc Glitch' },
+                { text: 'Ambient Wash', value: 'Ambient Wash' },
+                { text: 'Chillwave Drift', value: 'Chillwave Drift' },
+                { text: 'Trance Swirl', value: 'Trance Swirl' },
             ],
             value: this._builtinPresetName,
         }).on('change', (ev) => {
@@ -598,8 +646,8 @@ class Conf {
         if (start) {
             this._importPreset(start);
         } else {
-            // Default to Photo Mode
-            this.applyPreset('Photo Mode');
+            // Default to Audio Showcase for a compelling sound-reactive startup
+            this.applyPreset('Audio Showcase');
         }
     }
 
@@ -609,6 +657,15 @@ class Conf {
 
     registerAudioUpload(handler) {
         this.__onAudioUpload = handler;
+    }
+
+    registerRouter(router) {
+        this.__router = router;
+        // Apply any pending routing preset captured during early preset load
+        if (this.__routerPreset) {
+            try { this.__router.fromJSON(this.__routerPreset); } catch {}
+            this.__routerPreset = null;
+        }
     }
 
     update() {
@@ -630,11 +687,19 @@ class Conf {
             'boundariesEnabled','boundaryShape','glassIor','glassThickness','glassRoughness','glassDispersion','glassAttenuationDistance','glassAttenuationColor','collisionShrink','collisionRestitution','collisionFriction',
             'run','noise','speed','substeps','apicBlend','physMaxVelocity','cflSafety','vorticityEnabled','vorticityEps','xsphEnabled','xsphEps','sdfSphere','sdfCenterZ','sdfRadius','gravity','density','stiffness','dynamicViscosity',
             'jetEnabled','jetStrength','jetRadius','jetPos','jetDir','vortexEnabled','vortexStrength','vortexRadius','vortexCenter',
+            'curlEnabled','curlStrength','curlScale','curlTime',
+            'orbitEnabled','orbitStrength','orbitRadius','orbitAxis',
+            'waveEnabled','waveAmplitude','waveScale','waveSpeed','waveAxis',
             'audioEnabled','audioSource','audioSensitivity','audioAttack','audioRelease','audioBassGain','audioMidGain','audioTrebleGain','audioBeatBoost',
             'vignetteEnabled','vignetteAmount','grainEnabled','grainAmount','chromaEnabled','chromaAmount','motionBlurEnabled','motionBlurAmount','postSaturation','postContrast','postLift','aaMode','aaAmount','gtaoEnabled','gtaoRadius','gtaoThickness','gtaoDistanceExponent','gtaoScale','gtaoSamples','gtaoResolutionScale','ssgiEnabled','ssgiSlices','ssgiSteps','ssgiIntensity','ssgiResolutionScale','ssgiDenoise','ssrEnabled','ssrOpacity','ssrMaxDistance','ssrThickness','ssrResolutionScale','ssrMetalness','lensEnabled','sensorWidth','focalLength','fStop','lensDriveFov','focusSmooth','dofQuality','apertureBlades','apertureRotation','aperturePetal','anamorphic'
         ];
         const out = {};
         keys.forEach(k => { out[k] = this[k]; });
+        // Include audio routing config if present
+        try {
+            const r = this.__router ? this.__router.toJSON() : (this.__routerPreset || null);
+            if (r) out.audioRouting = r;
+        } catch {}
         return out;
     }
 
@@ -652,6 +717,15 @@ class Conf {
             }
         };
         Object.keys(data).forEach(k => apply(k, data[k]));
+        // Apply router config if provided
+        if (data.audioRouting) {
+            if (this.__router && this.__router.fromJSON) {
+                try { this.__router.fromJSON(data.audioRouting); } catch {}
+            } else {
+                // Store for later when router is registered
+                this.__routerPreset = data.audioRouting;
+            }
+        }
         this.updateParams();
         if (this.gui) this.gui.refresh();
     }
@@ -729,6 +803,104 @@ class Conf {
                 bloom: true, bloomStrength: 0.9, bloomRadius: 0.9, bloomThreshold: 0.002,
                 dofEnabled: true, dofFocus: 1.0, dofRange: 0.25, dofAmount: 0.8,
                 gravity: 0, speed: 1.8, density: 1.1,
+            },
+            'Audio Showcase': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 1.2,
+                // Volumetric fields
+                curlEnabled: true, curlStrength: 0.9, curlScale: 0.026, curlTime: 0.8,
+                orbitEnabled: true, orbitAxis: 'z', orbitRadius: 22.0, orbitStrength: 0.8,
+                waveEnabled: true, waveAxis: 'y', waveAmplitude: 0.45, waveScale: 0.12, waveSpeed: 1.2,
+                // Classic fields
+                jetEnabled: true, jetStrength: 0.8, jetRadius: 12.0, jetPos: { x: 32, y: 58, z: 28 }, jetDir: { x: 0, y: -1, z: 0 },
+                vortexEnabled: true, vortexStrength: 0.7, vortexRadius: 20.0, vortexCenter: { x: 32, y: 32 },
+                // Visuals
+                renderMode: 'surface', worldScale: 2.0,
+                bloom: true, bloomStrength: 1.0, bloomRadius: 0.9, bloomThreshold: 0.0013,
+                dofEnabled: true, dofFocus: 1.05, dofRange: 0.24, dofAmount: 0.85,
+                gravity: 0, speed: 1.7, density: 1.2,
+            },
+            'Nebula Curl': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 1.2,
+                curlEnabled: true, curlStrength: 1.0, curlScale: 0.028, curlTime: 0.8,
+                orbitEnabled: false,
+                waveEnabled: false,
+                renderMode: 'surface', worldScale: 1.9,
+                vorticityEnabled: true, vorticityEps: 0.18, xsphEnabled: true, xsphEps: 0.06,
+                bloom: true, bloomStrength: 1.0, bloomRadius: 0.9, bloomThreshold: 0.0015,
+                dofEnabled: true, dofFocus: 1.1, dofRange: 0.22, dofAmount: 0.85,
+                gravity: 0, speed: 1.6, density: 1.2,
+            },
+            'Orbit Dance': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 1.1,
+                orbitEnabled: true, orbitAxis: 'z', orbitRadius: 24.0, orbitStrength: 0.9,
+                curlEnabled: true, curlStrength: 0.6, curlScale: 0.02, curlTime: 0.7,
+                waveEnabled: false,
+                renderMode: 'glyphs', worldScale: 1.8,
+                bloom: true, bloomStrength: 0.9, bloomRadius: 0.9, bloomThreshold: 0.001,
+                dofEnabled: true, dofFocus: 1.0, dofRange: 0.25, dofAmount: 0.8,
+                gravity: 0, speed: 1.7, density: 1.1,
+            },
+            'Beat Waves': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 1.2,
+                waveEnabled: true, waveAxis: 'y', waveAmplitude: 0.5, waveScale: 0.14, waveSpeed: 1.2,
+                orbitEnabled: true, orbitAxis: 'y', orbitRadius: 18.0, orbitStrength: 0.6,
+                curlEnabled: false,
+                renderMode: 'surface', worldScale: 2.0,
+                bloom: true, bloomStrength: 0.95, bloomRadius: 0.9, bloomThreshold: 0.001,
+                dofEnabled: true, dofFocus: 1.0, dofRange: 0.22, dofAmount: 0.8,
+                gravity: 0, speed: 1.6, density: 1.2,
+            },
+            'Bass Storm': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 1.3,
+                jetEnabled: true, jetStrength: 1.0, jetRadius: 14.0, jetPos: { x: 32, y: 56, z: 28 }, jetDir: { x: 0, y: -1, z: 0 },
+                vortexEnabled: true, vortexStrength: 0.6, vortexRadius: 18.0, vortexCenter: { x: 32, y: 32 },
+                curlEnabled: true, curlStrength: 0.7, curlScale: 0.024, curlTime: 0.8,
+                waveEnabled: false,
+                renderMode: 'surface', worldScale: 1.9,
+                bloom: true, bloomStrength: 1.1, bloomRadius: 0.95, bloomThreshold: 0.001,
+                dofEnabled: true, dofFocus: 1.05, dofRange: 0.2, dofAmount: 0.85,
+                gravity: 0, speed: 1.8, density: 1.25,
+            },
+            'Perc Glitch': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 1.0,
+                waveEnabled: true, waveAxis: 'x', waveAmplitude: 0.65, waveScale: 0.18, waveSpeed: 1.4,
+                curlEnabled: true, curlStrength: 0.5, curlScale: 0.03, curlTime: 1.2,
+                orbitEnabled: false,
+                renderMode: 'glyphs', worldScale: 1.7,
+                bloom: true, bloomStrength: 0.9, bloomRadius: 0.85, bloomThreshold: 0.0015,
+                dofEnabled: false,
+                gravity: 0, speed: 1.9, density: 1.1,
+            },
+            'Ambient Wash': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 0.9,
+                curlEnabled: true, curlStrength: 0.5, curlScale: 0.022, curlTime: 0.6,
+                orbitEnabled: true, orbitAxis: 'y', orbitRadius: 28.0, orbitStrength: 0.5,
+                waveEnabled: true, waveAxis: 'z', waveAmplitude: 0.25, waveScale: 0.09, waveSpeed: 0.9,
+                renderMode: 'surface', worldScale: 2.0,
+                bloom: true, bloomStrength: 0.8, bloomRadius: 0.8, bloomThreshold: 0.002,
+                dofEnabled: true, dofFocus: 1.2, dofRange: 0.3, dofAmount: 0.7,
+                gravity: 0, speed: 1.4, density: 1.1,
+            },
+            'Chillwave Drift': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 1.0,
+                orbitEnabled: true, orbitAxis: 'z', orbitRadius: 26.0, orbitStrength: 0.6,
+                curlEnabled: true, curlStrength: 0.6, curlScale: 0.024, curlTime: 0.7,
+                waveEnabled: true, waveAxis: 'y', waveAmplitude: 0.35, waveScale: 0.12, waveSpeed: 1.0,
+                renderMode: 'surface', worldScale: 2.1,
+                bloom: true, bloomStrength: 0.9, bloomRadius: 0.9, bloomThreshold: 0.001,
+                dofEnabled: true, dofFocus: 1.1, dofRange: 0.28, dofAmount: 0.75,
+                gravity: 0, speed: 1.6, density: 1.15,
+            },
+            'Trance Swirl': {
+                audioEnabled: true, audioSource: 'mic', audioSensitivity: 1.15,
+                vortexEnabled: true, vortexStrength: 1.0, vortexRadius: 22.0, vortexCenter: { x: 32, y: 32 },
+                orbitEnabled: true, orbitAxis: 'z', orbitRadius: 24.0, orbitStrength: 0.8,
+                curlEnabled: false,
+                waveEnabled: true, waveAxis: 'y', waveAmplitude: 0.4, waveScale: 0.12, waveSpeed: 1.4,
+                renderMode: 'surface', worldScale: 2.0,
+                bloom: true, bloomStrength: 1.0, bloomRadius: 0.95, bloomThreshold: 0.0012,
+                dofEnabled: true, dofFocus: 1.0, dofRange: 0.22, dofAmount: 0.8,
+                gravity: 0, speed: 1.8, density: 1.2,
             },
         };
     }

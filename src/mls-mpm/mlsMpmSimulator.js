@@ -118,12 +118,31 @@ class mlsMpmSimulator {
         this.uniforms.vortexRadius = uniform(0.0);
         this.uniforms.vortexCenter = uniform(new THREE.Vector2());
 
+        // New volumetric field uniforms
+        this.uniforms.curlEnabled = uniform(0, 'uint');
+        this.uniforms.curlStrength = uniform(0.0);
+        this.uniforms.curlScale = uniform(0.02);
+        this.uniforms.curlTime = uniform(0.6);
+
+        this.uniforms.orbitEnabled = uniform(0, 'uint');
+        this.uniforms.orbitStrength = uniform(0.0);
+        this.uniforms.orbitRadius = uniform(0.0);
+        this.uniforms.orbitAxis = uniform(new THREE.Vector3(0,0,1));
+
+        this.uniforms.waveEnabled = uniform(0, 'uint');
+        this.uniforms.waveAmplitude = uniform(0.0);
+        this.uniforms.waveScale = uniform(0.12);
+        this.uniforms.waveSpeed = uniform(1.2);
+        this.uniforms.waveAxis = uniform(1, 'uint'); // 0 x, 1 y, 2 z
+
         // Audio-reactive uniforms (0..1 normalized)
         this.uniforms.audioLevel = uniform(0.0);
         this.uniforms.audioBeat = uniform(0.0);
         this.uniforms.audioBass = uniform(0.0);
         this.uniforms.audioMid = uniform(0.0);
         this.uniforms.audioTreble = uniform(0.0);
+        this.uniforms.audioTempoPhase = uniform(0.0);
+        this.uniforms.audioTempoBpm = uniform(0.0);
 
         // Optional fluid shaping
         this.uniforms.vorticityEnabled = uniform(0, 'uint');
@@ -320,6 +339,31 @@ class mlsMpmSimulator {
             const noise = triNoise3Dvec(particlePosition.mul(0.015), time, 0.11).sub(0.285).normalize().mul(0.28).toVar();
             particleVelocity.subAssign(noise.mul(this.uniforms.noise).mul(this.uniforms.dt));
 
+            // Curl noise turbulence (divergence-free like)
+            If( this.uniforms.curlEnabled.equal( uint(1) ), () => {
+                const p0 = particlePosition.mul( this.uniforms.curlScale ).toConst();
+                const eps = float(0.75).toConst();
+                const dx = vec3(eps,0,0).toConst();
+                const dy = vec3(0,eps,0).toConst();
+                const dz = vec3(0,0,eps).toConst();
+                const F_y1 = triNoise3Dvec( p0.add( dy ), time, this.uniforms.curlTime ).toConst();
+                const F_y0 = triNoise3Dvec( p0.sub( dy ), time, this.uniforms.curlTime ).toConst();
+                const F_z1 = triNoise3Dvec( p0.add( dz ), time, this.uniforms.curlTime ).toConst();
+                const F_z0 = triNoise3Dvec( p0.sub( dz ), time, this.uniforms.curlTime ).toConst();
+                const F_x1 = triNoise3Dvec( p0.add( dx ), time, this.uniforms.curlTime ).toConst();
+                const F_x0 = triNoise3Dvec( p0.sub( dx ), time, this.uniforms.curlTime ).toConst();
+                const half = float(0.5).toConst();
+                const dFz_dy = F_y1.z.sub( F_y0.z ).mul( half.div(eps) );
+                const dFy_dz = F_z1.y.sub( F_z0.y ).mul( half.div(eps) );
+                const dFx_dz = F_z1.x.sub( F_z0.x ).mul( half.div(eps) );
+                const dFz_dx = F_x1.z.sub( F_x0.z ).mul( half.div(eps) );
+                const dFy_dx = F_x1.y.sub( F_x0.y ).mul( half.div(eps) );
+                const dFx_dy = F_y1.x.sub( F_y0.x ).mul( half.div(eps) );
+                const curl = vec3( dFz_dy.sub( dFy_dz ), dFx_dz.sub( dFz_dx ), dFy_dx.sub( dFx_dy ) );
+                const amp = this.uniforms.curlStrength.mul( this.uniforms.audioLevel.mul(0.5).add(0.5) );
+                particleVelocity.addAssign( curl.mul( amp ).mul( this.uniforms.dt ) );
+            });
+
             // Jet field: directional impulse within radius
             If( this.uniforms.jetEnabled.equal( uint(1) ), () => {
                 const jp = this.uniforms.jetPos;
@@ -352,6 +396,33 @@ class mlsMpmSimulator {
             const midSwirl = tangentA.mul(this.uniforms.audioMid.mul(0.35)).mul(this.uniforms.dt);
             const trebJit = vec3(0,0,1).mul(this.uniforms.audioTreble.mul(0.25)).mul(this.uniforms.dt);
             particleVelocity.addAssign(bassKick.add(midSwirl).add(trebJit));
+
+            // Orbit swirl around axis with radial falloff
+            If( this.uniforms.orbitEnabled.equal( uint(1) ), () => {
+                const center = vec3(this.uniforms.gridSize).sub(1).mul(0.5).toConst();
+                const r = particlePosition.sub( center );
+                const axis = this.uniforms.orbitAxis.normalize();
+                const tang = axis.cross( r ).normalize();
+                const phase = this.uniforms.audioTempoPhase.mul(6.28318530718).sin().mul(0.2).add(1.0); // 1 ± 0.2
+                const w = float(1.0).sub( r.length().div( this.uniforms.orbitRadius.mul(phase).add(0.0001) ) ).max(0.0).pow(2.0);
+                const gain = this.uniforms.orbitStrength.mul( w ).mul( this.uniforms.audioMid.mul(0.5).add(0.5) );
+                particleVelocity.addAssign( tang.mul( gain ).mul( this.uniforms.dt ) );
+            });
+
+            // Standing wave along axis
+            If( this.uniforms.waveEnabled.equal( uint(1) ), () => {
+                const axisId = this.uniforms.waveAxis;
+                const a = vec3(1,0,0).toVar();
+                If( axisId.equal(uint(1)), () => { a.assign(vec3(0,1,0)); })
+                .ElseIf( axisId.equal(uint(2)), () => { a.assign(vec3(0,0,1)); });
+                const ortho = select( a.cross( vec3(0,1,0) ).length().greaterThan(0.01), a.cross(vec3(0,1,0)), a.cross(vec3(1,0,0)) ).normalize();
+                const posAxis = a.x.mul(particlePosition.x).add( a.y.mul(particlePosition.y) ).add( a.z.mul(particlePosition.z) );
+                const tempoScale = this.uniforms.audioTempoBpm.mul(0.0167).clamp(0.5, 3.0); // ~ bpm/60 in [0.5..3]
+                const phase = posAxis.mul( this.uniforms.waveScale ).add( time.mul( this.uniforms.waveSpeed.mul(tempoScale) ) );
+                const s = phase.sin();
+                const amp = this.uniforms.waveAmplitude.mul( this.uniforms.audioBeat.mul(0.5).add(0.5) );
+                particleVelocity.addAssign( ortho.mul( s.mul( amp ).mul( this.uniforms.dt ) ) );
+            });
 
             const cellIndex =  ivec3(particlePosition).sub(1).toConst("cellIndex");
             const cellDiff = particlePosition.fract().sub(0.5).toConst("cellDiff");
@@ -564,7 +635,10 @@ class mlsMpmSimulator {
     async update(interval, elapsed) {
         const { particles, run, noise, dynamicViscosity, stiffness, restDensity, speed, gravity, gravitySensorReading, accelerometerReading, substeps, apicBlend, sdfSphere, sdfRadius, sdfCenterZ, boundaryShape, boundariesEnabled,
             jetEnabled, jetStrength, jetRadius, jetPos, jetDir,
-            vortexEnabled, vortexStrength, vortexRadius, vortexCenter
+            vortexEnabled, vortexStrength, vortexRadius, vortexCenter,
+            curlEnabled, curlStrength, curlScale, curlTime,
+            orbitEnabled, orbitStrength, orbitRadius, orbitAxis,
+            waveEnabled, waveAmplitude, waveScale, waveSpeed, waveAxis
         } = conf;
 
         this.uniforms.noise.value = noise;
@@ -593,6 +667,24 @@ class mlsMpmSimulator {
         this.uniforms.vortexStrength.value = vortexStrength;
         this.uniforms.vortexRadius.value = vortexRadius;
         this.uniforms.vortexCenter.value.set(vortexCenter.x, vortexCenter.y);
+        // Curl noise
+        this.uniforms.curlEnabled.value = curlEnabled ? 1 : 0;
+        this.uniforms.curlStrength.value = curlStrength;
+        this.uniforms.curlScale.value = curlScale;
+        this.uniforms.curlTime.value = curlTime;
+        // Orbit
+        this.uniforms.orbitEnabled.value = orbitEnabled ? 1 : 0;
+        this.uniforms.orbitStrength.value = orbitStrength;
+        this.uniforms.orbitRadius.value = orbitRadius;
+        const ax = (orbitAxis === 'x') ? new THREE.Vector3(1,0,0) : (orbitAxis === 'y') ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
+        this.uniforms.orbitAxis.value.copy(ax);
+        // Wave
+        this.uniforms.waveEnabled.value = waveEnabled ? 1 : 0;
+        this.uniforms.waveAmplitude.value = waveAmplitude;
+        this.uniforms.waveScale.value = waveScale;
+        this.uniforms.waveSpeed.value = waveSpeed;
+        const wavAxisId = (waveAxis === 'x') ? 0 : (waveAxis === 'y') ? 1 : 2;
+        this.uniforms.waveAxis.value = wavAxisId >>> 0;
         // Collision material
         this.uniforms.collisionRestitution.value = conf.collisionRestitution || 0.6;
         this.uniforms.collisionFriction.value = conf.collisionFriction || 0.2;
@@ -602,6 +694,8 @@ class mlsMpmSimulator {
         this.uniforms.audioBass.value = conf._audioBass || 0.0;
         this.uniforms.audioMid.value = conf._audioMid || 0.0;
         this.uniforms.audioTreble.value = conf._audioTreble || 0.0;
+        this.uniforms.audioTempoPhase.value = conf._audioTempoPhase || 0.0;
+        this.uniforms.audioTempoBpm.value = conf._audioTempoBpm || 0.0;
         // Color mode uniform
         const cm = (conf.colorMode === 'audio') ? 1 : (conf.colorMode === 'velocity') ? 2 : 0;
         this.uniforms.colorMode.value = cm >>> 0;

@@ -18,6 +18,11 @@ export class AudioEngine {
       bass: 0,
       mid: 0,
       treble: 0,
+      sub: 0,
+      lowMid: 0,
+      highMid: 0,
+      presence: 0,
+      air: 0,
       centroid: 0,
       flux: 0,
       beat: 0,
@@ -27,9 +32,28 @@ export class AudioEngine {
       fluxBass: 0,
       fluxMid: 0,
       fluxTreble: 0,
+      tilt: 0,
+      roughness: 0,
+      transient: 0,
+      brightness: 0,
     };
     // Per-feature envelopes
-    this._env = { level: 0, bass: 0, mid: 0, treble: 0, beat: 0 };
+    this._env = {
+      level: 0,
+      bass: 0,
+      mid: 0,
+      treble: 0,
+      beat: 0,
+      sub: 0,
+      lowMid: 0,
+      highMid: 0,
+      presence: 0,
+      air: 0,
+      tilt: 0,
+      roughness: 0,
+      transient: 0,
+      brightness: 0,
+    };
     this._envCfg = { attack: 0.5, release: 0.2 };
     this._envCfgMap = {
       level: { attack: 0.5, release: 0.2 },
@@ -37,6 +61,15 @@ export class AudioEngine {
       mid: { attack: 0.5, release: 0.2 },
       treble: { attack: 0.5, release: 0.2 },
       beat: { attack: 0.6, release: 0.2 },
+      sub: { attack: 0.5, release: 0.25 },
+      lowMid: { attack: 0.5, release: 0.25 },
+      highMid: { attack: 0.45, release: 0.25 },
+      presence: { attack: 0.45, release: 0.25 },
+      air: { attack: 0.45, release: 0.25 },
+      tilt: { attack: 0.35, release: 0.25 },
+      roughness: { attack: 0.3, release: 0.45 },
+      transient: { attack: 0.7, release: 0.35 },
+      brightness: { attack: 0.45, release: 0.3 },
     };
     // Beat / flux state
     this._beatState = { thr: 0.0, avg: 0.0, last: 0, hold: 0.12 };
@@ -204,6 +237,7 @@ export class AudioEngine {
     const t0 = toBin(2000), t1 = toBin(8000);
 
     const avgBand = (lo, hi) => {
+      hi = Math.max(lo, Math.min(N - 1, hi));
       let s = 0, c = 0;
       for (let i = lo; i <= hi; i++) { s += mag[i]; c++; }
       return c ? s / c : 0;
@@ -211,6 +245,28 @@ export class AudioEngine {
     const bass = avgBand(b0, b1);
     const mid = avgBand(m0, m1);
     const treble = avgBand(t0, t1);
+    const subHi = toBin(60);
+    const lowMid0 = toBin(60), lowMid1 = toBin(400);
+    const highMid0 = toBin(1000), highMid1 = toBin(4000);
+    const presence0 = toBin(4000), presence1 = toBin(8000);
+    const air0 = toBin(8000), air1 = toBin(16000);
+    const sub = avgBand(b0, subHi);
+    const lowMid = avgBand(lowMid0, lowMid1);
+    const highMid = avgBand(highMid0, highMid1);
+    const presence = avgBand(presence0, presence1);
+    const air = avgBand(air0, air1);
+
+    const lowEnergy = (sub + bass + lowMid) / 3;
+    const highEnergy = (treble + highMid + presence + air) / 4;
+    const tilt = Math.max(0, Math.min(1, 0.5 + 0.5 * (highEnergy - lowEnergy)));
+    const brightness = Math.max(0, Math.min(1, highEnergy / (lowEnergy + highEnergy + 1e-6)));
+
+    let rough = 0;
+    for (let i = 1; i < N; i++) {
+      rough += Math.abs(mag[i] - mag[i - 1]);
+    }
+    const roughness = Math.max(0, Math.min(1, (rough / N) * 0.65));
+
 
     // Spectral centroid
     let num = 0, den = 0;
@@ -245,6 +301,8 @@ export class AudioEngine {
       thr = this._beatState.avg * this._thrK;
     }
     this._beatState.thr = thr;
+    const transient = Math.max(0, Math.min(1, (flux / (sum + 1e-6)) * 0.65));
+
     let beat = 0;
     if (flux > thr && this._gateTimer < this._gateHold) {
       const now = (performance.now() || 0) / 1000;
@@ -270,12 +328,21 @@ export class AudioEngine {
     this._features.bass = applyEnv('bass', bass);
     this._features.mid = applyEnv('mid', mid);
     this._features.treble = applyEnv('treble', treble);
+    this._features.sub = applyEnv('sub', sub);
+    this._features.lowMid = applyEnv('lowMid', lowMid);
+    this._features.highMid = applyEnv('highMid', highMid);
+    this._features.presence = applyEnv('presence', presence);
+    this._features.air = applyEnv('air', air);
     this._features.centroid = centroid;
     this._features.flux = flux;
     this._features.beat = applyEnv('beat', beat);
     this._features.fluxBass = fluxBass;
     this._features.fluxMid = fluxMid;
     this._features.fluxTreble = fluxTreble;
+    this._features.tilt = applyEnv('tilt', tilt);
+    this._features.roughness = applyEnv('roughness', roughness);
+    this._features.transient = applyEnv('transient', transient);
+    this._features.brightness = applyEnv('brightness', brightness);
 
     // Tempo estimation (simple ACF over recent flux)
     if (this._tempoEnabled) {

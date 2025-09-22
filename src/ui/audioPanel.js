@@ -48,6 +48,11 @@ export default class AudioPanel {
     audio.addBinding(this.conf, 'audioBassGain', { min: 0.0, max: 3.0, step: 0.05, label: 'bass gain' });
     audio.addBinding(this.conf, 'audioMidGain', { min: 0.0, max: 3.0, step: 0.05, label: 'mid gain' });
     audio.addBinding(this.conf, 'audioTrebleGain', { min: 0.0, max: 3.0, step: 0.05, label: 'treble gain' });
+    audio.addBinding(this.conf, 'audioSubGain', { min: 0.0, max: 3.0, step: 0.05, label: 'sub gain' });
+    audio.addBinding(this.conf, 'audioPresenceGain', { min: 0.0, max: 3.0, step: 0.05, label: 'presence gain' });
+    audio.addBinding(this.conf, 'audioAirGain', { min: 0.0, max: 3.0, step: 0.05, label: 'air gain' });
+    audio.addBinding(this.conf, 'audioTextureGain', { min: 0.2, max: 3.0, step: 0.05, label: 'texture gain' });
+    audio.addBinding(this.conf, 'audioColorTilt', { min: 0.2, max: 2.5, step: 0.05, label: 'tilt gain' });
     audio.addBinding(this.conf, 'audioBeatBoost', { min: 0.0, max: 3.0, step: 0.05, label: 'beat boost' });
 
     // Engine-level controls
@@ -82,8 +87,58 @@ export default class AudioPanel {
     diag.addBinding(this.conf, '_audioLevel', { readonly: true, label: 'level' });
     diag.addBinding(this.conf, '_audioBass', { readonly: true, label: 'bass' });
     diag.addBinding(this.conf, '_audioMid', { readonly: true, label: 'mid' });
+    diag.addBinding(this.conf, '_audioLowMid', { readonly: true, label: 'low mid' });
+    diag.addBinding(this.conf, '_audioHighMid', { readonly: true, label: 'high mid' });
     diag.addBinding(this.conf, '_audioTreble', { readonly: true, label: 'treble' });
     diag.addBinding(this.conf, '_audioBeat', { readonly: true, label: 'beat' });
+    diag.addBinding(this.conf, '_audioSub', { readonly: true, label: 'sub' });
+    diag.addBinding(this.conf, '_audioPresence', { readonly: true, label: 'presence' });
+    diag.addBinding(this.conf, '_audioAir', { readonly: true, label: 'air' });
+    diag.addBinding(this.conf, '_audioTilt', { readonly: true, label: 'tilt' });
+    diag.addBinding(this.conf, '_audioRoughness', { readonly: true, label: 'rough' });
+    diag.addBinding(this.conf, '_audioTransient', { readonly: true, label: 'trans' });
+    diag.addBinding(this.conf, '_audioBrightness', { readonly: true, label: 'bright' });
+    diag.addBinding(this.conf, '_audioTempoBpm', { readonly: true, label: 'tempo bpm' });
+    diag.addBinding(this.conf, '_audioTempoConf', { readonly: true, label: 'tempo conf' });
+
+    this._featureSmooth = {
+      level: { attack: 0.5, release: 0.2 },
+      bass: { attack: 0.5, release: 0.2 },
+      mid: { attack: 0.5, release: 0.2 },
+      treble: { attack: 0.5, release: 0.2 },
+      sub: { attack: 0.5, release: 0.25 },
+      presence: { attack: 0.45, release: 0.25 },
+      air: { attack: 0.45, release: 0.25 },
+      beat: { attack: 0.6, release: 0.2 },
+      tilt: { attack: 0.35, release: 0.25 },
+      roughness: { attack: 0.3, release: 0.45 },
+      transient: { attack: 0.7, release: 0.35 },
+      brightness: { attack: 0.45, release: 0.3 },
+    };
+    const envelopes = gui.addFolder({ title: 'feature envelopes', expanded: false });
+    const applySmooth = () => { try { this.engine.setFeatureSmoothing(this._featureSmooth); } catch {} };
+    const addEnv = (key, label) => {
+      const folder = envelopes.addFolder({ title: label, expanded: false });
+      folder.addBinding(this._featureSmooth[key], 'attack', { min: 0.05, max: 0.99, step: 0.01, label: 'attack' })
+        .on('change', applySmooth);
+      folder.addBinding(this._featureSmooth[key], 'release', { min: 0.05, max: 0.99, step: 0.01, label: 'release' })
+        .on('change', applySmooth);
+    };
+    [
+      ['level', 'level'],
+      ['bass', 'bass'],
+      ['mid', 'mid'],
+      ['treble', 'treble'],
+      ['sub', 'sub'],
+      ['presence', 'presence'],
+      ['air', 'air'],
+      ['beat', 'beat'],
+      ['tilt', 'tilt'],
+      ['roughness', 'roughness'],
+      ['transient', 'transient'],
+      ['brightness', 'brightness'],
+    ].forEach(([key, label]) => addEnv(key, label));
+    applySmooth();
 
     // File input
     audio.addBlade({ view: 'button', label: 'input', title: 'Choose Audio File' }).on('click', () => {
@@ -125,11 +180,23 @@ export default class AudioPanel {
       { text: 'level', value: 'level' },
       { text: 'beat', value: 'beat' },
       { text: 'bass', value: 'bass' },
+      { text: 'sub', value: 'sub' },
       { text: 'mid', value: 'mid' },
+      { text: 'low mid', value: 'lowMid' },
+      { text: 'high mid', value: 'highMid' },
       { text: 'treble', value: 'treble' },
-      { text: 'fluxBass', value: 'fluxBass' },
-      { text: 'fluxMid', value: 'fluxMid' },
-      { text: 'fluxTreble', value: 'fluxTreble' },
+      { text: 'presence', value: 'presence' },
+      { text: 'air', value: 'air' },
+      { text: 'tilt', value: 'tilt' },
+      { text: 'roughness', value: 'roughness' },
+      { text: 'transient', value: 'transient' },
+      { text: 'brightness', value: 'brightness' },
+      { text: 'tempo phase', value: 'tempoPhase01' },
+      { text: 'tempo pulse', value: 'tempoWave' },
+      { text: 'tempo conf', value: 'tempoConf' },
+      { text: 'flux bass', value: 'fluxBass' },
+      { text: 'flux mid', value: 'fluxMid' },
+      { text: 'flux treble', value: 'fluxTreble' },
     ];
     const routes = this.router?.getRoutes ? this.router.getRoutes() : {};
     const addRoute = (folder, key, label, min=0, max=2, step=0.01) => {
@@ -155,10 +222,17 @@ export default class AudioPanel {
     addRoute(phys, 'waveAmplitude', 'wave', 0, 3, 0.01);
     addRoute(phys, 'apicBlend', 'apic blend', 0, 1, 0.01);
     addRoute(phys, 'viscosity', 'viscosity', -1, 1, 0.01);
+    addRoute(phys, 'jetRadius', 'jet radius', 2, 30, 0.05);
+    addRoute(phys, 'vortexRadius', 'vortex radius', 4, 48, 0.05);
     const vis = routing.addFolder({ title: 'visuals', expanded: false });
     addRoute(vis, 'noise', 'noise');
     addRoute(vis, 'colorSaturation', 'color');
     addRoute(vis, 'envSway', 'env sway', 0, 0.2, 0.001);
+    addRoute(vis, 'bloomStrength', 'bloom', 0, 4, 0.01);
+    addRoute(vis, 'exposure', 'exposure', 0.2, 1.8, 0.01);
+    addRoute(vis, 'postSaturation', 'post sat', 0.3, 2.5, 0.01);
+    addRoute(vis, 'postContrast', 'contrast', 0.5, 2.0, 0.01);
+    addRoute(vis, 'dofAmount', 'dof amount', 0.2, 2.0, 0.01);
 
     this.gui = gui;
 
@@ -186,6 +260,13 @@ export default class AudioPanel {
         apicBlend: { source: 'level', gain: 0.35, curve: 1.4 },
         noise: { source: 'treble', gain: 0.35, curve: 1.0 },
         envSway: { source: 'level', gain: 0.06, curve: 1.0 },
+        jetRadius: { enable: true, source: 'sub', gain: 7.0, curve: 1.0 },
+        vortexRadius: { enable: true, source: 'presence', gain: 5.0, curve: 1.0 },
+        bloomStrength: { enable: true, source: 'presence', gain: 0.7, curve: 1.15 },
+        exposure: { enable: true, source: 'brightness', gain: 0.35, curve: 1.0 },
+        postSaturation: { enable: true, source: 'tilt', gain: 0.7, curve: 1.0 },
+        postContrast: { enable: false, source: 'transient', gain: 0.45, curve: 1.1 },
+        dofAmount: { enable: false, source: 'roughness', gain: 0.4, curve: 1.0 },
       },
       Swirl: {
         jetStrength: { source: 'bass', gain: 0.8, curve: 1.2, beatBoost: 0.4 },
@@ -196,6 +277,13 @@ export default class AudioPanel {
         apicBlend: { source: 'level', gain: 0.4, curve: 1.4 },
         noise: { source: 'treble', gain: 0.25, curve: 1.0 },
         envSway: { source: 'level', gain: 0.05, curve: 1.0 },
+        jetRadius: { enable: true, source: 'sub', gain: 4.5, curve: 1.1 },
+        vortexRadius: { enable: true, source: 'presence', gain: 6.2, curve: 1.05 },
+        bloomStrength: { enable: true, source: 'presence', gain: 0.5, curve: 1.0 },
+        exposure: { enable: false, source: 'brightness', gain: 0.3, curve: 1.0 },
+        postSaturation: { enable: true, source: 'tilt', gain: 0.6, curve: 1.1 },
+        postContrast: { enable: true, source: 'transient', gain: 0.5, curve: 1.0 },
+        dofAmount: { enable: true, source: 'roughness', gain: 0.45, curve: 1.0 },
       },
       Waves: {
         jetStrength: { source: 'fluxBass', gain: 0.9, curve: 1.1, beatBoost: 0.3 },
@@ -206,6 +294,13 @@ export default class AudioPanel {
         apicBlend: { source: 'level', gain: 0.3, curve: 1.2 },
         noise: { source: 'treble', gain: 0.3, curve: 1.0 },
         envSway: { source: 'level', gain: 0.05, curve: 1.0 },
+        jetRadius: { enable: true, source: 'fluxBass', gain: 5.5, curve: 1.0 },
+        vortexRadius: { enable: true, source: 'mid', gain: 4.2, curve: 1.0 },
+        bloomStrength: { enable: true, source: 'presence', gain: 0.45, curve: 1.0 },
+        exposure: { enable: true, source: 'brightness', gain: 0.3, curve: 1.0 },
+        postSaturation: { enable: true, source: 'tilt', gain: 0.55, curve: 1.0 },
+        postContrast: { enable: false, source: 'transient', gain: 0.35, curve: 1.0 },
+        dofAmount: { enable: true, source: 'roughness', gain: 0.35, curve: 1.0 },
       },
       Sparkle: {
         jetStrength: { source: 'fluxBass', gain: 1.1, curve: 1.3, beatBoost: 0.7 },
@@ -216,6 +311,13 @@ export default class AudioPanel {
         apicBlend: { source: 'level', gain: 0.35, curve: 1.5 },
         noise: { source: 'treble', gain: 0.4, curve: 1.0 },
         envSway: { source: 'level', gain: 0.06, curve: 1.0 },
+        jetRadius: { enable: true, source: 'fluxBass', gain: 6.4, curve: 1.1 },
+        vortexRadius: { enable: true, source: 'fluxMid', gain: 5.5, curve: 1.1 },
+        bloomStrength: { enable: true, source: 'presence', gain: 0.85, curve: 1.2 },
+        exposure: { enable: true, source: 'brightness', gain: 0.42, curve: 1.1 },
+        postSaturation: { enable: true, source: 'tilt', gain: 0.85, curve: 1.1 },
+        postContrast: { enable: true, source: 'transient', gain: 0.55, curve: 1.0 },
+        dofAmount: { enable: false, source: 'roughness', gain: 0.45, curve: 1.0 },
       },
     };
     const r = styles[name];

@@ -122,11 +122,19 @@ class Conf {
     audioMidGain = 1.0;
     audioTrebleGain = 1.0;
     audioBeatBoost = 1.0;
+    audioSubGain = 1.0;
+    audioPresenceGain = 1.0;
+    audioAirGain = 1.0;
+    audioTextureGain = 1.0;
+    audioColorTilt = 1.0;
     audioSource = 'mic'; // 'mic' | 'file'
     __onAudioUpload = null;
     // Runtime audio features (read-only; set by app)
     _audioLevel = 0.0; _audioBeat = 0.0; _audioBass = 0.0; _audioMid = 0.0; _audioTreble = 0.0;
-    _audioTempoPhase = 0.0; _audioTempoBpm = 0.0;
+    _audioLowMid = 0.0; _audioHighMid = 0.0;
+    _audioSub = 0.0; _audioPresence = 0.0; _audioAir = 0.0;
+    _audioTilt = 0.0; _audioRoughness = 0.0; _audioTransient = 0.0; _audioBrightness = 0.0;
+    _audioTempoPhase = 0.0; _audioTempoBpm = 0.0; _audioTempoConf = 0.0;
 
     // Post FX extras
     postFxEnabled = true;
@@ -691,6 +699,7 @@ class Conf {
             'orbitEnabled','orbitStrength','orbitRadius','orbitAxis',
             'waveEnabled','waveAmplitude','waveScale','waveSpeed','waveAxis',
             'audioEnabled','audioSource','audioSensitivity','audioAttack','audioRelease','audioBassGain','audioMidGain','audioTrebleGain','audioBeatBoost',
+            'audioSubGain','audioPresenceGain','audioAirGain','audioTextureGain','audioColorTilt',
             'vignetteEnabled','vignetteAmount','grainEnabled','grainAmount','chromaEnabled','chromaAmount','motionBlurEnabled','motionBlurAmount','postSaturation','postContrast','postLift','aaMode','aaAmount','gtaoEnabled','gtaoRadius','gtaoThickness','gtaoDistanceExponent','gtaoScale','gtaoSamples','gtaoResolutionScale','ssgiEnabled','ssgiSlices','ssgiSteps','ssgiIntensity','ssgiResolutionScale','ssgiDenoise','ssrEnabled','ssrOpacity','ssrMaxDistance','ssrThickness','ssrResolutionScale','ssrMetalness','lensEnabled','sensorWidth','focalLength','fStop','lensDriveFov','focusSmooth','dofQuality','apertureBlades','apertureRotation','aperturePetal','anamorphic'
         ];
         const out = {};

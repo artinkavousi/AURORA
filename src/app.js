@@ -286,21 +286,42 @@ class App {
                 conf._audioBeat = clamp( f.beat * conf.audioBeatBoost, 0.0, 1.0 );
                 conf._audioBass = clamp( f.bass * conf.audioBassGain * sens, 0.0, 1.0 );
                 conf._audioMid = clamp( f.mid * conf.audioMidGain * sens, 0.0, 1.0 );
+                conf._audioLowMid = clamp( f.lowMid * conf.audioMidGain * sens, 0.0, 1.0 );
+                conf._audioHighMid = clamp( f.highMid * conf.audioTrebleGain * sens, 0.0, 1.0 );
                 conf._audioTreble = clamp( f.treble * conf.audioTrebleGain * sens, 0.0, 1.0 );
+                conf._audioSub = clamp( f.sub * (conf.audioSubGain || 1.0) * sens, 0.0, 1.0 );
+                conf._audioPresence = clamp( f.presence * (conf.audioPresenceGain || 1.0) * sens, 0.0, 1.0 );
+                conf._audioAir = clamp( f.air * (conf.audioAirGain || 1.0) * sens, 0.0, 1.0 );
+                const tiltGain = conf.audioColorTilt || 1.0;
+                const textureGain = conf.audioTextureGain || 1.0;
+                conf._audioTilt = clamp( f.tilt * tiltGain, 0.0, 1.0 );
+                conf._audioRoughness = clamp( f.roughness * textureGain, 0.0, 1.0 );
+                conf._audioTransient = clamp( f.transient * textureGain, 0.0, 1.0 );
+                conf._audioBrightness = clamp( f.brightness, 0.0, 1.0 );
                 conf._audioTempoPhase = f.tempoPhase01 || 0.0;
                 conf._audioTempoBpm = f.tempoBpm || 0.0;
+                conf._audioTempoConf = f.tempoConf || 0.0;
                 // Router applies mappings and environment sway
                 this.router.apply({
                     level: conf._audioLevel,
                     beat: conf._audioBeat,
                     bass: conf._audioBass,
                     mid: conf._audioMid,
+                    lowMid: conf._audioLowMid,
+                    highMid: conf._audioHighMid,
                     treble: conf._audioTreble,
+                    sub: conf._audioSub,
+                    presence: conf._audioPresence,
+                    air: conf._audioAir,
                     centroid: f.centroid,
                     flux: f.flux,
                     fluxBass: f.fluxBass,
                     fluxMid: f.fluxMid,
                     fluxTreble: f.fluxTreble,
+                    tilt: conf._audioTilt,
+                    roughness: conf._audioRoughness,
+                    transient: conf._audioTransient,
+                    brightness: conf._audioBrightness,
                     tempoBpm: f.tempoBpm,
                     tempoPhase01: f.tempoPhase01,
                     tempoConf: f.tempoConf,
@@ -308,8 +329,13 @@ class App {
             } catch (e) { /* noop */ }
         } else {
             conf._audioLevel = conf._audioBeat = conf._audioBass = conf._audioMid = conf._audioTreble = 0;
+            conf._audioSub = conf._audioPresence = conf._audioAir = 0;
+            conf._audioLowMid = conf._audioHighMid = 0;
+            conf._audioTilt = conf._audioRoughness = conf._audioTransient = conf._audioBrightness = 0;
+            conf._audioTempoPhase = conf._audioTempoBpm = conf._audioTempoConf = 0;
             // Reset environment rotations when audio off
             if (this._envBase) { conf.bgRotY = this._envBase.bg; conf.envRotY = this._envBase.env; }
+            if (this.router && this.router.reset) this.router.reset(conf, this._envBase);
         }
 
         await this.mlsMpmSim.update(delta,elapsed);

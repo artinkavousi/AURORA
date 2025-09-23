@@ -1,7 +1,6 @@
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import {conf} from "./conf";
-import {Info} from "./info";
 import MlsMpmSimulator from "./mls-mpm/mlsMpmSimulator";
 import ParticleRenderer from "./mls-mpm/particleRenderer";
 import GlyphRenderer from "./mls-mpm/glyphRenderer";
@@ -33,7 +32,6 @@ class App {
     }
 
     async init(progressCallback) {
-        this.info = new Info();
         conf.init();
 
         this.stage = new Stage(this.renderer);

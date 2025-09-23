@@ -28,45 +28,26 @@ class Conf {
     // PostFX defaults (match postfx.js expectations)
     postFxEnabled = true;
     // Bloom
-    bloom = true;
-    bloomStrength = 1.2;
-    bloomRadius = 1.0;
-    bloomThreshold = 0.0005;
-    // Depth of field (node-based)
-    dofEnabled = true;
-    dofHighQuality = true;
-    dofAutoFocus = true;
-    dofFocus = 1.0;
-    dofRange = 0.25;
-    dofAmount = 0.85;
-    dofNearBoost = 1.0;
-    dofFarBoost = 1.0;
-    dofHighlightThreshold = 0.8;
-    dofHighlightGain = 0.6;
-    apertureBlades = 7;
-    apertureRotation = 0.0;
-    aperturePetal = 1.0;
-    anamorphic = 0.0;
+    postBloomEnabled = true;
+    postBloomIntensity = 0.9;
+    postBloomRadius = 0.6;
+    postBloomThreshold = 0.85;
     // Vignette
-    vignetteEnabled = false;
-    vignetteAmount = 0.25;
+    postVignetteEnabled = false;
+    postVignetteAmount = 0.25;
     // Film grain
-    grainEnabled = false;
-    grainAmount = 0.06;
+    postGrainEnabled = false;
+    postGrainAmount = 0.06;
     // Chromatic aberration
-    chromaEnabled = false;
-    chromaAmount = 0.0025;
-    chromaCenter = { x: 0.5, y: 0.5 };
-    chromaScale = 1.0;
+    postChromaticEnabled = false;
+    postChromaticAmount = 0.0025;
     // Motion blur
-    motionBlurEnabled = false;
-    motionBlurAmount = 0.35;
+    postMotionBlurEnabled = false;
+    postMotionBlurAmount = 0.35;
     // Grading
-    postSaturation = 1.0;
-    postContrast = 1.0;
-    postLift = 0.0;
-    // Anti-aliasing mode: off|fxaa|smaa|traa
-    aaMode = 'fxaa';
+    postToneSaturation = 1.0;
+    postToneContrast = 1.0;
+    postToneLift = 0.0;
 
     // World/domain scaling (visual mapping of 64^3 grid to world units)
     worldScale = 2.0; // scale up domain to fill more of the page by default

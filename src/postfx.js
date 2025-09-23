@@ -177,7 +177,6 @@ class PostFX {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     const scale = Math.max(0.3, Math.min(1.0, this._lensResolutionScale));
     if (this._dofNode?.setSize) this._dofNode.setSize(size.width * scale, size.height * scale);
-    if (this._bloomNode?.setSize) this._bloomNode.setSize(size.width, size.height);
     await this.postProcessing.renderAsync();
   }
 }

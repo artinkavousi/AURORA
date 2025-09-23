@@ -1,5 +1,5 @@
 import {Pane} from 'tweakpane';
-import EssentialsPlugin from '@tweakpane/plugin-essentials';
+import * as EssentialsPlugin from '@tweakpane/plugin-essentials';
 import mobile from "is-mobile";
 import * as THREE from "three/webgpu";
 

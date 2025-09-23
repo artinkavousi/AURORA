@@ -1,5 +1,5 @@
 import { Pane } from 'tweakpane';
-import EssentialsPlugin from '@tweakpane/plugin-essentials';
+import * as EssentialsPlugin from '@tweakpane/plugin-essentials';
 
 export default class AudioPanel {
   constructor(engine, conf, router) {

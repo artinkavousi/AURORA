@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build --mode=production",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:refined": "vite --config aurora-refined/vite.config.js --host",
+    "build:refined": "vite build --config aurora-refined/vite.config.js --mode=production",
+    "preview:refined": "vite preview --config aurora-refined/vite.config.js"
   },
   "devDependencies": {
     "@babel/generator": "^7.26.9",

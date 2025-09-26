@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 import { Fn, attribute, instanceIndex, mat3, normalize, vec3, varying, uniform, mrt, float } from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { conf } from "../conf";
+import { conf } from "../config.js";
 import { calcLookAtMatrix } from "./particleRenderer";
 
 class GlyphRenderer {

@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { conf } from "../conf";
+import { conf } from "../config.js";
 
 // Centralizes camera + lens + DOF control
 // - Maps physical-ish lens params -> DOF controls

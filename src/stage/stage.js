@@ -1,19 +1,9 @@
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { conf } from "./conf";
-import { Lights } from "./lights";
-import hdri from "./assets/autumn_field_puresky_1k.hdr";
-
-const loadHdr = async ( file ) => {
-    const texture = await new Promise( resolve => {
-        new HDRLoader().load( file, result => {
-            result.mapping = THREE.EquirectangularReflectionMapping;
-            resolve( result );
-        } );
-    } );
-    return texture;
-}
+import { conf } from "../config.js";
+import { loadHdrTexture } from "../commons/assets.js";
+import { Lights } from "./lights.js";
+import hdri from "../assets/autumn_field_puresky_1k.hdr";
 
 export class Stage {
     renderer = null;
@@ -47,7 +37,7 @@ export class Stage {
 
         if ( progressCallback ) await progressCallback( 0.1 );
 
-        const hdriTexture = await loadHdr( hdri );
+        const hdriTexture = await loadHdrTexture( hdri );
         this.scene.background = hdriTexture;
         this.scene.environment = hdriTexture;
 

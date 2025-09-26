@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 import {Fn, attribute, triNoise3D, time, vec3, vec4, float, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform} from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import {conf} from "../conf";
+import { conf } from "../config.js";
 
 
 export const calcLookAtMatrix = /*#__PURE__*/ Fn( ( [ target_immutable ] ) => {

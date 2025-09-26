@@ -1,6 +1,6 @@
 import * as THREE from "three/webgpu";
 import {Fn, vec3, instanceIndex, float} from "three/tsl";
-import {conf} from "../conf";
+import { conf } from "../config.js";
 
 class PointRenderer {
     mlsMpmSim = null;

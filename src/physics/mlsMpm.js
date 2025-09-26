@@ -21,10 +21,10 @@ import {
     time,
     cross, mix, mx_hsvtorgb, select, ivec3
 } from "three/tsl";
-import {triNoise3Dvec} from "../common/noise";
-import {conf} from "../conf";
+import { triNoise3Dvec } from "../commons/noise.js";
+import { conf } from "../config.js";
 import {StructuredArray} from "./structuredArray.js";
-import {hsvtorgb} from "../common/hsv.js";
+import { hsvtorgb } from "../commons/hsv.js";
 
 class mlsMpmSimulator {
     renderer = null;

@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu"
-import App from "./src/app";
+import App from "./src/main.js";
 THREE.ColorManagement.enabled = true
 
 const updateLoadingProgressBar = async (frac, delay=0) => {

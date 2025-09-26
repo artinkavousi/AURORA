@@ -13,6 +13,8 @@ import AudioEngine from "./audio/audio.js";
 import AudioRouter from "./audio/audioRouter.js";
 import AudioPanel from "./audio/audioPanel.js";
 import LensPipeline from "./postfx/cameraLens.js";
+import { postFxState } from "./postfx/state.js";
+import PostFXPanel from "./io/postfxPanel.js";
 // PostFX pipeline is initialized dynamically inside init
 
 // Stage handles camera/scene/environment & controls
@@ -27,6 +29,7 @@ class App {
     lens = null;
     router = null;
     audioPanel = null;
+    postFxPanel = null;
 
     constructor(renderer) {
         this.renderer = renderer;
@@ -39,7 +42,8 @@ class App {
         this.stage = new Stage(this.renderer);
         await this.stage.init(progressCallback);
         // Store environment rotation base for audio sway
-        this._envBase = { bg: conf.bgRotY, env: conf.envRotY };
+        const camState = postFxState.value.camera;
+        this._envBase = { bg: camState.bgRotation, env: camState.envRotation };
 
         await progressCallback(0.5)
 
@@ -200,6 +204,8 @@ class App {
         this.postFX = new (await import('./postfx/postfx.js')).default(this.renderer);
         await this.postFX.init(this.stage);
         this.lens = new LensPipeline(this.stage, this.postFX);
+        this.postFxPanel = new PostFXPanel(this.lens);
+        this.postFxPanel.init('left');
 
 
         this.raycaster = new THREE.Raycaster();
@@ -246,7 +252,8 @@ class App {
         this.mlsMpmSim.setMouseRay(originSim, dirSim, posSim);
 
         // Auto focus DOF to pointer via LensPipeline
-        if (conf.dofEnabled && conf.dofAutoFocus && this.lens) {
+        const fxState = postFxState.value;
+        if (fxState.dof.enabled && fxState.dof.autoFocus && this.lens) {
             const camSpace = intersect.clone().applyMatrix4(camera.matrixWorldInverse);
             const viewDist = Math.abs(camSpace.z);
             this.lens.onPointerFocus(viewDist);
@@ -309,19 +316,21 @@ class App {
         } else {
             conf._audioLevel = conf._audioBeat = conf._audioBass = conf._audioMid = conf._audioTreble = 0;
             // Reset environment rotations when audio off
-            if (this._envBase) { conf.bgRotY = this._envBase.bg; conf.envRotY = this._envBase.env; }
+            if (this._envBase) {
+                postFxState.set(['camera', 'bgRotation'], this._envBase.bg);
+                postFxState.set(['camera', 'envRotation'], this._envBase.env);
+            }
         }
 
         await this.mlsMpmSim.update(delta,elapsed);
 
         // Sync post FX from control panel and motion direction
-        if (this.postFX) this.postFX.updateFromConf(conf);
         if (this.lens) this.lens.update();
         if (!this._prevCamPos) this._prevCamPos = this.stage.camera.position.clone();
         if (this.postFX) this.postFX.updateMotionDirection(this.stage.camera, this._prevCamPos);
         this._prevCamPos.copy(this.stage.camera.position);
 
-        if (conf.postFxEnabled && this.postFX) {
+        if (postFxState.value.enabled && this.postFX) {
             await this.postFX.renderAsync();
         } else {
             await this.renderer.renderAsync(this.stage.scene, this.stage.camera);

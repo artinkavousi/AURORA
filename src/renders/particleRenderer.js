@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import {Fn, attribute, triNoise3D, time, vec3, vec4, float, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,mrt,uniform} from "three/tsl";
+import {Fn, attribute, triNoise3D, time, vec3, vec4, float, varying,instanceIndex,mix,normalize,cross,mat3,normalLocal,transformNormalToView,mx_hsvtorgb,uniform} from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { conf } from "../config.js";
 
@@ -92,7 +92,6 @@ const createRoundedBox = (width, height, depth, radius) => {
 class ParticleRenderer {
     mlsMpmSim = null;
     object = null;
-    bloom = false;
     uniforms = {};
 
     constructor(mlsMpmSim) {
@@ -173,17 +172,10 @@ class ParticleRenderer {
     }
 
     update() {
-        const { particles, bloom, actualSize, worldScale, zScale } = conf;
+        const { particles, actualSize, worldScale, zScale } = conf;
         this.uniforms.size.value = actualSize;
         this.uniforms.zScale.value = zScale;
         this.geometry.instanceCount = particles;
-
-        if (bloom !== this.bloom) {
-            this.bloom = bloom;
-            this.material.mrtNode = bloom ? mrt( {
-                bloomIntensity: 1
-            } ) : null;
-        }
 
         // Fit domain to view by scaling the 64^3 to world mapping
         const s = (1/64) * (worldScale || 1);

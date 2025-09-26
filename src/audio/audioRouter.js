@@ -1,5 +1,7 @@
 // AudioRouter: map audio features to simulation and visual configuration safely
 
+import { postFxState } from "../postfx/state.js";
+
 function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 
 export class AudioRouter {
@@ -123,8 +125,8 @@ export class AudioRouter {
     if (this.routes.envSway.enable && envBase) {
       const r = this.routes.envSway;
       const sway = (get(r.source) * r.gain) * Math.sin(elapsed * 1.6) + (f.beat * 0.06);
-      conf.bgRotY = envBase.bg + sway;
-      conf.envRotY = envBase.env - sway * 0.8;
+      postFxState.set(['camera', 'bgRotation'], envBase.bg + sway);
+      postFxState.set(['camera', 'envRotation'], envBase.env - sway * 0.8);
     }
 
     // Color mode: audio saturation boost

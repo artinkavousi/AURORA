@@ -1,24 +1,15 @@
 import * as THREE from "three/webgpu";
 import { Fn, texture, uv, positionWorld, vec3, float } from "three/tsl";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import boxObj from './assets/boxSlightlySmooth.obj';
+import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-import normalMapFile from './assets/concrete_0016_normal_opengl_1k.png';
-import aoMapFile from './assets/concrete_0016_ao_1k.jpg';
-import colorMapFile from './assets/concrete_0016_color_1k.jpg';
-import roughnessMapFile from './assets/concrete_0016_roughness_1k.jpg';
+import { loadRepeatTexture } from "../commons/assets.js";
+import boxObj from "../assets/boxSlightlySmooth.obj";
 
-const textureLoader = new THREE.TextureLoader();
-const loadTexture = (file) => {
-    return new Promise(resolve => {
-        textureLoader.load(file, texture => {
-            texture.wrapS = THREE.RepeatWrapping;
-            texture.wrapT = THREE.RepeatWrapping;
-            resolve(texture);
-        });
-    });
-}
+import normalMapFile from "../assets/concrete_0016_normal_opengl_1k.png";
+import aoMapFile from "../assets/concrete_0016_ao_1k.jpg";
+import colorMapFile from "../assets/concrete_0016_color_1k.jpg";
+import roughnessMapFile from "../assets/concrete_0016_roughness_1k.jpg";
 
 class BackgroundGeometry {
     object = null;
@@ -70,10 +61,12 @@ class BackgroundGeometry {
             uvArray[i] *= 10;
         }
 
-        const normalMap = await loadTexture(normalMapFile);
-        const aoMap = await loadTexture(aoMapFile);
-        const map = await loadTexture(colorMapFile);
-        const roughnessMap = await loadTexture(roughnessMapFile);
+        const [normalMap, aoMap, map, roughnessMap] = await Promise.all([
+            loadRepeatTexture(normalMapFile),
+            loadRepeatTexture(aoMapFile),
+            loadRepeatTexture(colorMapFile),
+            loadRepeatTexture(roughnessMapFile),
+        ]);
 
         const floorMat = new THREE.MeshStandardNodeMaterial({
             roughness: 0.9,

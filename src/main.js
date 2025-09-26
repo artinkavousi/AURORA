@@ -1,18 +1,18 @@
 import * as THREE from "three/webgpu";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
-import {conf} from "./conf";
-import {Info} from "./info";
-import MlsMpmSimulator from "./mls-mpm/mlsMpmSimulator";
-import ParticleRenderer from "./mls-mpm/particleRenderer";
-import GlyphRenderer from "./mls-mpm/glyphRenderer";
-import BackgroundGeometry from "./backgroundGeometry";
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import PointRenderer from "./mls-mpm/pointRenderer.js";
-import Stage from "./stage";
-import AudioEngine from "./audio/audioEngine";
-import AudioRouter from "./audio/router";
-import AudioPanel from "./ui/audioPanel";
-import LensPipeline from "./lens/LensPipeline";
+import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js";
+
+import { conf } from "./config.js";
+import { Info } from "./io/info.js";
+import MlsMpmSimulator from "./physics/mlsMpm.js";
+import ParticleRenderer from "./renders/particleRenderer.js";
+import GlyphRenderer from "./renders/glyphRenderer.js";
+import BackgroundGeometry from "./stage/backgroundGeometry.js";
+import PointRenderer from "./renders/pointRenderer.js";
+import Stage from "./stage/stage.js";
+import AudioEngine from "./audio/audio.js";
+import AudioRouter from "./audio/audioRouter.js";
+import AudioPanel from "./audio/audioPanel.js";
+import LensPipeline from "./postfx/cameraLens.js";
 // PostFX pipeline is initialized dynamically inside init
 
 // Stage handles camera/scene/environment & controls
@@ -197,7 +197,7 @@ class App {
         this.audioPanel = new AudioPanel(this.audio, conf, this.router);
         this.audioPanel.init('bottom-right');
 
-        this.postFX = new (await import('./postfx')).default(this.renderer);
+        this.postFX = new (await import('./postfx/postfx.js')).default(this.renderer);
         await this.postFX.init(this.stage);
         this.lens = new LensPipeline(this.stage, this.postFX);
 

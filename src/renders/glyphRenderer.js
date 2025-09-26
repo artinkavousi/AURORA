@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { Fn, attribute, instanceIndex, mat3, normalize, vec3, varying, uniform, mrt, float } from "three/tsl";
+import { Fn, attribute, instanceIndex, mat3, normalize, vec3, varying, uniform, float } from "three/tsl";
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { conf } from "../config.js";
 import { calcLookAtMatrix } from "./particleRenderer";
@@ -7,7 +7,6 @@ import { calcLookAtMatrix } from "./particleRenderer";
 class GlyphRenderer {
     mlsMpmSim = null;
     object = null;
-    bloom = false;
     uniforms = {};
 
     constructor(mlsMpmSim) {
@@ -57,14 +56,9 @@ class GlyphRenderer {
     }
 
     update() {
-        const { particles, bloom, actualSize, worldScale, zScale } = conf;
+        const { particles, actualSize, worldScale, zScale } = conf;
         this.uniforms.size.value = actualSize;
         this.geometry.instanceCount = particles;
-
-        if (bloom !== this.bloom) {
-            this.bloom = bloom;
-            this.material.mrtNode = bloom ? mrt({ bloomIntensity: 1 }) : null;
-        }
 
         const s = (1/64) * (worldScale || 1);
         this.object.position.set(0,0,0);

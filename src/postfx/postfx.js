@@ -5,18 +5,21 @@ import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
 import GTAONode from 'three/examples/jsm/tsl/display/GTAONode.js';
 import SMAANode from 'three/examples/jsm/tsl/display/SMAANode.js';
 import SSRNode from 'three/examples/jsm/tsl/display/SSRNode.js';
+import { postFxState } from './state.js';
 
 class PostFX {
   constructor(renderer) {
     this.renderer = renderer;
     this.postProcessing = null;
     this._built = false;
+    this.state = postFxState;
+    this._stateVersionApplied = -1;
   }
 
   async init(stage) {
     const scenePass = pass(stage.scene, stage.camera);
     // Include normal buffer for AO and future stages
-    scenePass.setMRT( mrt( { output, normal: normalView, velocity: velocity, bloomIntensity: float( 0 ) } ) );
+    scenePass.setMRT( mrt( { output, normal: normalView, velocity: velocity } ) );
     const outputPass = scenePass.getTextureNode();
     const viewZ = scenePass.getViewZNode( 'depth' );
     const normalTex = scenePass.getTextureNode( 'normal' );
@@ -27,7 +30,6 @@ class PostFX {
 
     // DOF
     this._dofEnabled = uniform( 1 );
-    this._dofHQ = uniform( 1 );
     this._dofFocusDist = uniform( 1.0 );
     this._dofFocal = uniform( 0.3 );
     this._dofBokeh = uniform( 0.8 );
@@ -58,9 +60,9 @@ class PostFX {
     const dofOut = this._dofNode.getTextureNode();
 
     // Bloom
-    const bloomIntensityPass = scenePass.getTextureNode( 'bloomIntensity' );
-    const bloomPass = bloom( outputPass.mul( bloomIntensityPass ) );
+    const bloomPass = bloom( outputPass );
     this.bloomPass = bloomPass;
+    this._bloomMix = uniform( 1.0 );
 
     // GTAO (optional)
     this._aoEnabled = uniform( 0 );
@@ -136,7 +138,7 @@ class PostFX {
       outCol = mix( outCol, smooth, q.mul(0.65) );
 
       // Bloom
-      outCol = outCol.add( bloomPass.rgb.clamp(0,1).mul(0.35) ).clamp(0,1);
+      outCol = outCol.add( bloomPass.rgb.clamp(0,1).mul( this._bloomMix ) ).clamp(0,1);
 
       // Vignette
       const st = uv();
@@ -194,16 +196,19 @@ class PostFX {
     // We'll create CA/Film on demand in renderAsync to ensure correct ordering
     this._smaa = null;
 
+    this._applyState();
     this._built = true;
   }
 
   setFocusDistance(d, smooth = 0) {
     if (!this._built) return;
-    if (smooth > 0 && this._dofFocusDist) {
-      this._dofFocusDist.value = this._dofFocusDist.value * (1 - smooth) + d * smooth;
-    } else if (this._dofFocusDist) {
-      this._dofFocusDist.value = d;
+    if (!this._dofFocusDist) return;
+    let next = d;
+    if (smooth > 0) {
+      next = this._dofFocusDist.value * (1 - smooth) + d * smooth;
     }
+    this._dofFocusDist.value = next;
+    this.state.set(['dof', 'focus'], next, { notify: true });
   }
 
   resize(width, height) {
@@ -213,68 +218,81 @@ class PostFX {
     if (this._gtao) this._gtao.setSize(width, height);
   }
 
-  updateFromConf(conf) {
+  _applyState() {
     if (!this._built) return;
-    // Bloom
+    const state = this.state.value;
+
+    const { bloom: bloomState, dof, vignette, grain, chroma, motion, color, aa, ao, ssr } = state;
+
     if (this.bloomPass) {
-      this.bloomPass.threshold.value = conf.bloomThreshold;
-      this.bloomPass.strength.value = conf.bloom ? conf.bloomStrength : 0.0;
-      this.bloomPass.radius.value = conf.bloomRadius;
+      this.bloomPass.threshold.value = bloomState.threshold;
+      this.bloomPass.radius.value = bloomState.radius;
+      this.bloomPass.strength.value = bloomState.strength;
     }
-    // DOF
-    this._dofEnabled.value = conf.dofEnabled ? 1 : 0;
-    this._dofHQ.value = conf.dofHighQuality ? 1 : 0;
-    if (!conf.dofAutoFocus) this._dofFocusDist.value = conf.dofFocus;
-    this._dofFocal.value = conf.dofRange;
-    this._dofBokeh.value = conf.dofAmount;
-    this._dofNearBoost.value = conf.dofNearBoost || 1.0;
-    this._dofFarBoost.value = conf.dofFarBoost || 1.0;
-    this._dofHiThresh.value = conf.dofHighlightThreshold || 0.8;
-    this._dofHiGain.value = conf.dofHighlightGain || 0.6;
-    this._apertureBlades.value = conf.apertureBlades || 7;
-    this._apertureRot.value = conf.apertureRotation || 0.0;
-    this._aperturePetal.value = conf.aperturePetal || 1.0;
-    this._anamorphic.value = conf.anamorphic || 0.0;
-    // Extras
-    this._vigEnabled.value = conf.vignetteEnabled ? 1 : 0;
-    this._vigAmount.value = conf.vignetteAmount;
-    this._grainEnabled.value = conf.grainEnabled ? 1 : 0;
-    this._grainAmount.value = conf.grainAmount;
-    this._chromaEnabled.value = conf.chromaEnabled ? 1 : 0;
-    this._chromaAmount.value = conf.chromaAmount;
-    if (conf.chromaCenter) this._chromaCenter.value.set(conf.chromaCenter.x, conf.chromaCenter.y);
-    this._chromaScale.value = conf.chromaScale || 1.0;
-    this._mbEnabled.value = conf.motionBlurEnabled ? 1 : 0;
-    this._mbAmount.value = conf.motionBlurAmount;
-    this._sat.value = conf.postSaturation || 1.0;
-    this._contrast.value = conf.postContrast || 1.0;
-    this._lift.value = conf.postLift || 0.0;
-    // 0 off, 1 fxaa, 2 smaa
+    this._bloomMix.value = bloomState.enabled ? bloomState.strength : 0.0;
+
+    this._dofEnabled.value = dof.enabled ? 1 : 0;
+    if (!dof.autoFocus) this._dofFocusDist.value = dof.focus;
+    this._dofFocal.value = dof.range;
+    this._dofBokeh.value = dof.amount;
+    this._dofNearBoost.value = dof.nearBoost;
+    this._dofFarBoost.value = dof.farBoost;
+    this._dofHiThresh.value = dof.highlightThreshold;
+    this._dofHiGain.value = dof.highlightGain;
+    this._apertureBlades.value = dof.apertureBlades;
+    this._apertureRot.value = dof.apertureRotation;
+    this._aperturePetal.value = dof.aperturePetal;
+    this._anamorphic.value = dof.anamorphic;
+    const dofQuality = typeof dof.quality === 'number' ? dof.quality : (dof.highQuality ? 1.0 : 0.6);
+    this._dofQualityU.value = dofQuality;
+
+    this._vigEnabled.value = vignette.enabled ? 1 : 0;
+    this._vigAmount.value = vignette.amount;
+    this._grainEnabled.value = grain.enabled ? 1 : 0;
+    this._grainAmount.value = grain.amount;
+    this._chromaEnabled.value = chroma.enabled ? 1 : 0;
+    this._chromaAmount.value = chroma.amount;
+    if (chroma.center) this._chromaCenter.value.set(chroma.center.x, chroma.center.y);
+    this._chromaScale.value = chroma.scale;
+    this._mbEnabled.value = motion.enabled ? 1 : 0;
+    this._mbAmount.value = motion.amount;
+    this._sat.value = color.saturation;
+    this._contrast.value = color.contrast;
+    this._lift.value = color.lift;
+
     let aaMode = 0;
-    if (conf.aaMode === 'fxaa') aaMode = 1; else if (conf.aaMode === 'smaa') aaMode = 2; else if (conf.aaMode === 'traa') aaMode = 1;
+    if (aa.mode === 'fxaa') aaMode = 1;
+    else if (aa.mode === 'smaa') aaMode = 2;
+    else if (aa.mode === 'traa') aaMode = 1;
     this._aaMode.value = aaMode;
-    this._aaAmount.value = conf.aaAmount || 1.0;
-    this._dofQualityU.value = conf.dofQuality || 1.0;
-    // AO
-    this._aoEnabled.value = conf.gtaoEnabled ? 1 : 0;
+    this._aaAmount.value = aa.amount;
+
+    this._aoEnabled.value = ao.enabled ? 1 : 0;
     if (this._gtao) {
-      this._gtao.radius.value = conf.gtaoRadius;
-      this._gtao.thickness.value = conf.gtaoThickness;
-      this._gtao.distanceExponent.value = conf.gtaoDistanceExponent;
-      this._gtao.scale.value = conf.gtaoScale;
-      this._gtao.samples.value = conf.gtaoSamples;
-      this._gtao.resolutionScale = conf.gtaoResolutionScale;
+      this._gtao.radius.value = ao.radius;
+      this._gtao.thickness.value = ao.thickness;
+      this._gtao.distanceExponent.value = ao.distanceExponent;
+      this._gtao.scale.value = ao.scale;
+      this._gtao.samples.value = ao.samples;
+      this._gtao.resolutionScale = ao.resolutionScale;
     }
-    // SSGI placeholder
+
     this._ssgiEnabled.value = 0;
-    // SSR
-    this._ssrEnabled.value = conf.ssrEnabled ? 1 : 0;
+    this._ssrEnabled.value = ssr.enabled ? 1 : 0;
     if (this._ssr) {
-      this._ssr.opacity.value = conf.ssrOpacity;
-      this._ssr.maxDistance.value = conf.ssrMaxDistance;
-      this._ssr.thickness.value = conf.ssrThickness;
-      this._ssr.resolutionScale = conf.ssrResolutionScale;
-      this._ssrMetalness.value = conf.ssrMetalness;
+      this._ssr.opacity.value = ssr.opacity;
+      this._ssr.maxDistance.value = ssr.maxDistance;
+      this._ssr.thickness.value = ssr.thickness;
+      this._ssr.resolutionScale = ssr.resolutionScale;
+      this._ssrMetalness.value = ssr.metalness;
+    }
+
+    this._stateVersionApplied = this.state.version;
+  }
+
+  _ensureStateApplied() {
+    if (this._stateVersionApplied !== this.state.version) {
+      this._applyState();
     }
   }
 
@@ -289,6 +307,7 @@ class PostFX {
 
   async renderAsync() {
     if (!this.postProcessing) return;
+    this._ensureStateApplied();
     // Build CA/Film chain on top of composed tex
     let node = this._finalNodeTex;
     // Chromatic aberration
@@ -296,7 +315,7 @@ class PostFX {
       const { vec2, float } = await import('three/tsl'); // dynamic import for literal nodes
       const caNodeMod = await import('three/examples/jsm/tsl/display/ChromaticAberrationNode.js');
       const CAClass = caNodeMod.default;
-      node = new CAClass( node, this._chromaAmount, vec2(0.5,0.5), float(1.0) );
+      node = new CAClass( node, this._chromaAmount, vec2(this._chromaCenter.value.x, this._chromaCenter.value.y), float(this._chromaScale.value) );
     }
     // Film grain
     if (this._grainEnabled.value > 0.5) {

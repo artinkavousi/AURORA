@@ -90,90 +90,11 @@ export const buildDashboard = (conf) => {
     }).on('change', (ev) => { conf.borderMode = ev.value; });
 
     // DOF controls moved under Post FX
-    const dofMacro = () => {
-        conf.zScale = 0.18;
-        conf.dofEnabled = true;
-        conf.dofHighQuality = true;
-        conf.dofAutoFocus = true;
-        conf.dofRange = 0.06;
-        conf.dofAmount = 1.30;
-        conf.fov = Math.max(60, conf.fov);
-        conf.updateParams();
-        if (conf.gui) conf.gui.refresh();
-    };
-
     const perf = settings.addFolder({ title: 'performance', expanded: false });
     perf.addBinding(conf, 'autoPerf', { label: 'auto adjust' });
     perf.addBinding(conf, 'perfMinFps', { min: 20, max: 80, step: 1, label: 'min fps' });
     perf.addBinding(conf, 'perfMaxFps', { min: 30, max: 120, step: 1, label: 'max fps' });
     perf.addBinding(conf, 'perfStep', { min: 1024, max: 16384, step: 1024, label: 'step' });
-
-    const camera = settings.addFolder({
-        title: "camera",
-        expanded: false,
-    });
-    camera.addBinding(conf, "fov", { min: 30, max: 100, step: 1 });
-    // Lens controls (approximate mapping to DOF params)
-    const lens = settings.addFolder({ title: 'lens & dof', expanded: false });
-    conf.lensEnabled = false;
-    conf.sensorWidth = 36.0; // mm (full-frame)
-    conf.focalLength = 24.0; // mm
-    conf.fStop = 1.8;
-    conf.lensDriveFov = true;
-    conf.focusSmooth = 0.2;
-    lens.addBinding(conf, 'lensEnabled', { label: 'enable' });
-    lens.addBinding(conf, 'sensorWidth', { min: 12.0, max: 70.0, step: 0.1, label: 'sensor (mm)' });
-    lens.addBinding(conf, 'focalLength', { min: 8.0, max: 120.0, step: 0.1, label: 'focal (mm)' });
-    lens.addBinding(conf, 'fStop', { min: 0.7, max: 16.0, step: 0.1, label: 'f‑stop' });
-    lens.addBinding(conf, 'lensDriveFov', { label: 'drive FOV' });
-    lens.addBinding(conf, 'focusSmooth', { min: 0.0, max: 0.9, step: 0.01, label: 'focus smooth' });
-    // DOF controls (moved here)
-    lens.addBinding(conf, 'dofEnabled', { label: 'dof enable' });
-    lens.addBinding(conf, 'dofAutoFocus', { label: 'auto focus (pointer)' });
-    lens.addBinding(conf, 'dofHighQuality', { label: 'high quality' });
-    lens.addBinding(conf, 'dofFocus', { min: 0.1, max: 3.0, step: 0.01 });
-    lens.addBinding(conf, 'dofRange', { min: 0.02, max: 2.0, step: 0.01 });
-    lens.addBinding(conf, 'dofAmount', { min: 0.0, max: 2.0, step: 0.01 });
-    // DOF quality (0.25..1.0)
-    conf.dofQuality = 1.0;
-    lens.addBinding(conf, 'dofQuality', { min: 0.25, max: 1.0, step: 0.01, label: 'dof quality' });
-    lens.addBlade({ view: 'button', label: 'macro', title: 'Macro Shot' }).on('click', dofMacro);
-    // Advanced bokeh controls
-    conf.dofNearBoost = conf.dofNearBoost ?? 1.0;
-    conf.dofFarBoost = conf.dofFarBoost ?? 1.0;
-    conf.dofHighlightThreshold = conf.dofHighlightThreshold ?? 0.8;
-    conf.dofHighlightGain = conf.dofHighlightGain ?? 0.6;
-    lens.addBinding(conf, 'dofNearBoost', { min: 0.5, max: 3.0, step: 0.01, label: 'near boost' });
-    lens.addBinding(conf, 'dofFarBoost', { min: 0.5, max: 3.0, step: 0.01, label: 'far boost' });
-    lens.addBinding(conf, 'dofHighlightThreshold', { min: 0.0, max: 1.0, step: 0.01, label: 'hi thresh' });
-    lens.addBinding(conf, 'dofHighlightGain', { min: 0.0, max: 2.0, step: 0.01, label: 'hi gain' });
-    // Aperture & anamorphic
-    conf.apertureBlades = 7; // polygon blades
-    conf.apertureRotation = 0.0; // radians
-    conf.aperturePetal = 1.0; // sharpness of polygon weighting
-    conf.anamorphic = 0.0; // -1..1 (negative vertical, positive horizontal)
-    lens.addBinding(conf, 'apertureBlades', { min: 3, max: 12, step: 1, label: 'blades' });
-    lens.addBinding(conf, 'apertureRotation', { min: -3.1416, max: 3.1416, step: 0.01, label: 'apert rot' });
-    lens.addBinding(conf, 'aperturePetal', { min: 0.2, max: 2.5, step: 0.01, label: 'apert petal' });
-    lens.addBinding(conf, 'anamorphic', { min: -1.0, max: 1.0, step: 0.01, label: 'anamorphic' });
-    // Creative presets
-    lens.addBlade({ view: 'button', label: 'preset', title: 'Creamy Wide' }).on('click', () => {
-        conf.lensEnabled = true; conf.lensDriveFov = true;
-        conf.sensorWidth = 36.0; conf.focalLength = 24.0; conf.fStop = 1.4;
-        conf.dofEnabled = true; conf.dofAutoFocus = true; conf.dofHighQuality = true;
-        conf.dofRange = 0.06; conf.dofAmount = 1.4; conf.dofFarBoost = 2.2; conf.dofNearBoost = 1.2;
-        conf.dofHighlightThreshold = 0.8; conf.dofHighlightGain = 1.1; conf.focusSmooth = 0.25;
-        if (conf.gui) conf.gui.refresh();
-    });
-
-    const environment = settings.addFolder({
-        title: "environment",
-        expanded: false,
-    });
-    environment.addBinding(conf, "envIntensity", { min: 0.0, max: 5.0, step: 0.05 });
-    environment.addBinding(conf, "exposure", { min: 0.0, max: 2.0, step: 0.01 });
-    environment.addBinding(conf, "bgRotY", { label: 'bg rot Y', min: -Math.PI, max: Math.PI, step: 0.01 });
-    environment.addBinding(conf, "envRotY", { label: 'env rot Y', min: -Math.PI, max: Math.PI, step: 0.01 });
 
     const boundary = settings.addFolder({
         title: "boundary",
@@ -293,86 +214,6 @@ export const buildDashboard = (conf) => {
     }).on('change', (ev) => { conf.waveAxis = ev.value; });
 
     // Audio controls moved to dedicated AudioPanel (src/ui/audioPanel.js)
-
-    // Post FX unified panel
-    const fx = settings.addFolder({ title: 'post fx', expanded: false });
-    // Master toggle
-    fx.addBinding(conf, 'postFxEnabled', { label: 'enable all' });
-    // Bloom
-    const fxBloom = fx.addFolder({ title: 'bloom', expanded: false });
-    fxBloom.addBinding(conf, "bloom", { label: 'enable' });
-    fxBloom.addBinding(conf, "bloomStrength", { min: 0, max: 2, step: 0.01 });
-    fxBloom.addBinding(conf, "bloomRadius", { min: 0, max: 1.2, step: 0.01 });
-    fxBloom.addBinding(conf, "bloomThreshold", { min: 0, max: 1, step: 0.001 });
-    // Depth of field
-    // DOF controls moved into Lens panel for cohesion
-    // Vignette
-    const fxVig = fx.addFolder({ title: 'vignette', expanded: false });
-    fxVig.addBinding(conf, 'vignetteEnabled', { label: 'enable' });
-    fxVig.addBinding(conf, 'vignetteAmount', { min: 0.0, max: 1.0, step: 0.01, label: 'amount' });
-    // Grain
-    const fxGrain = fx.addFolder({ title: 'grain', expanded: false });
-    fxGrain.addBinding(conf, 'grainEnabled', { label: 'enable' });
-    fxGrain.addBinding(conf, 'grainAmount', { min: 0.0, max: 0.5, step: 0.01, label: 'amount' });
-    // Chromatic aberration
-    const fxCA = fx.addFolder({ title: 'chroma ab', expanded: false });
-    fxCA.addBinding(conf, 'chromaEnabled', { label: 'enable' });
-    fxCA.addBinding(conf, 'chromaAmount', { min: 0.0, max: 0.01, step: 0.0001, label: 'amount' });
-    conf.chromaCenter = conf.chromaCenter || { x: 0.5, y: 0.5 };
-    conf.chromaScale = conf.chromaScale || 1.0;
-    fxCA.addBinding(conf, 'chromaCenter', { x: { min: 0.0, max: 1.0, step: 0.001 }, y: { min: 0.0, max: 1.0, step: 0.001 } });
-    fxCA.addBinding(conf, 'chromaScale', { min: 0.2, max: 3.0, step: 0.01, label: 'scale' });
-    // Motion blur
-    const fxMB = fx.addFolder({ title: 'motion blur', expanded: false });
-    fxMB.addBinding(conf, 'motionBlurEnabled', { label: 'enable' });
-    fxMB.addBinding(conf, 'motionBlurAmount', { min: 0.0, max: 1.0, step: 0.01, label: 'amount' });
-    // Grading
-    const fxGrade = fx.addFolder({ title: 'grading', expanded: false });
-    fxGrade.addBinding(conf, 'postSaturation', { min: 0.0, max: 2.0, step: 0.01, label: 'saturation' });
-    fxGrade.addBinding(conf, 'postContrast', { min: 0.5, max: 2.0, step: 0.01, label: 'contrast' });
-    fxGrade.addBinding(conf, 'postLift', { min: -0.3, max: 0.3, step: 0.005, label: 'lift' });
-    // Anti-aliasing
-    const fxAA = fx.addFolder({ title: 'anti aliasing', expanded: false });
-    fxAA.addBlade({
-        view: 'list',
-        label: 'mode',
-        options: [
-            { text: 'off', value: 'off' },
-            { text: 'fxaa', value: 'fxaa' },
-            { text: 'smaa', value: 'smaa' },
-            { text: 'traa', value: 'traa' },
-        ],
-        value: conf.aaMode,
-    }).on('change', (ev) => { conf.aaMode = ev.value; });
-    fxAA.addBinding(conf, 'aaAmount', { min: 0.2, max: 2.0, step: 0.05, label: 'amount' });
-    // Ambient Occlusion (GTAO)
-    const fxAO = fx.addFolder({ title: 'ambient occlusion', expanded: false });
-    fxAO.addBinding(conf, 'gtaoEnabled', { label: 'enable' });
-    fxAO.addBinding(conf, 'gtaoRadius', { min: 0.05, max: 2.0, step: 0.01, label: 'radius' });
-    fxAO.addBinding(conf, 'gtaoThickness', { min: 0.1, max: 4.0, step: 0.1, label: 'thickness' });
-    fxAO.addBinding(conf, 'gtaoDistanceExponent', { min: 0.5, max: 3.0, step: 0.05, label: 'distance exp' });
-    fxAO.addBinding(conf, 'gtaoScale', { min: 0.1, max: 2.0, step: 0.05, label: 'scale' });
-    fxAO.addBinding(conf, 'gtaoSamples', { min: 4, max: 32, step: 1, label: 'samples' });
-    fxAO.addBinding(conf, 'gtaoResolutionScale', { min: 0.25, max: 1.0, step: 0.05, label: 'res scale' });
-    // Global Illumination (SSGI)
-    const fxGI = fx.addFolder({ title: 'global illumination', expanded: false });
-    fxGI.addBinding(conf, 'ssgiEnabled', { label: 'enable' });
-    fxGI.addBinding(conf, 'ssgiSlices', { min: 1, max: 4, step: 1, label: 'slices' });
-    fxGI.addBinding(conf, 'ssgiSteps', { min: 1, max: 32, step: 1, label: 'steps' });
-    fxGI.addBinding(conf, 'ssgiIntensity', { min: 0.0, max: 2.0, step: 0.01, label: 'intensity' });
-    fxGI.addBinding(conf, 'ssgiResolutionScale', { min: 0.25, max: 1.0, step: 0.05, label: 'res scale' });
-    fxGI.addBinding(conf, 'ssgiDenoise', { label: 'denoise' });
-    // Reflections (SSR)
-    const fxSSR = fx.addFolder({ title: 'reflections', expanded: false });
-    fxSSR.addBinding(conf, 'ssrEnabled', { label: 'enable' });
-    fxSSR.addBinding(conf, 'ssrOpacity', { min: 0.0, max: 1.0, step: 0.01, label: 'opacity' });
-    fxSSR.addBinding(conf, 'ssrMaxDistance', { min: 0.1, max: 4.0, step: 0.05, label: 'max dist' });
-    fxSSR.addBinding(conf, 'ssrThickness', { min: 0.01, max: 1.0, step: 0.01, label: 'thickness' });
-    fxSSR.addBinding(conf, 'ssrResolutionScale', { min: 0.25, max: 1.0, step: 0.05, label: 'res scale' });
-    fxSSR.addBinding(conf, 'ssrMetalness', { min: 0.0, max: 1.0, step: 0.01, label: 'metalness' });
-
-    /*settings.addBinding(conf, "roughness", { min: 0.0, max: 1, step: 0.01 });
-    settings.addBinding(conf, "metalness", { min: 0.0, max: 1, step: 0.01 });*/
 
     // Presets
     const presets = gui.addFolder({

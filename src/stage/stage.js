@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { conf } from "../config.js";
+import { postFxState } from "../postfx/state.js";
 import { loadHdrTexture } from "../commons/assets.js";
 import { Lights } from "./lights.js";
 import hdri from "../assets/autumn_field_puresky_1k.hdr";
@@ -19,7 +20,8 @@ export class Stage {
     async init( progressCallback ) {
         if ( progressCallback ) await progressCallback( 0.05 );
 
-        this.camera = new THREE.PerspectiveCamera( conf.fov, window.innerWidth / window.innerHeight, 0.01, 10 );
+        const camState = postFxState.value.camera;
+        this.camera = new THREE.PerspectiveCamera( camState.fov, window.innerWidth / window.innerHeight, 0.01, 10 );
         this.camera.position.set( 0, 0, 2.0 );
         this.camera.updateProjectionMatrix();
 
@@ -43,7 +45,7 @@ export class Stage {
 
         this.applyEnvironmentParams();
 
-        this.renderer.toneMappingExposure = conf.exposure;
+        this.renderer.toneMappingExposure = camState.exposure;
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -54,9 +56,10 @@ export class Stage {
     }
 
     applyEnvironmentParams() {
-        this.scene.backgroundRotation = new THREE.Euler( 0, conf.bgRotY, 0 );
-        this.scene.environmentRotation = new THREE.Euler( 0, conf.envRotY, 0 );
-        this.scene.environmentIntensity = conf.envIntensity;
+        const camState = postFxState.value.camera;
+        this.scene.backgroundRotation = new THREE.Euler( 0, camState.bgRotation, 0 );
+        this.scene.environmentRotation = new THREE.Euler( 0, camState.envRotation, 0 );
+        this.scene.environmentIntensity = camState.envIntensity;
     }
 
     resize( width, height ) {
@@ -66,13 +69,14 @@ export class Stage {
 
     update( delta, elapsed ) {
         // Live-sync camera and environment parameters from control panel
-        if ( Math.abs( this.camera.fov - conf.fov ) > 0.001 ) {
-            this.camera.fov = conf.fov;
+        const camState = postFxState.value.camera;
+        if ( Math.abs( this.camera.fov - camState.fov ) > 0.001 ) {
+            this.camera.fov = camState.fov;
             this.camera.updateProjectionMatrix();
         }
 
         this.applyEnvironmentParams();
-        this.renderer.toneMappingExposure = conf.exposure;
+        this.renderer.toneMappingExposure = camState.exposure;
 
         this.controls.update( delta );
         if ( this.lights && this.lights.update ) this.lights.update( elapsed );

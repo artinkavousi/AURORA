@@ -1,0 +1,366 @@
+/**
+ * AUDIO/volumetric.ts - Volumetric audio visualizer with TSL shaders
+ * Single responsibility: GPU-accelerated volumetric audio visualization
+ */
+
+import * as THREE from "three/webgpu";
+import {
+  Fn,
+  uniform,
+  vec2,
+  vec3,
+  vec4,
+  float,
+  uv,
+  mix,
+  sin,
+  cos,
+  length,
+  normalize,
+  dot,
+  smoothstep,
+  step,
+  abs,
+  pow,
+  exp,
+  fract,
+  floor,
+  atan2,
+  clamp,
+  positionLocal,
+} from "three/tsl";
+import type { AudioData } from './soundreactivity';
+
+export interface VolumetricConfig {
+  enabled: boolean;
+  mode: 'sphere' | 'cylinder' | 'waves' | 'particles' | 'tunnel';
+  
+  // Visual properties
+  scale: number;
+  complexity: number;
+  speed: number;
+  
+  // Color
+  colorMode: 'rainbow' | 'bass' | 'frequency' | 'gradient';
+  hue: number;
+  saturation: number;
+  brightness: number;
+  
+  // Animation
+  rotationSpeed: number;
+  pulseIntensity: number;
+  waveAmplitude: number;
+  
+  // Glow and opacity
+  glowIntensity: number;
+  opacity: number;
+  
+  // Frequency band influence
+  bassInfluence: number;
+  midInfluence: number;
+  trebleInfluence: number;
+}
+
+/**
+ * VolumetricVisualizer - GPU-accelerated volumetric audio visualization
+ * Creates beautiful 3D volumetric shapes that react to audio
+ */
+export class VolumetricVisualizer {
+  public readonly object: THREE.Mesh;
+  private material: THREE.MeshBasicNodeMaterial;
+  private config: VolumetricConfig;
+  
+  // Uniforms for audio reactivity
+  private uniforms = {
+    uTime: uniform(0),
+    uBass: uniform(0),
+    uMid: uniform(0),
+    uTreble: uniform(0),
+    uOverall: uniform(0),
+    uBeatIntensity: uniform(0),
+    uPeakFrequency: uniform(0),
+    
+    // Config uniforms
+    uScale: uniform(1.0),
+    uComplexity: uniform(5.0),
+    uSpeed: uniform(1.0),
+    uHue: uniform(0.5),
+    uSaturation: uniform(0.8),
+    uBrightness: uniform(1.0),
+    uRotationSpeed: uniform(1.0),
+    uPulseIntensity: uniform(1.0),
+    uWaveAmplitude: uniform(1.0),
+    uGlowIntensity: uniform(2.0),
+    uOpacity: uniform(0.6),
+    uBassInfluence: uniform(1.0),
+    uMidInfluence: uniform(0.5),
+    uTrebleInfluence: uniform(0.3),
+  };
+  
+  constructor(config: VolumetricConfig) {
+    this.config = { ...config };
+    
+    // Create geometry based on mode
+    const geometry = this.createGeometry(config.mode);
+    
+    // Create TSL material with volumetric shader
+    this.material = new THREE.MeshBasicNodeMaterial();
+    this.material.transparent = true;
+    this.material.side = THREE.DoubleSide;
+    this.material.depthWrite = false;
+    this.material.blending = THREE.AdditiveBlending;
+    
+    // Build shader based on mode
+    this.buildShader(config.mode);
+    
+    // Create mesh
+    this.object = new THREE.Mesh(geometry, this.material);
+    this.object.position.set(0, 0.5, 0.2);
+    this.object.visible = config.enabled;  // Start hidden if disabled
+    
+    // Update uniforms from config
+    this.updateConfigUniforms();
+  }
+  
+  /**
+   * Create geometry based on visualization mode
+   */
+  private createGeometry(mode: string): THREE.BufferGeometry {
+    switch (mode) {
+      case 'sphere':
+        return new THREE.IcosahedronGeometry(0.3, 64);
+      
+      case 'cylinder':
+        return new THREE.CylinderGeometry(0.2, 0.2, 0.6, 64, 64);
+      
+      case 'waves':
+        return new THREE.PlaneGeometry(0.8, 0.8, 128, 128);
+      
+      case 'particles':
+        return new THREE.IcosahedronGeometry(0.3, 32);
+      
+      case 'tunnel':
+        return new THREE.CylinderGeometry(0.3, 0.3, 1.0, 64, 64, true);
+      
+      default:
+        return new THREE.IcosahedronGeometry(0.3, 64);
+    }
+  }
+  
+  /**
+   * Build TSL shader for the visualization
+   */
+  private buildShader(mode: string): void {
+    // HSV to RGB conversion (TSL)
+    const hsvToRgb = Fn(([h, s, v]) => {
+      const K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      const p = abs(fract(h.add(K.xyz)).mul(6.0).sub(K.www));
+      return v.mul(mix(K.xxx, clamp(p.sub(K.xxx), 0.0, 1.0), s));
+    });
+    
+    // Sphere displacement shader
+    const sphereShader = Fn(() => {
+      const pos = positionLocal;
+      
+      // Audio-reactive displacement
+      const audioDisp = this.uniforms.uBass.mul(this.uniforms.uBassInfluence)
+        .add(this.uniforms.uMid.mul(this.uniforms.uMidInfluence))
+        .add(this.uniforms.uTreble.mul(this.uniforms.uTrebleInfluence));
+      
+      // Spherical displacement with noise
+      const theta = atan2(pos.z, pos.x);
+      const phi = atan2(length(pos.xz), pos.y);
+      const displacement = sin(theta.mul(this.uniforms.uComplexity).add(this.uniforms.uTime.mul(this.uniforms.uSpeed)))
+        .mul(cos(phi.mul(this.uniforms.uComplexity).sub(this.uniforms.uTime.mul(this.uniforms.uSpeed))))
+        .mul(0.1)
+        .mul(audioDisp.add(0.5))
+        .mul(this.uniforms.uWaveAmplitude);
+      
+      // Beat pulse
+      const beatPulse = this.uniforms.uBeatIntensity.mul(this.uniforms.uPulseIntensity).mul(0.2);
+      
+      // Final position
+      const finalPos = pos.mul(this.uniforms.uScale.add(displacement).add(beatPulse));
+      
+      // Color based on audio
+      const hue = this.uniforms.uHue.add(audioDisp.mul(0.5));
+      const sat = this.uniforms.uSaturation;
+      const brightness = this.uniforms.uBrightness.mul(float(1.0).add(audioDisp.mul(0.5)));
+      const color = hsvToRgb(hue, sat, brightness);
+      
+      // Simple edge glow based on position
+      const edgeFactor = float(1.0).sub(abs(normalize(pos).y));
+      const glow = pow(edgeFactor, 3.0).mul(this.uniforms.uGlowIntensity).mul(float(1.0).add(audioDisp));
+      
+      return {
+        position: finalPos,
+        color: vec4(color.mul(float(1.0).add(glow)), this.uniforms.uOpacity),
+      };
+    });
+    
+    // Cylinder/tunnel shader
+    const cylinderShader = Fn(() => {
+      const pos = positionLocal;
+      
+      // Audio bands
+      const audioDisp = this.uniforms.uBass.mul(this.uniforms.uBassInfluence)
+        .add(this.uniforms.uMid.mul(this.uniforms.uMidInfluence))
+        .add(this.uniforms.uTreble.mul(this.uniforms.uTrebleInfluence));
+      
+      // Radial displacement
+      const angle = atan2(pos.z, pos.x);
+      const radius = length(pos.xz);
+      const displacement = sin(angle.mul(this.uniforms.uComplexity).add(this.uniforms.uTime.mul(this.uniforms.uSpeed)))
+        .mul(sin(pos.y.mul(10.0).sub(this.uniforms.uTime.mul(2.0))))
+        .mul(0.05)
+        .mul(audioDisp.add(0.3))
+        .mul(this.uniforms.uWaveAmplitude);
+      
+      const newRadius = radius.add(displacement).add(this.uniforms.uBeatIntensity.mul(0.1));
+      const finalPos = vec3(
+        cos(angle).mul(newRadius),
+        pos.y,
+        sin(angle).mul(newRadius)
+      ).mul(this.uniforms.uScale);
+      
+      // Rainbow color based on position
+      const hue = this.uniforms.uHue.add(pos.y.mul(0.5)).add(angle.div(Math.PI * 2)).add(audioDisp.mul(0.3));
+      const sat = this.uniforms.uSaturation;
+      const brightness = this.uniforms.uBrightness.mul(float(1.0).add(audioDisp));
+      const color = hsvToRgb(hue, sat, brightness);
+      
+      return {
+        position: finalPos,
+        color: vec4(color.mul(this.uniforms.uGlowIntensity), this.uniforms.uOpacity),
+      };
+    });
+    
+    // Waves shader
+    const wavesShader = Fn(() => {
+      const pos = positionLocal;
+      
+      // Audio bands
+      const audioDisp = this.uniforms.uBass.mul(this.uniforms.uBassInfluence)
+        .add(this.uniforms.uMid.mul(this.uniforms.uMidInfluence))
+        .add(this.uniforms.uTreble.mul(this.uniforms.uTrebleInfluence));
+      
+      // Wave displacement
+      const dist = length(pos.xy);
+      const wave1 = sin(dist.mul(10.0).sub(this.uniforms.uTime.mul(2.0))).mul(0.1);
+      const wave2 = cos(pos.x.mul(5.0).add(this.uniforms.uTime)).mul(sin(pos.y.mul(5.0).sub(this.uniforms.uTime))).mul(0.05);
+      const zDisp = wave1.add(wave2).mul(audioDisp.add(0.5)).mul(this.uniforms.uWaveAmplitude);
+      
+      const finalPos = vec3(
+        pos.x.mul(this.uniforms.uScale),
+        pos.y.mul(this.uniforms.uScale),
+        zDisp.add(this.uniforms.uBeatIntensity.mul(0.2))
+      );
+      
+      // Color gradient
+      const hue = this.uniforms.uHue.add(dist.mul(0.3)).add(audioDisp.mul(0.5));
+      const sat = this.uniforms.uSaturation;
+      const brightness = this.uniforms.uBrightness.mul(float(1.0).add(audioDisp.mul(0.5)));
+      const color = hsvToRgb(hue, sat, brightness);
+      
+      return {
+        position: finalPos,
+        color: vec4(color.mul(this.uniforms.uGlowIntensity), this.uniforms.uOpacity),
+      };
+    });
+    
+    // Select shader based on mode
+    let selectedShader: any;
+    switch (mode) {
+      case 'sphere':
+      case 'particles':
+        selectedShader = sphereShader;
+        break;
+      
+      case 'cylinder':
+      case 'tunnel':
+        selectedShader = cylinderShader;
+        break;
+      
+      case 'waves':
+        selectedShader = wavesShader;
+        break;
+      
+      default:
+        selectedShader = sphereShader;
+    }
+    
+    // Apply shader to material
+    const result = selectedShader();
+    this.material.positionNode = result.position;
+    this.material.colorNode = result.color;
+  }
+  
+  /**
+   * Update with audio data
+   */
+  update(audioData: AudioData, elapsed: number): void {
+    if (!this.config.enabled) {
+      this.object.visible = false;
+      return;
+    }
+    
+    this.object.visible = true;
+    
+    // Update audio uniforms
+    this.uniforms.uTime.value = elapsed;
+    this.uniforms.uBass.value = audioData.smoothBass;
+    this.uniforms.uMid.value = audioData.smoothMid;
+    this.uniforms.uTreble.value = audioData.smoothTreble;
+    this.uniforms.uOverall.value = audioData.smoothOverall;
+    this.uniforms.uBeatIntensity.value = audioData.beatIntensity;
+    this.uniforms.uPeakFrequency.value = audioData.peakFrequency / 20000; // Normalize to 0-1
+    
+    // Rotate the object
+    this.object.rotation.y = elapsed * this.config.rotationSpeed * 0.5;
+    this.object.rotation.x = Math.sin(elapsed * 0.3) * 0.2;
+  }
+  
+  /**
+   * Update configuration
+   */
+  updateConfig(config: Partial<VolumetricConfig>): void {
+    Object.assign(this.config, config);
+    this.updateConfigUniforms();
+    
+    // If mode changed, rebuild geometry and shader
+    if (config.mode !== undefined) {
+      this.object.geometry.dispose();
+      this.object.geometry = this.createGeometry(config.mode);
+      this.buildShader(config.mode);
+    }
+  }
+  
+  /**
+   * Update uniforms from config
+   */
+  private updateConfigUniforms(): void {
+    this.uniforms.uScale.value = this.config.scale;
+    this.uniforms.uComplexity.value = this.config.complexity;
+    this.uniforms.uSpeed.value = this.config.speed;
+    this.uniforms.uHue.value = this.config.hue;
+    this.uniforms.uSaturation.value = this.config.saturation;
+    this.uniforms.uBrightness.value = this.config.brightness;
+    this.uniforms.uRotationSpeed.value = this.config.rotationSpeed;
+    this.uniforms.uPulseIntensity.value = this.config.pulseIntensity;
+    this.uniforms.uWaveAmplitude.value = this.config.waveAmplitude;
+    this.uniforms.uGlowIntensity.value = this.config.glowIntensity;
+    this.uniforms.uOpacity.value = this.config.opacity;
+    this.uniforms.uBassInfluence.value = this.config.bassInfluence;
+    this.uniforms.uMidInfluence.value = this.config.midInfluence;
+    this.uniforms.uTrebleInfluence.value = this.config.trebleInfluence;
+  }
+  
+  /**
+   * Dispose of resources
+   */
+  dispose(): void {
+    this.object.geometry.dispose();
+    this.material.dispose();
+  }
+}
+

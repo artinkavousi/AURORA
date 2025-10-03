@@ -84,6 +84,8 @@ export interface BoundaryConfig {
   visualize?: boolean;          // Show boundary mesh
   customMesh?: THREE.Mesh;      // Custom boundary mesh
   customModelPath?: string;     // Path to OBJ model
+  audioReactive?: boolean;      // Enable audio-reactive animations
+  audioPulseStrength?: number;  // Strength of audio pulse effect (0-1)
 }
 
 /**
@@ -113,6 +115,12 @@ export class ParticleBoundaries {
   private customMesh: THREE.Mesh | null = null;
   private visualize: boolean;
   
+  // Audio reactivity
+  private audioReactive: boolean;
+  private audioPulseStrength: number;
+  private baseRadius: number = 0;  // Store base radius for pulsing
+  private baseScale: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
+  
   // Boundary limits (in grid space)
   public readonly min: THREE.Vector3;
   public readonly max: THREE.Vector3;
@@ -128,6 +136,8 @@ export class ParticleBoundaries {
       friction = 0.1,
       visualize = false,  // Default to hidden
       customMesh = null,
+      audioReactive = false,
+      audioPulseStrength = 0.15,
     } = config;
     
     this.object = new THREE.Object3D();
@@ -140,10 +150,15 @@ export class ParticleBoundaries {
     this.friction = friction;
     this.visualize = visualize;
     this.customMesh = customMesh;
+    this.audioReactive = audioReactive;
+    this.audioPulseStrength = audioPulseStrength;
     
     // Calculate boundary limits
     this.min = new THREE.Vector3(wallThickness, wallThickness, wallThickness);
     this.max = this.gridSize.clone().subScalar(wallThickness);
+    
+    // Store base radius for audio reactivity
+    this.baseRadius = Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - wallThickness;
   }
   
   /**
@@ -424,15 +439,15 @@ export class ParticleBoundaries {
       gridSize: any,
     }
   ): void {
-    const xN = particlePosition.add(particleVelocity.mul(uniforms.dt).mul(3.0)).toConst("xN");
+    const xN = particlePosition.add(particleVelocity.mul(uniforms.dt).mul(3.0));
     
     // === VIEWPORT MODE (NONE or disabled) ===
     // Particles use gridSize (viewport space) as boundaries
     // This keeps particles visible on page and adapts to page size
     If(uniforms.boundaryEnabled.equal(int(0)), () => {
-      const viewportMin = vec3(2, 2, 2).toConst("viewportMin");
-      const viewportMax = uniforms.gridSize.sub(2).toConst("viewportMax");
-      const softStiffness = float(0.2);  // Softer collision for viewport
+      const viewportMin = vec3(1, 1, 1);
+      const viewportMax = uniforms.gridSize.sub(1);
+      const softStiffness = float(0.08);  // Very gentle collision for viewport (softer)
       
       // Soft viewport boundaries (keeps particles visible)
       If(xN.x.lessThan(viewportMin.x), () => { 
@@ -460,122 +475,122 @@ export class ParticleBoundaries {
     
     // === CUSTOM CONTAINER MODE (enabled) ===
     If(uniforms.boundaryEnabled.equal(int(1)), () => {
-      const xN = particlePosition.add(particleVelocity.mul(uniforms.dt).mul(3.0)).toConst("xN");
+      const xN2 = particlePosition.add(particleVelocity.mul(uniforms.dt).mul(3.0));
       
       // === BOX CONTAINER (shape = 0) ===
       If(uniforms.boundaryShape.equal(int(0)), () => {
-        const wallMin = uniforms.boundaryWallMin.toConst("wallMin");
-        const wallMax = uniforms.boundaryWallMax.toConst("wallMax");
-        const wallStiffness = uniforms.boundaryWallStiffness;
+        const boxMin = uniforms.boundaryWallMin;
+        const boxMax = uniforms.boundaryWallMax;
+        const boxStiffness = uniforms.boundaryWallStiffness;
         
         // Six-sided box collision
-        If(xN.x.lessThan(wallMin.x), () => { 
-          particleVelocity.x.addAssign(wallMin.x.sub(xN.x).mul(wallStiffness)); 
+        If(xN2.x.lessThan(boxMin.x), () => { 
+          particleVelocity.x.addAssign(boxMin.x.sub(xN2.x).mul(boxStiffness)); 
         });
-        If(xN.x.greaterThan(wallMax.x), () => { 
-          particleVelocity.x.addAssign(wallMax.x.sub(xN.x).mul(wallStiffness)); 
+        If(xN2.x.greaterThan(boxMax.x), () => { 
+          particleVelocity.x.addAssign(boxMax.x.sub(xN2.x).mul(boxStiffness)); 
         });
-        If(xN.y.lessThan(wallMin.y), () => { 
-          particleVelocity.y.addAssign(wallMin.y.sub(xN.y).mul(wallStiffness)); 
+        If(xN2.y.lessThan(boxMin.y), () => { 
+          particleVelocity.y.addAssign(boxMin.y.sub(xN2.y).mul(boxStiffness)); 
         });
-        If(xN.y.greaterThan(wallMax.y), () => { 
-          particleVelocity.y.addAssign(wallMax.y.sub(xN.y).mul(wallStiffness)); 
+        If(xN2.y.greaterThan(boxMax.y), () => { 
+          particleVelocity.y.addAssign(boxMax.y.sub(xN2.y).mul(boxStiffness)); 
         });
-        If(xN.z.lessThan(wallMin.z), () => { 
-          particleVelocity.z.addAssign(wallMin.z.sub(xN.z).mul(wallStiffness)); 
+        If(xN2.z.lessThan(boxMin.z), () => { 
+          particleVelocity.z.addAssign(boxMin.z.sub(xN2.z).mul(boxStiffness)); 
         });
-        If(xN.z.greaterThan(wallMax.z), () => { 
-          particleVelocity.z.addAssign(wallMax.z.sub(xN.z).mul(wallStiffness)); 
+        If(xN2.z.greaterThan(boxMax.z), () => { 
+          particleVelocity.z.addAssign(boxMax.z.sub(xN2.z).mul(boxStiffness)); 
         });
         
         // Clamp position to box boundaries
-        particlePosition.assign(particlePosition.clamp(wallMin, wallMax));
+        particlePosition.assign(particlePosition.clamp(boxMin, boxMax));
       });
       
       // === SPHERE CONTAINER (shape = 1) ===
       If(uniforms.boundaryShape.equal(int(1)), () => {
-        const center = uniforms.boundaryCenter.toConst("center");
-        const radius = uniforms.boundaryRadius.toConst("radius");
-        const wallStiffness = uniforms.boundaryWallStiffness;
+        const sphereCenter = uniforms.boundaryCenter;
+        const sphereRadius = uniforms.boundaryRadius;
+        const sphereStiffness = uniforms.boundaryWallStiffness;
         
         // Radial distance-based collision
-        const offset = xN.sub(center).toConst("offset");
-        const dist = offset.length().toConst("dist");
+        const sphereOffset = xN2.sub(sphereCenter);
+        const sphereDist = sphereOffset.length();
         
-        If(dist.greaterThan(radius), () => {
-          const normal = offset.normalize().toConst("normal");
-          const penetration = dist.sub(radius).toConst("penetration");
-          particleVelocity.subAssign(normal.mul(penetration).mul(wallStiffness));
+        If(sphereDist.greaterThan(sphereRadius), () => {
+          const sphereNormal = sphereOffset.normalize();
+          const spherePenetration = sphereDist.sub(sphereRadius);
+          particleVelocity.subAssign(sphereNormal.mul(spherePenetration).mul(sphereStiffness));
         });
         
         // Clamp position to sphere
-        const currentOffset = particlePosition.sub(center);
-        const currentDist = currentOffset.length();
-        If(currentDist.greaterThan(radius), () => {
-          particlePosition.assign(center.add(currentOffset.normalize().mul(radius)));
+        const sphereCurrentOffset = particlePosition.sub(sphereCenter);
+        const sphereCurrentDist = sphereCurrentOffset.length();
+        If(sphereCurrentDist.greaterThan(sphereRadius), () => {
+          particlePosition.assign(sphereCenter.add(sphereCurrentOffset.normalize().mul(sphereRadius)));
         });
       });
       
       // === TUBE CONTAINER (shape = 2) ===
       If(uniforms.boundaryShape.equal(int(2)), () => {
-        const center = uniforms.boundaryCenter.toConst("center");
-        const radius = uniforms.boundaryRadius.toConst("radius");
-        const wallMin = uniforms.boundaryWallMin.toConst("wallMin");
-        const wallMax = uniforms.boundaryWallMax.toConst("wallMax");
-        const wallStiffness = uniforms.boundaryWallStiffness;
+        const tubeCenter = uniforms.boundaryCenter;
+        const tubeRadius = uniforms.boundaryRadius;
+        const tubeMinZ = uniforms.boundaryWallMin;
+        const tubeMaxZ = uniforms.boundaryWallMax;
+        const tubeStiffness = uniforms.boundaryWallStiffness;
         
         // Radial collision on XY plane
-        const offsetXY = vec3(xN.x.sub(center.x), xN.y.sub(center.y), 0).toConst("offsetXY");
-        const distXY = offsetXY.length().toConst("distXY");
+        const tubeOffsetXY = vec3(xN2.x.sub(tubeCenter.x), xN2.y.sub(tubeCenter.y), 0);
+        const tubeDistXY = tubeOffsetXY.length();
         
-        If(distXY.greaterThan(radius), () => {
-          const normalXY = offsetXY.normalize().toConst("normalXY");
-          const penetration = distXY.sub(radius).toConst("penetration");
-          particleVelocity.x.subAssign(normalXY.x.mul(penetration).mul(wallStiffness));
-          particleVelocity.y.subAssign(normalXY.y.mul(penetration).mul(wallStiffness));
+        If(tubeDistXY.greaterThan(tubeRadius), () => {
+          const tubeNormalXY = tubeOffsetXY.normalize();
+          const tubePenetration = tubeDistXY.sub(tubeRadius);
+          particleVelocity.x.subAssign(tubeNormalXY.x.mul(tubePenetration).mul(tubeStiffness));
+          particleVelocity.y.subAssign(tubeNormalXY.y.mul(tubePenetration).mul(tubeStiffness));
         });
         
         // Z-axis collision (tube caps)
-        If(xN.z.lessThan(wallMin.z), () => { 
-          particleVelocity.z.addAssign(wallMin.z.sub(xN.z).mul(wallStiffness)); 
+        If(xN2.z.lessThan(tubeMinZ.z), () => { 
+          particleVelocity.z.addAssign(tubeMinZ.z.sub(xN2.z).mul(tubeStiffness)); 
         });
-        If(xN.z.greaterThan(wallMax.z), () => { 
-          particleVelocity.z.addAssign(wallMax.z.sub(xN.z).mul(wallStiffness)); 
+        If(xN2.z.greaterThan(tubeMaxZ.z), () => { 
+          particleVelocity.z.addAssign(tubeMaxZ.z.sub(xN2.z).mul(tubeStiffness)); 
         });
         
         // Clamp position to tube
-        const currentOffsetXY = vec3(particlePosition.x.sub(center.x), particlePosition.y.sub(center.y), 0);
-        const currentDistXY = currentOffsetXY.length();
-        If(currentDistXY.greaterThan(radius), () => {
-          const clampedXY = currentOffsetXY.normalize().mul(radius);
-          particlePosition.x.assign(center.x.add(clampedXY.x));
-          particlePosition.y.assign(center.y.add(clampedXY.y));
+        const tubeCurrentOffsetXY = vec3(particlePosition.x.sub(tubeCenter.x), particlePosition.y.sub(tubeCenter.y), 0);
+        const tubeCurrentDistXY = tubeCurrentOffsetXY.length();
+        If(tubeCurrentDistXY.greaterThan(tubeRadius), () => {
+          const tubeClampedXY = tubeCurrentOffsetXY.normalize().mul(tubeRadius);
+          particlePosition.x.assign(tubeCenter.x.add(tubeClampedXY.x));
+          particlePosition.y.assign(tubeCenter.y.add(tubeClampedXY.y));
         });
-        particlePosition.z.assign(particlePosition.z.clamp(wallMin.z, wallMax.z));
+        particlePosition.z.assign(particlePosition.z.clamp(tubeMinZ.z, tubeMaxZ.z));
       });
       
       // === DODECAHEDRON CONTAINER (shape = 3) ===
       // Approximated as spherical collision for GPU efficiency
       If(uniforms.boundaryShape.equal(int(3)), () => {
-        const center = uniforms.boundaryCenter.toConst("center");
-        const radius = uniforms.boundaryRadius.toConst("radius");
-        const wallStiffness = uniforms.boundaryWallStiffness;
+        const dodecaCenter = uniforms.boundaryCenter;
+        const dodecaRadius = uniforms.boundaryRadius;
+        const dodecaStiffness = uniforms.boundaryWallStiffness;
         
         // Radial distance-based collision (same as sphere)
-        const offset = xN.sub(center).toConst("offset");
-        const dist = offset.length().toConst("dist");
+        const dodecaOffset = xN2.sub(dodecaCenter);
+        const dodecaDist = dodecaOffset.length();
         
-        If(dist.greaterThan(radius), () => {
-          const normal = offset.normalize().toConst("normal");
-          const penetration = dist.sub(radius).toConst("penetration");
-          particleVelocity.subAssign(normal.mul(penetration).mul(wallStiffness));
+        If(dodecaDist.greaterThan(dodecaRadius), () => {
+          const dodecaNormal = dodecaOffset.normalize();
+          const dodecaPenetration = dodecaDist.sub(dodecaRadius);
+          particleVelocity.subAssign(dodecaNormal.mul(dodecaPenetration).mul(dodecaStiffness));
         });
         
         // Clamp position to dodecahedron (spherical approximation)
-        const currentOffset = particlePosition.sub(center);
-        const currentDist = currentOffset.length();
-        If(currentDist.greaterThan(radius), () => {
-          particlePosition.assign(center.add(currentOffset.normalize().mul(radius)));
+        const dodecaCurrentOffset = particlePosition.sub(dodecaCenter);
+        const dodecaCurrentDist = dodecaCurrentOffset.length();
+        If(dodecaCurrentDist.greaterThan(dodecaRadius), () => {
+          particlePosition.assign(dodecaCenter.add(dodecaCurrentOffset.normalize().mul(dodecaRadius)));
         });
       });
     });
@@ -731,10 +746,45 @@ export class ParticleBoundaries {
   }
   
   /**
-   * Update boundary (for dynamic boundaries)
+   * Update boundary with audio data (for audio-reactive animations)
    */
-  public update(elapsed: number): void {
-    // Reserved for animated/dynamic boundaries
+  public update(elapsed: number, audioData?: { bass: number; mid: number; treble: number; beatIntensity: number }): void {
+    if (!this.audioReactive || !audioData || !this.boundaryMesh) return;
+    
+    // Audio-reactive pulsing for glass containers
+    if (this.shape === BoundaryShape.SPHERE || this.shape === BoundaryShape.DODECAHEDRON) {
+      // Pulse scale based on bass
+      const pulseScale = 1.0 + audioData.bass * this.audioPulseStrength;
+      this.boundaryMesh.scale.setScalar(pulseScale);
+      
+      // Beat flash (opacity pulse)
+      if (this.boundaryMesh.material instanceof THREE.Material) {
+        const material = this.boundaryMesh.material as THREE.MeshPhysicalNodeMaterial;
+        const baseOpacity = 0.3;
+        const beatFlash = audioData.beatIntensity * 0.2;
+        material.opacity = baseOpacity + beatFlash;
+      }
+    } else if (this.shape === BoundaryShape.TUBE) {
+      // Tube: radial pulse + height modulation
+      const radialPulse = 1.0 + audioData.mid * this.audioPulseStrength;
+      const heightPulse = 1.0 + audioData.bass * this.audioPulseStrength * 0.5;
+      this.boundaryMesh.scale.set(radialPulse, heightPulse, radialPulse);
+      
+      // Beat flash
+      if (this.boundaryMesh.material instanceof THREE.Material) {
+        const material = this.boundaryMesh.material as THREE.MeshPhysicalNodeMaterial;
+        material.opacity = 0.3 + audioData.beatIntensity * 0.2;
+      }
+    } else if (this.shape === BoundaryShape.BOX) {
+      // Box: subtle pulse + rotation on beat
+      const pulseScale = 1.0 + (audioData.bass + audioData.mid + audioData.treble) / 3 * this.audioPulseStrength * 0.3;
+      this.boundaryMesh.scale.setScalar(pulseScale);
+      
+      // Subtle rotation on strong beats
+      if (audioData.beatIntensity > 0.7) {
+        this.boundaryMesh.rotation.y += audioData.beatIntensity * 0.01;
+      }
+    }
   }
   
   /**

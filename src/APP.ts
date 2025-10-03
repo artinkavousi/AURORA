@@ -13,9 +13,12 @@ import { PostFXPanel } from './POSTFX/PANELpostfx';  // RE-ENABLED
 import { MlsMpmSimulator } from './PARTICLESYSTEM/physic/mls-mpm';
 import { MeshRenderer } from './PARTICLESYSTEM/RENDERER/meshrenderer';
 import { PointRenderer } from './PARTICLESYSTEM/RENDERER/pointrenderer';
+import { RendererManager, ParticleRenderMode } from './PARTICLESYSTEM/RENDERER/renderercore';
 import { PhysicPanel, ColorMode } from './PARTICLESYSTEM/PANELphysic';
+import { VisualsPanel } from './PARTICLESYSTEM/PANEL/PANELvisuals';
 import { SoundReactivity } from './AUDIO/soundreactivity';
-import { VolumetricVisualizer } from './AUDIO/volumetric';
+import { AudioReactiveBehavior } from './AUDIO/audioreactive';
+import { AudioVisualizationManager } from './AUDIO/audiovisual';
 import { AudioPanel } from './AUDIO/PANELsoundreactivity';
 
 export type ProgressCallback = (frac: number, delay?: number) => Promise<void>;
@@ -38,17 +41,24 @@ export class FlowApp {
 
   // Particle system
   private mlsMpmSim!: MlsMpmSimulator;
+  private rendererManager!: RendererManager;  // PRIMARY: Unified renderer system
+  private currentRenderObject: THREE.Object3D | null = null;  // Currently active renderer
+  
+  // Legacy renderers (DEPRECATED - kept for backward compatibility only)
   private meshRenderer!: MeshRenderer;
   private pointRenderer!: PointRenderer;
+  private useLegacyRenderers: boolean = false;  // Set to true to use old system
 
   // UI Panels
   private postFXPanel!: PostFXPanel;  // RE-ENABLED
   private physicPanel!: PhysicPanel;
+  private visualsPanel!: VisualsPanel;  // NEW: Visual controls
   private audioPanel!: AudioPanel;
 
   // Audio reactivity
   private soundReactivity!: SoundReactivity;
-  private volumetricVisualizer!: VolumetricVisualizer;
+  private audioReactiveBehavior!: AudioReactiveBehavior;
+  private audioVisualizationManager!: AudioVisualizationManager;
 
   // Mouse interaction
   private raycaster!: THREE.Raycaster;
@@ -93,14 +103,14 @@ export class FlowApp {
 
     await progress(0.3);
 
-    // Initialize PostFX (clean: bloom + radial blur + radial CA)
+    // Initialize PostFX (refined: bloom + radial focus + radial CA)
     this.postFX = new PostFX(
       this.renderer,
       this.scenery.scene,
       this.scenery.camera,
       {
         bloom: this.config.bloom,
-        radialBlur: this.config.radialBlur,
+        radialFocus: this.config.radialFocus,
         radialCA: this.config.radialCA,
       }
     );
@@ -117,6 +127,8 @@ export class FlowApp {
       wallThickness: 3,
       wallStiffness: 0.3,
       visualize: false,  // Hidden by default
+      audioReactive: true,  // Enable audio-reactive animations
+      audioPulseStrength: 0.15,  // Moderate pulse strength
     });
     await this.boundaries.init();
     this.scenery.add(this.boundaries.object);
@@ -138,24 +150,33 @@ export class FlowApp {
 
     await progress(0.7);
 
-    // Initialize particle renderers
+    // Initialize PRIMARY unified renderer system
+    this.rendererManager = new RendererManager(this.mlsMpmSim, {
+      mode: this.config.rendering.points ? ParticleRenderMode.POINT : ParticleRenderMode.MESH,
+      quality: 2 as import('./PARTICLESYSTEM/RENDERER/renderercore').RenderQuality,  // HIGH = 2
+      lodEnabled: false,
+      sortingEnabled: false,
+      cullingEnabled: false,
+      maxParticles: this.config.particles.maxCount,
+    });
+    
+    // Get renderer and add to scene (ACTIVE by default)
+    this.currentRenderObject = this.rendererManager.getRenderer().object;
+    this.currentRenderObject.visible = true;  // ✅ NEW SYSTEM IS PRIMARY
+    this.scenery.add(this.currentRenderObject);
+    
+    // Initialize legacy renderers (for backward compatibility if needed)
     this.meshRenderer = new MeshRenderer(this.mlsMpmSim, {
       metalness: 0.900,
       roughness: 0.50,
     });
-    this.scenery.add(this.meshRenderer.object);
-
     this.pointRenderer = new PointRenderer(this.mlsMpmSim);
+    
+    // Add to scene but keep HIDDEN (legacy system disabled by default)
+    this.meshRenderer.object.visible = false;
+    this.pointRenderer.object.visible = false;
+    this.scenery.add(this.meshRenderer.object);
     this.scenery.add(this.pointRenderer.object);
-
-    // Set initial visibility
-    this.meshRenderer.object.visible = !this.config.rendering.points;
-    this.pointRenderer.object.visible = this.config.rendering.points;
-
-    // Set initial bloom intensity
-    if (this.config.bloom.enabled) {
-      this.meshRenderer.setBloomIntensity(1);
-    }
 
     await progress(0.8);
 
@@ -198,8 +219,8 @@ export class FlowApp {
       onBloomChange: (bloomConfig) => {
         this.postFX.updateBloom(bloomConfig);
       },
-      onRadialBlurChange: (radialBlurConfig) => {
-        this.postFX.updateRadialBlur(radialBlurConfig);
+      onRadialFocusChange: (radialFocusConfig) => {
+        this.postFX.updateRadialFocus(radialFocusConfig);
       },
       onRadialCAChange: (radialCAConfig) => {
         this.postFX.updateRadialCA(radialCAConfig);
@@ -209,17 +230,124 @@ export class FlowApp {
     // Initialize audio reactivity system (don't start by default)
     this.soundReactivity = new SoundReactivity(this.config.audio);
     
-    // Initialize volumetric visualizer
-    this.volumetricVisualizer = new VolumetricVisualizer(this.config.volumetric);
-    this.scenery.add(this.volumetricVisualizer.object);
+    // Actually initialize the audio context and request microphone permission
+    if (this.config.audio.enabled) {
+      try {
+        await this.soundReactivity.init();
+        console.log('🎤 SoundReactivity initialized successfully!');
+      } catch (error) {
+        console.warn('⚠️ Failed to initialize audio (microphone access denied?):', error);
+      }
+    }
+    
+    // Initialize audio-reactive behavior system
+    console.log('🎵 Initializing AudioReactiveBehavior...', this.config.audioReactive);
+    this.audioReactiveBehavior = new AudioReactiveBehavior(this.renderer, this.config.audioReactive);
+    console.log('🎵 AudioReactiveBehavior created, setting force field manager...');
+    this.audioReactiveBehavior.setForceFieldManager(this.physicPanel.forceFieldManager);
+    console.log('🎵 Force field manager set successfully');
+    
+    // Initialize visualization manager (handles 8 visualization modes)
+    console.log('🎵 Initializing AudioVisualizationManager...');
+    this.audioVisualizationManager = new AudioVisualizationManager(
+      this.renderer,
+      new THREE.Vector3(64, 64, 64)
+    );
+    console.log('🎵 Setting visualization mode:', this.config.audioReactive.mode);
+    this.audioVisualizationManager.setMode(this.config.audioReactive.mode);
+    
+    // Sync initial visualization mode to physics simulator
+    this.mlsMpmSim.setAudioVisualizationMode(this.config.audioReactive.mode);
+    
+    console.log('🎵 Audio system initialized successfully!');
+    
+    // Initialize visuals control panel (NEW)
+    this.visualsPanel = new VisualsPanel(this.dashboard, {
+      onRenderModeChange: (mode) => {
+        this.switchRenderMode(mode);
+      },
+      onMaterialPresetChange: (preset) => {
+        console.log(`🎨 Applying preset: ${preset.name}`);
+        
+        // Update visuals panel settings
+        this.visualsPanel.settings.metalness = preset.metalness;
+        this.visualsPanel.settings.roughness = preset.roughness;
+        this.visualsPanel.settings.emissive = preset.emissive;
+        
+        // Apply to active renderer if it's a mesh-based material
+        const currentMode = this.rendererManager.getCurrentMode();
+        if (currentMode === ParticleRenderMode.MESH) {
+          const renderer = this.rendererManager.getRenderer() as MeshRenderer;
+          if (renderer && renderer.material) {
+            renderer.material.metalness = preset.metalness;
+            renderer.material.roughness = preset.roughness;
+            renderer.material.needsUpdate = true;
+          }
+        }
+        
+        // Also update legacy mesh renderer for compatibility
+        if (this.meshRenderer && this.meshRenderer.material) {
+          this.meshRenderer.material.metalness = preset.metalness;
+          this.meshRenderer.material.roughness = preset.roughness;
+          this.meshRenderer.material.needsUpdate = true;
+        }
+      },
+      onColorModeChange: (mode) => {
+        // Map new ColorMode to legacy ColorMode
+        const legacyColorMode = mode as number;
+        this.mlsMpmSim.setColorMode(legacyColorMode);
+      },
+      onColorGradientChange: (gradientName) => {
+        console.log('🌈 Color gradient changed:', gradientName);
+        // Gradient system will be fully integrated in Phase 2
+        // For now, just acknowledge the change
+      },
+      onSizeChange: (size) => {
+        this.rendererManager.update(this.mlsMpmSim.numParticles, size);
+      },
+      onMaterialPropertyChange: (property, value) => {
+        console.log(`🎨 ${property}: ${value.toFixed(2)}`);
+        
+        // Apply to active renderer if it supports material properties
+        const currentMode = this.rendererManager.getCurrentMode();
+        if (currentMode === ParticleRenderMode.MESH) {
+          const renderer = this.rendererManager.getRenderer() as MeshRenderer;
+          if (renderer && renderer.material) {
+            const material = renderer.material as any;
+            if (property in material) {
+              material[property] = value;
+              material.needsUpdate = true;
+            }
+          }
+        }
+        
+        // Also update legacy mesh renderer
+        if (this.meshRenderer && this.meshRenderer.material) {
+          const material = this.meshRenderer.material as any;
+          if (property in material) {
+            material[property] = value;
+            material.needsUpdate = true;
+          }
+        }
+      },
+    });
+    
+    // Connect renderer manager to visuals panel
+    this.visualsPanel.setRendererManager(this.rendererManager);
     
     // Initialize audio control panel
     this.audioPanel = new AudioPanel(this.dashboard, this.config, {
       onAudioConfigChange: (audioConfig) => {
         this.soundReactivity.updateConfig(audioConfig);
       },
-      onVolumetricConfigChange: (volumetricConfig) => {
-        this.volumetricVisualizer.updateConfig(volumetricConfig);
+      onAudioReactiveConfigChange: (audioReactiveConfig) => {
+        this.audioReactiveBehavior.updateConfig(audioReactiveConfig);
+        if (audioReactiveConfig.mode !== undefined) {
+          this.audioVisualizationManager.setMode(audioReactiveConfig.mode);
+          // Sync visualization mode to physics simulator for GPU forces
+          this.mlsMpmSim.setAudioVisualizationMode(audioReactiveConfig.mode);
+          console.log(`🎵 Visualization mode changed to: ${audioReactiveConfig.mode}`);
+        }
       },
       onSourceChange: async (source) => {
         // Reinitialize audio with new source
@@ -336,6 +464,18 @@ export class FlowApp {
     // Update audio reactivity
     const audioData = this.soundReactivity.getAudioData();
     
+    // Update boundaries with audio data (for audio-reactive animations)
+    if (this.config.audio.enabled && this.config.audioReactive.enabled) {
+      this.boundaries.update(elapsed, {
+        bass: audioData.smoothBass,
+        mid: audioData.smoothMid,
+        treble: audioData.smoothTreble,
+        beatIntensity: audioData.beatIntensity,
+      });
+    } else {
+      this.boundaries.update(elapsed);
+    }
+    
     // Update audio panel metrics
     if (this.config.audio.enabled) {
       this.audioPanel.updateMetrics(
@@ -348,25 +488,76 @@ export class FlowApp {
       );
     }
     
-    // Update volumetric visualizer with audio data
-    this.volumetricVisualizer.update(audioData, elapsed);
+    // Update audio-reactive behavior system
+    if (this.config.audioReactive.enabled) {
+      // Debug: Log audio values periodically (~1/sec at 60fps)
+      if (Math.random() < 0.016) {
+        console.log('🎵 Audio:', {
+          bass: audioData.smoothBass.toFixed(2),
+          mid: audioData.smoothMid.toFixed(2),
+          treble: audioData.smoothTreble.toFixed(2),
+          beat: audioData.isBeat ? '🔴' : '⚫',
+          beatIntensity: audioData.beatIntensity.toFixed(2)
+        });
+      }
+      
+      // Upload audio data to GPU
+      this.audioReactiveBehavior.updateAudioData(audioData);
+      
+      // Update beat-triggered effects (vortexes, etc.)
+      this.audioReactiveBehavior.updateBeatEffects(
+        audioData,
+        delta,
+        new THREE.Vector3(64, 64, 64)
+      );
+      
+      // Update visualization mode
+      this.audioVisualizationManager.update(audioData, delta);
+      
+      // Apply material modulation if enabled
+      if (this.config.audioReactive.materialModulation) {
+        const { viscosity, stiffness } = this.audioReactiveBehavior.getMaterialModulation(audioData);
+        // Note: Material modulation will be applied in physics update below
+        this.config.simulation.dynamicViscosity = viscosity;
+        this.config.simulation.stiffness = stiffness;
+      }
+    }
 
-    // Update renderer visibility based on config
-    this.meshRenderer.object.visible = !this.config.rendering.points;
-    this.pointRenderer.object.visible = this.config.rendering.points;
-
-    // Update renderers
-    this.meshRenderer.update(
-      this.config.particles.count,
-      this.config.particles.actualSize
-    );
-    this.pointRenderer.update(this.config.particles.count);
-
-    // Update bloom intensity
-    if (this.config.bloom.enabled) {
-      this.meshRenderer.setBloomIntensity(1);
+    // ═══════════════════════════════════════════════════════════
+    // UNIFIED RENDERER UPDATE - Primary System
+    // ═══════════════════════════════════════════════════════════
+    
+    if (this.useLegacyRenderers) {
+      // LEGACY PATH (deprecated, for compatibility only)
+      this.meshRenderer.object.visible = !this.config.rendering.points;
+      this.pointRenderer.object.visible = this.config.rendering.points;
+      this.meshRenderer.update(this.config.particles.count, this.config.particles.actualSize);
+      this.pointRenderer.update(this.config.particles.count);
+      
+      if (this.config.bloom.enabled) {
+        this.meshRenderer.setBloomIntensity(1);
+      } else {
+        this.meshRenderer.setBloomIntensity(0);
+      }
     } else {
-      this.meshRenderer.setBloomIntensity(0);
+      // NEW UNIFIED SYSTEM (default, always active)
+      this.rendererManager.update(
+        this.config.particles.count,
+        this.visualsPanel?.settings.particleSize || this.config.particles.actualSize
+      );
+      
+      // Update renderer with audio reactivity if enabled
+      if (this.config.audio.enabled && this.config.audioReactive.enabled) {
+        const renderer = this.rendererManager.getRenderer() as MeshRenderer;
+        if (renderer && typeof (renderer as any).updateAudioReactivity === 'function') {
+          (renderer as any).updateAudioReactivity({
+            bass: audioData.smoothBass,
+            mid: audioData.smoothMid,
+            treble: audioData.smoothTreble,
+            beatIntensity: audioData.beatIntensity,
+          });
+        }
+      }
     }
 
     // Update physics simulation
@@ -415,9 +606,28 @@ export class FlowApp {
           mouseRayOrigin: new THREE.Vector3(),
           mouseRayDirection: new THREE.Vector3(),
           mouseForce: new THREE.Vector3(),
+          
+          // FLIP/PIC Hybrid parameters
+          transferMode: this.config.simulation.transferMode,
+          flipRatio: this.config.simulation.flipRatio,
+          
+          // Vorticity confinement parameters
+          vorticityEnabled: this.config.simulation.vorticityEnabled,
+          vorticityEpsilon: this.config.simulation.vorticityEpsilon,
+          
+          // Surface tension parameters
+          surfaceTensionEnabled: this.config.simulation.surfaceTensionEnabled,
+          surfaceTensionCoeff: this.config.simulation.surfaceTensionCoeff,
+          
+          // Performance parameters
+          sparseGrid: this.config.simulation.sparseGrid,
+          adaptiveTimestep: this.config.simulation.adaptiveTimestep,
+          cflTarget: this.config.simulation.cflTarget,
         },
         delta,
-        elapsed
+        elapsed,
+        // Pass audio data if reactive is enabled
+        this.config.audioReactive.enabled ? audioData : undefined
       );
       
       // Update performance metrics
@@ -440,6 +650,38 @@ export class FlowApp {
   }
 
   /**
+   * Switch particle render mode (Unified System)
+   */
+  private switchRenderMode(mode: ParticleRenderMode): void {
+    console.log(`🎨 Switching render mode to: ${RendererManager.getModeName(mode)}`);
+    
+    // Ensure legacy renderers are hidden
+    if (this.meshRenderer) this.meshRenderer.object.visible = false;
+    if (this.pointRenderer) this.pointRenderer.object.visible = false;
+    
+    // Remove current renderer from scene
+    if (this.currentRenderObject) {
+      this.scenery.remove(this.currentRenderObject);
+    }
+    
+    // Switch to new renderer
+    const newRenderObject = this.rendererManager.switchMode(mode);
+    
+    // Add to scene and make visible
+    this.scenery.add(newRenderObject);
+    newRenderObject.visible = true;
+    this.currentRenderObject = newRenderObject;
+    
+    // Update renderer with current particle count
+    this.rendererManager.update(
+      this.mlsMpmSim.numParticles,
+      this.visualsPanel?.settings.particleSize || 1.0
+    );
+    
+    console.log(`✅ Now rendering with: ${RendererManager.getModeName(mode)}`);
+  }
+  
+  /**
    * Dispose of all resources
    */
   public dispose(): void {
@@ -454,11 +696,14 @@ export class FlowApp {
     this.boundaries.dispose();
     this.meshRenderer.dispose();
     this.pointRenderer.dispose();
+    this.rendererManager.dispose();  // NEW
     // this.postFXPanel.dispose(); // PostFXPanel doesn't have dispose method
     this.physicPanel.dispose();
+    this.visualsPanel.dispose();  // NEW
     this.audioPanel.dispose();
     this.soundReactivity.dispose();
-    this.volumetricVisualizer.dispose();
+    this.audioReactiveBehavior.dispose();
+    this.audioVisualizationManager.dispose();
   }
 }
 

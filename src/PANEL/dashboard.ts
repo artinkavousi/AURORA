@@ -86,15 +86,15 @@ export class Dashboard {
         border-radius: 20px !important;
         box-shadow: 
           0 16px 48px 0 rgba(0, 0, 0, 0.45),
-          0 4px 24px 0 rgba(139, 92, 246, 0.35),
+          0 4px 24px 0 rgba(80, 120, 180, 0.35),
           inset 0 1px 0 0 rgba(255, 255, 255, 0.20),
-          inset 0 0 100px 0 rgba(139, 92, 246, 0.08);
+          inset 0 0 100px 0 rgba(80, 120, 180, 0.08);
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         overflow: hidden;
         position: relative;
       }
 
-      /* Subtle inner glow effect with tint */
+      /* Subtle inner glow effect (no purple tint) */
       .tp-dfwv::before,
       .tp-rotv::before,
       .panel-container > div:first-child::before {
@@ -107,33 +107,33 @@ export class Dashboard {
         background: linear-gradient(
           90deg,
           transparent,
-          rgba(139, 92, 246, 0.6) 30%,
-          rgba(99, 102, 241, 0.6) 70%,
+          rgba(255, 255, 255, 0.3) 30%,
+          rgba(200, 220, 255, 0.3) 70%,
           transparent
         );
-        opacity: 0.7;
+        opacity: 0.5;
         filter: blur(1px);
       }
 
-      /* Hover: LIGHTER frosted glass effect (less blur, more transparent) */
+      /* Hover: NO CHANGE (keep same appearance) */
       .tp-dfwv:hover,
       .tp-rotv:hover,
       .panel-container:hover > div:first-child {
-        backdrop-filter: blur(20px) saturate(160%) brightness(1.1) contrast(1.05);
-        -webkit-backdrop-filter: blur(20px) saturate(160%) brightness(1.1) contrast(1.05);
+        backdrop-filter: blur(50px) saturate(200%) brightness(1.2) contrast(1.15);
+        -webkit-backdrop-filter: blur(50px) saturate(200%) brightness(1.2) contrast(1.15);
         background: linear-gradient(
           135deg,
-          rgba(25, 35, 70, 0.45) 0%,
-          rgba(15, 25, 55, 0.35) 50%,
-          rgba(20, 30, 62, 0.40) 100%
+          rgba(35, 46, 92, 0.78) 0%,
+          rgba(25, 35, 75, 0.68) 50%,
+          rgba(30, 40, 82, 0.73) 100%
         ) !important;
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.28);
         box-shadow: 
-          0 6px 24px 0 rgba(0, 0, 0, 0.25),
-          0 1px 8px 0 rgba(30, 41, 82, 0.15),
-          inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
-          inset 0 0 40px 0 rgba(139, 92, 246, 0.02);
-        transform: translateY(-1px);
+          0 16px 48px 0 rgba(0, 0, 0, 0.45),
+          0 4px 24px 0 rgba(30, 41, 82, 0.35),
+          inset 0 1px 0 0 rgba(255, 255, 255, 0.20),
+          inset 0 0 100px 0 rgba(200, 220, 255, 0.05);
+        /* Removed transform to keep position stable */
       }
 
       /* ═══════════════════════════════════════════════════════════════════ */
@@ -162,13 +162,13 @@ export class Dashboard {
       }
 
       .panel-container:hover {
-        filter: drop-shadow(0 8px 24px rgba(139, 92, 246, 0.2));
+        filter: drop-shadow(0 8px 24px rgba(30, 41, 82, 0.3));
       }
 
       .panel-container.dragging {
         z-index: 2000;
         cursor: grabbing !important;
-        filter: drop-shadow(0 12px 32px rgba(139, 92, 246, 0.3));
+        filter: drop-shadow(0 12px 32px rgba(30, 41, 82, 0.4));
         transform: scale(1.02);
       }
 
@@ -180,8 +180,8 @@ export class Dashboard {
         padding: 12px 16px !important;
         background: linear-gradient(
           135deg,
-          rgba(139, 92, 246, 0.08) 0%,
-          rgba(99, 102, 241, 0.05) 100%
+          rgba(80, 120, 180, 0.08) 0%,
+          rgba(100, 140, 200, 0.05) 100%
         );
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       }
@@ -195,8 +195,8 @@ export class Dashboard {
         width: 3px;
         background: linear-gradient(
           180deg,
-          rgba(139, 92, 246, 0.8) 0%,
-          rgba(99, 102, 241, 0.6) 100%
+          rgba(80, 120, 180, 0.8) 0%,
+          rgba(100, 140, 200, 0.6) 100%
         );
         opacity: 0;
         transition: opacity 0.3s ease;
@@ -205,8 +205,8 @@ export class Dashboard {
       .tp-fldv_t:hover {
         background: linear-gradient(
           135deg,
-          rgba(139, 92, 246, 0.12) 0%,
-          rgba(99, 102, 241, 0.08) 100%
+          rgba(80, 120, 180, 0.12) 0%,
+          rgba(100, 140, 200, 0.08) 100%
         );
         border-bottom: 1px solid rgba(255, 255, 255, 0.12);
       }
@@ -217,15 +217,15 @@ export class Dashboard {
 
       .tp-fldv_t:active {
         cursor: grabbing;
-        background: rgba(139, 92, 246, 0.15);
+        background: rgba(80, 120, 180, 0.15);
       }
 
       /* Premium title styling with gradient */
       .tp-fldv_t .tp-fldv_b {
         background: linear-gradient(
           135deg,
-          #8b5cf6 0%,
-          #6366f1 50%,
+          #5078b4 0%,
+          #648cc8 50%,
           #a78bfa 100%
         );
         -webkit-background-clip: text;
@@ -235,7 +235,7 @@ export class Dashboard {
         font-size: 13px;
         letter-spacing: 0.8px;
         text-transform: uppercase;
-        text-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+        text-shadow: 0 2px 8px rgba(80, 120, 180, 0.3);
       }
 
       /* Enhanced folder content */
@@ -273,10 +273,10 @@ export class Dashboard {
           rgba(255, 255, 255, 0.10) 0%,
           rgba(255, 255, 255, 0.06) 100%
         ) !important;
-        border: 1px solid rgba(139, 92, 246, 0.3);
+        border: 1px solid rgba(80, 120, 180, 0.3);
         box-shadow: 
           inset 0 1px 2px rgba(0, 0, 0, 0.2),
-          0 0 0 1px rgba(139, 92, 246, 0.1);
+          0 0 0 1px rgba(80, 120, 180, 0.1);
       }
 
       .tp-rotv_b:focus, .tp-sldtxtv_t:focus {
@@ -285,11 +285,11 @@ export class Dashboard {
           rgba(255, 255, 255, 0.12) 0%,
           rgba(255, 255, 255, 0.08) 100%
         ) !important;
-        border: 1px solid rgba(139, 92, 246, 0.6);
+        border: 1px solid rgba(80, 120, 180, 0.6);
         box-shadow: 
-          0 0 0 3px rgba(139, 92, 246, 0.15),
+          0 0 0 3px rgba(80, 120, 180, 0.15),
           inset 0 1px 2px rgba(0, 0, 0, 0.2),
-          0 4px 12px rgba(139, 92, 246, 0.2);
+          0 4px 12px rgba(80, 120, 180, 0.2);
         outline: none;
       }
 
@@ -307,14 +307,14 @@ export class Dashboard {
       .tp-btnv_b {
         background: linear-gradient(
           135deg,
-          #8b5cf6 0%,
-          #7c3aed 25%,
-          #6366f1 50%,
+          #5078b4 0%,
+          #5a80b8 25%,
+          #648cc8 50%,
           #4f46e5 75%,
-          #8b5cf6 100%
+          #5078b4 100%
         ) !important;
         background-size: 200% 200% !important;
-        border: 1px solid rgba(139, 92, 246, 0.5) !important;
+        border: 1px solid rgba(80, 120, 180, 0.5) !important;
         border-radius: 12px;
         color: white !important;
         font-weight: 700;
@@ -324,7 +324,7 @@ export class Dashboard {
         padding: 10px 20px;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         box-shadow: 
-          0 4px 16px rgba(139, 92, 246, 0.4),
+          0 4px 16px rgba(80, 120, 180, 0.4),
           inset 0 1px 0 rgba(255, 255, 255, 0.2);
         position: relative;
         overflow: hidden;
@@ -350,11 +350,11 @@ export class Dashboard {
       .tp-btnv_b:hover {
         transform: translateY(-3px) scale(1.02);
         box-shadow: 
-          0 8px 24px rgba(139, 92, 246, 0.5),
-          0 4px 12px rgba(99, 102, 241, 0.3),
+          0 8px 24px rgba(80, 120, 180, 0.5),
+          0 4px 12px rgba(100, 140, 200, 0.3),
           inset 0 1px 0 rgba(255, 255, 255, 0.3);
         background-position: 100% 0 !important;
-        border: 1px solid rgba(139, 92, 246, 0.8) !important;
+        border: 1px solid rgba(80, 120, 180, 0.8) !important;
       }
 
       .tp-btnv_b:hover::before {
@@ -364,7 +364,7 @@ export class Dashboard {
       .tp-btnv_b:active {
         transform: translateY(-1px) scale(0.98);
         box-shadow: 
-          0 4px 12px rgba(139, 92, 246, 0.4),
+          0 4px 12px rgba(80, 120, 180, 0.4),
           inset 0 2px 4px rgba(0, 0, 0, 0.2);
       }
 
@@ -372,8 +372,8 @@ export class Dashboard {
       .tp-sldv_t {
         background: linear-gradient(
           90deg,
-          rgba(139, 92, 246, 0.15) 0%,
-          rgba(99, 102, 241, 0.08) 100%
+          rgba(80, 120, 180, 0.15) 0%,
+          rgba(100, 140, 200, 0.08) 100%
         );
         border-radius: 12px;
         height: 6px;
@@ -391,9 +391,9 @@ export class Dashboard {
         bottom: 0;
         background: linear-gradient(
           90deg,
-          rgba(139, 92, 246, 0.3) 0%,
-          rgba(99, 102, 241, 0.2) 50%,
-          rgba(139, 92, 246, 0.1) 100%
+          rgba(80, 120, 180, 0.3) 0%,
+          rgba(100, 140, 200, 0.2) 50%,
+          rgba(80, 120, 180, 0.1) 100%
         );
         opacity: 0;
         transition: opacity 0.3s ease;
@@ -407,13 +407,13 @@ export class Dashboard {
         background: linear-gradient(
           135deg,
           #a78bfa 0%,
-          #8b5cf6 50%,
-          #7c3aed 100%
+          #5078b4 50%,
+          #5a80b8 100%
         );
         border-radius: 12px;
         box-shadow: 
-          0 2px 8px rgba(139, 92, 246, 0.5),
-          0 0 0 2px rgba(139, 92, 246, 0.2),
+          0 2px 8px rgba(80, 120, 180, 0.5),
+          0 0 0 2px rgba(80, 120, 180, 0.2),
           inset 0 1px 0 rgba(255, 255, 255, 0.3);
         border: 2px solid rgba(255, 255, 255, 0.2);
         transition: all 0.3s ease;
@@ -421,8 +421,8 @@ export class Dashboard {
 
       .tp-sldv_k:hover {
         box-shadow: 
-          0 4px 16px rgba(139, 92, 246, 0.6),
-          0 0 0 3px rgba(139, 92, 246, 0.3),
+          0 4px 16px rgba(80, 120, 180, 0.6),
+          0 0 0 3px rgba(80, 120, 180, 0.3),
           inset 0 1px 0 rgba(255, 255, 255, 0.4);
         transform: scale(1.15);
       }
@@ -448,8 +448,8 @@ export class Dashboard {
         inset: -2px;
         background: linear-gradient(
           135deg,
-          rgba(139, 92, 246, 0.5),
-          rgba(99, 102, 241, 0.5)
+          rgba(80, 120, 180, 0.5),
+          rgba(100, 140, 200, 0.5)
         );
         opacity: 0;
         transition: opacity 0.3s ease;
@@ -459,21 +459,21 @@ export class Dashboard {
       .tp-ckbv_i:checked {
         background: linear-gradient(
           135deg,
-          #8b5cf6 0%,
-          #7c3aed 50%,
-          #6366f1 100%
+          #5078b4 0%,
+          #5a80b8 50%,
+          #648cc8 100%
         );
-        border-color: rgba(139, 92, 246, 0.8);
+        border-color: rgba(80, 120, 180, 0.8);
         box-shadow: 
-          0 4px 12px rgba(139, 92, 246, 0.4),
+          0 4px 12px rgba(80, 120, 180, 0.4),
           inset 0 1px 0 rgba(255, 255, 255, 0.3);
       }
 
       .tp-ckbv_i:hover {
-        border-color: rgba(139, 92, 246, 0.5);
+        border-color: rgba(80, 120, 180, 0.5);
         box-shadow: 
           inset 0 1px 3px rgba(0, 0, 0, 0.2),
-          0 0 0 2px rgba(139, 92, 246, 0.2);
+          0 0 0 2px rgba(80, 120, 180, 0.2);
       }
 
       /* Premium list/dropdown */
@@ -495,19 +495,19 @@ export class Dashboard {
       .tp-lstv_s:hover {
         background: linear-gradient(
           135deg,
-          rgba(139, 92, 246, 0.12) 0%,
-          rgba(99, 102, 241, 0.08) 100%
+          rgba(80, 120, 180, 0.12) 0%,
+          rgba(100, 140, 200, 0.08) 100%
         ) !important;
-        border: 1px solid rgba(139, 92, 246, 0.4);
+        border: 1px solid rgba(80, 120, 180, 0.4);
         box-shadow: 
           inset 0 1px 2px rgba(0, 0, 0, 0.2),
-          0 0 0 1px rgba(139, 92, 246, 0.2);
+          0 0 0 1px rgba(80, 120, 180, 0.2);
       }
 
       .tp-lstv_s:focus {
-        border: 1px solid rgba(139, 92, 246, 0.6);
+        border: 1px solid rgba(80, 120, 180, 0.6);
         box-shadow: 
-          0 0 0 3px rgba(139, 92, 246, 0.2),
+          0 0 0 3px rgba(80, 120, 180, 0.2),
           inset 0 1px 2px rgba(0, 0, 0, 0.2);
         outline: none;
       }
@@ -517,13 +517,13 @@ export class Dashboard {
         background: linear-gradient(
           90deg,
           transparent,
-          rgba(139, 92, 246, 0.5) 50%,
+          rgba(80, 120, 180, 0.5) 50%,
           transparent
         );
         height: 2px;
         margin: 12px 0;
         border-radius: 2px;
-        box-shadow: 0 1px 3px rgba(139, 92, 246, 0.3);
+        box-shadow: 0 1px 3px rgba(80, 120, 180, 0.3);
       }
 
       /* Enhanced FPS Graph */
@@ -542,7 +542,7 @@ export class Dashboard {
       .tp-fpsv_g path {
         stroke: url(#fps-gradient);
         stroke-width: 2;
-        filter: drop-shadow(0 2px 4px rgba(139, 92, 246, 0.5));
+        filter: drop-shadow(0 2px 4px rgba(80, 120, 180, 0.5));
       }
 
       /* Premium scrollbar */
@@ -560,14 +560,14 @@ export class Dashboard {
       .tp-dfwv::-webkit-scrollbar-thumb {
         background: linear-gradient(
           180deg,
-          #8b5cf6 0%,
-          #7c3aed 50%,
-          #6366f1 100%
+          #5078b4 0%,
+          #5a80b8 50%,
+          #648cc8 100%
         );
         border-radius: 12px;
         border: 2px solid rgba(15, 23, 42, 0.5);
         box-shadow: 
-          0 2px 8px rgba(139, 92, 246, 0.4),
+          0 2px 8px rgba(80, 120, 180, 0.4),
           inset 0 1px 0 rgba(255, 255, 255, 0.2);
         transition: all 0.3s ease;
       }
@@ -576,11 +576,11 @@ export class Dashboard {
         background: linear-gradient(
           180deg,
           #a78bfa 0%,
-          #8b5cf6 50%,
-          #7c3aed 100%
+          #5078b4 50%,
+          #5a80b8 100%
         );
         box-shadow: 
-          0 4px 16px rgba(139, 92, 246, 0.6),
+          0 4px 16px rgba(80, 120, 180, 0.6),
           inset 0 1px 0 rgba(255, 255, 255, 0.3);
         border-color: rgba(15, 23, 42, 0.3);
       }
@@ -601,10 +601,10 @@ export class Dashboard {
 
       @keyframes panelGlow {
         0%, 100% {
-          box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+          box-shadow: 0 0 20px rgba(80, 120, 180, 0.3);
         }
         50% {
-          box-shadow: 0 0 40px rgba(139, 92, 246, 0.5);
+          box-shadow: 0 0 40px rgba(80, 120, 180, 0.5);
         }
       }
 
@@ -645,7 +645,7 @@ export class Dashboard {
       }
 
       .tp-brkv:hover {
-        background: rgba(139, 92, 246, 0.08);
+        background: rgba(80, 120, 180, 0.08);
       }
 
       /* Info dump styling */
@@ -665,7 +665,7 @@ export class Dashboard {
       }
 
       .tp-infov a:hover {
-        color: #8b5cf6;
+        color: #5078b4;
         text-decoration: underline;
       }
 
@@ -697,7 +697,7 @@ export class Dashboard {
         }
 
         .tp-fldv_t:active {
-          background: rgba(139, 92, 246, 0.2);
+          background: rgba(80, 120, 180, 0.2);
         }
       }
 
@@ -833,9 +833,9 @@ export class Dashboard {
         element.style.borderRadius = '20px';
         element.style.boxShadow = 
           '0 16px 48px 0 rgba(0, 0, 0, 0.45), ' +
-          '0 4px 24px 0 rgba(139, 92, 246, 0.35), ' +
+          '0 4px 24px 0 rgba(30, 41, 82, 0.35), ' +
           'inset 0 1px 0 0 rgba(255, 255, 255, 0.20), ' +
-          'inset 0 0 100px 0 rgba(139, 92, 246, 0.08)';
+          'inset 0 0 100px 0 rgba(200, 220, 255, 0.05)';
         console.log(`✨ Applied solid frosted glass to panel: ${config.title}`);
       }
     });
@@ -887,13 +887,7 @@ export class Dashboard {
       currentX = event.clientX - initialX;
       currentY = event.clientY - initialY;
 
-      // Constrain to viewport
-      const maxX = window.innerWidth - container.offsetWidth;
-      const maxY = window.innerHeight - container.offsetHeight;
-
-      currentX = Math.max(0, Math.min(currentX, maxX));
-      currentY = Math.max(0, Math.min(currentY, maxY));
-
+      // No constraints - move freely anywhere on screen
       container.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
     };
 

@@ -276,8 +276,9 @@ export class SoundReactivity {
     // Find peak frequency
     const peakData = this.findPeakFrequency();
     
-    // Smooth values for animations
-    const smoothingFactor = Math.exp(-deltaTime * 8); // Exponential smoothing
+    // Smooth values for animations with refined exponential smoothing
+    // Lower rate = slower, more stable response (4 instead of 8)
+    const smoothingFactor = Math.exp(-deltaTime * 4); // Slower exponential smoothing for stability
     this.smoothedValues.bass = this.lerp(bands.bass, this.smoothedValues.bass, smoothingFactor);
     this.smoothedValues.mid = this.lerp(bands.mid, this.smoothedValues.mid, smoothingFactor);
     this.smoothedValues.treble = this.lerp(bands.treble, this.smoothedValues.treble, smoothingFactor);

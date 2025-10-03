@@ -21,6 +21,23 @@ export interface SimulationConfig {
   density: number;
   dynamicViscosity: number;
   gravityType: number; // 0=back, 1=down, 2=center, 3=device
+  
+  // FLIP/PIC Hybrid
+  transferMode: number; // 0=PIC, 1=FLIP, 2=HYBRID
+  flipRatio: number;    // 0.0-1.0 (0=PIC, 1=FLIP)
+  
+  // Vorticity Confinement
+  vorticityEnabled: boolean;
+  vorticityEpsilon: number; // 0.0-1.0
+  
+  // Surface Tension
+  surfaceTensionEnabled: boolean;
+  surfaceTensionCoeff: number; // 0.0-2.0
+  
+  // Performance Optimizations
+  sparseGrid: boolean; // Skip empty cells
+  adaptiveTimestep: boolean; // Auto-adjust dt based on velocity
+  cflTarget: number; // CFL safety factor (0.3-1.0)
 }
 
 export interface RenderingConfig {
@@ -41,25 +58,32 @@ export interface BloomConfig {
   threshold: number;
   strength: number;
   radius: number;
+  blendMode: 'add' | 'screen' | 'softlight';
   levels: number;
   smoothing: number;
 }
 
-export interface ChromaticAberrationConfig {
+export interface RadialFocusConfig {
   enabled: boolean;
-  strength: number;
-  radialIntensity: number;
-}
-
-export interface RadialBlurConfig {
-  enabled: boolean;
-  strength: number;
+  blurStrength: number;
+  focusCenter: { x: number; y: number };
+  focusRadius: number;
+  falloffPower: number;
 }
 
 export interface RadialCAConfig {
   enabled: boolean;
   strength: number;
   angle: number;
+  edgeIntensity: number;
+  falloffPower: number;
+}
+
+// Legacy - keeping for compatibility
+export interface ChromaticAberrationConfig {
+  enabled: boolean;
+  strength: number;
+  radialIntensity: number;
 }
 
 // Legacy - keeping for compatibility
@@ -136,34 +160,48 @@ export interface AudioConfig {
   postFXInfluence: number;
 }
 
-export interface VolumetricConfig {
+/**
+ * Audio-reactive visualization configuration
+ */
+export interface AudioReactiveConfig {
   enabled: boolean;
-  mode: 'sphere' | 'cylinder' | 'waves' | 'particles' | 'tunnel';
+  mode: number; // AudioVisualizationMode enum
   
-  // Visual properties
-  scale: number;
-  complexity: number;
-  speed: number;
+  // Frequency mapping
+  bassInfluence: number;      // 0-1
+  midInfluence: number;       // 0-1
+  trebleInfluence: number;    // 0-1
   
-  // Color
-  colorMode: 'rainbow' | 'bass' | 'frequency' | 'gradient';
-  hue: number;
-  saturation: number;
-  brightness: number;
+  // Spatial mapping
+  spatialMode: number;        // SpatialMode enum
+  spatialScale: number;       // Size of spatial regions
+  spatialIntensity: number;   // Strength of spatial effects
   
-  // Animation
-  rotationSpeed: number;
-  pulseIntensity: number;
-  waveAmplitude: number;
+  // Dynamic response
+  inertia: number;            // Motion lag/smoothing (0-1)
+  resonance: number;          // Frequency resonance strength (0-2)
+  dampening: number;          // Energy dissipation (0-1)
   
-  // Glow and opacity
-  glowIntensity: number;
-  opacity: number;
+  // Beat response
+  beatImpulse: number;        // Force magnitude on beats (0-100)
+  beatRadius: number;         // Radius of beat influence (0-50)
+  beatDecay: number;          // How fast beat effects fade (1-20)
   
-  // Frequency band influence
-  bassInfluence: number;
-  midInfluence: number;
-  trebleInfluence: number;
+  // Force field generation
+  forceFieldsEnabled: boolean;
+  forceFieldMode: number;     // AudioForceFieldMode enum
+  forceFieldStrength: number; // 0-100
+  
+  // Material modulation
+  materialModulation: boolean;
+  viscosityMin: number;       // Min viscosity (0-1)
+  viscosityMax: number;       // Max viscosity (0-2)
+  stiffnessMin: number;       // Min stiffness (0-500)
+  stiffnessMax: number;       // Max stiffness (0-1000)
+  
+  // Visual effects
+  colorReactivity: number;    // Color modulation strength (0-1)
+  scaleReactivity: number;    // Size modulation strength (0-1)
 }
 
 export interface FlowConfig {
@@ -172,7 +210,7 @@ export interface FlowConfig {
   rendering: RenderingConfig;
   camera: CameraConfig;
   bloom: BloomConfig;
-  radialBlur: RadialBlurConfig;
+  radialFocus: RadialFocusConfig;
   radialCA: RadialCAConfig;
   // Legacy
   chromaticAberration: ChromaticAberrationConfig;
@@ -183,7 +221,7 @@ export interface FlowConfig {
   toneMapping: ToneMappingConfig;
   environment: EnvironmentConfig;
   audio: AudioConfig;
-  volumetric: VolumetricConfig;
+  audioReactive: AudioReactiveConfig;
   
   // Device sensors
   gravitySensorReading: THREE.Vector3;
@@ -217,7 +255,24 @@ export const defaultConfig: FlowConfig = {
     restDensity: 1.0,
     density: 1.0,
     dynamicViscosity: 0.1,
-    gravityType: 0,
+    gravityType: 2,  // 0=back, 1=down, 2=center (default), 3=device
+    
+    // FLIP/PIC Hybrid (default: 95% FLIP, 5% PIC)
+    transferMode: 2,  // 0=PIC, 1=FLIP, 2=HYBRID
+    flipRatio: 0.95,  // 0.0-1.0
+    
+    // Vorticity Confinement (disabled by default)
+    vorticityEnabled: false,
+    vorticityEpsilon: 0.0,  // 0.0-1.0
+    
+    // Surface Tension (disabled by default)
+    surfaceTensionEnabled: false,
+    surfaceTensionCoeff: 0.5,  // 0.0-2.0
+    
+    // Performance Optimizations
+    sparseGrid: true,  // Enabled by default (free performance!)
+    adaptiveTimestep: true,  // Enabled by default (stability + performance)
+    cflTarget: 0.7,  // Conservative CFL target (0.3-1.0)
   },
   rendering: {
     bloom: true,
@@ -233,20 +288,26 @@ export const defaultConfig: FlowConfig = {
   },
   bloom: {
     enabled: true,
-    threshold: 0.8,
-    strength: 0.5,
-    radius: 0.8,
+    threshold: 0.7,
+    strength: 0.8,
+    radius: 1.0,
+    blendMode: 'add',
     levels: 3,
     smoothing: 0.05,
   },
-  radialBlur: {
+  radialFocus: {
     enabled: false,
-    strength: 0.05,
+    blurStrength: 0.3,
+    focusCenter: { x: 0.5, y: 0.5 },
+    focusRadius: 0.3,
+    falloffPower: 2.0,
   },
   radialCA: {
     enabled: false,
-    strength: 0.005,
+    strength: 0.008,
     angle: 0.0,
+    edgeIntensity: 1.5,
+    falloffPower: 2.5,
   },
   // Legacy
   chromaticAberration: {
@@ -300,41 +361,48 @@ export const defaultConfig: FlowConfig = {
     environmentIntensity: 0.25,  // Conservative default to prevent overexposure
   },
   audio: {
-    enabled: false,
+    enabled: true, // ENABLED BY DEFAULT for testing
     source: 'microphone',
     fftSize: 2048,
-    smoothing: 0.8,
+    smoothing: 0.88, // Higher smoothing for smoother, more fluid motion
     minDecibels: -90,
     maxDecibels: -10,
-    bassGain: 1.0,
-    midGain: 1.0,
-    trebleGain: 1.0,
+    bassGain: 1.2, // Moderate bass (reduced from 1.5)
+    midGain: 1.0, // Moderate mid (reduced from 1.2)
+    trebleGain: 0.9, // Slightly reduced treble
     beatDetectionEnabled: true,
-    beatThreshold: 1.5,
-    beatDecay: 4.0,
-    particleInfluence: 0.3,
+    beatThreshold: 1.4, // Slightly less sensitive for stability
+    beatDecay: 2.5, // Slower decay for smoother beat response
+    particleInfluence: 0.5, // More influence
     volumetricInfluence: 1.0,
     colorInfluence: 0.5,
     postFXInfluence: 0.2,
   },
-  volumetric: {
-    enabled: false,
-    mode: 'sphere',
-    scale: 1.0,
-    complexity: 8.0,
-    speed: 1.0,
-    colorMode: 'rainbow',
-    hue: 0.5,
-    saturation: 0.8,
-    brightness: 1.0,
-    rotationSpeed: 0.5,
-    pulseIntensity: 1.0,
-    waveAmplitude: 1.0,
-    glowIntensity: 2.0,
-    opacity: 0.6,
-    bassInfluence: 1.5,
+  audioReactive: {
+    enabled: true, // ENABLED BY DEFAULT for testing
+    mode: 0, // WAVE_FIELD
+    bassInfluence: 1.0,
     midInfluence: 0.8,
-    trebleInfluence: 0.4,
+    trebleInfluence: 0.6,
+    spatialMode: 0, // LAYERED
+    spatialScale: 1.0,
+    spatialIntensity: 1.0,
+    inertia: 0.5,
+    resonance: 1.0,
+    dampening: 0.3,
+    beatImpulse: 50.0, // Increased for more visible effect
+    beatRadius: 25.0, // Increased for larger influence
+    beatDecay: 3.0, // Faster decay for more responsive
+    forceFieldsEnabled: true,
+    forceFieldMode: 1, // BEAT_VORTEX
+    forceFieldStrength: 80.0, // Increased for stronger vortexes
+    materialModulation: true,
+    viscosityMin: 0.05, // More range
+    viscosityMax: 1.5,
+    stiffnessMin: 10, // More range
+    stiffnessMax: 800,
+    colorReactivity: 0.8,
+    scaleReactivity: 0.3,
   },
   gravitySensorReading: new THREE.Vector3(),
   accelerometerReading: new THREE.Vector3(),
@@ -370,7 +438,7 @@ export function mergeConfig(base: FlowConfig, updates: Partial<FlowConfig>): Flo
     toneMapping: { ...base.toneMapping, ...updates.toneMapping },
     environment: { ...base.environment, ...updates.environment },
     audio: { ...base.audio, ...updates.audio },
-    volumetric: { ...base.volumetric, ...updates.volumetric },
+    audioReactive: { ...base.audioReactive, ...updates.audioReactive },
   };
 }
 

@@ -1,16 +1,18 @@
 /**
- * AUDIO/PANELsoundreactivity.ts - Premium audio reactivity control panel
- * Elegant UI for audio analysis and visualization with real-time metrics
+ * AUDIO/PANELsoundreactivity.ts - Clean & simple audio reactivity panel
+ * Streamlined UI with essential controls and presets
  */
 
 import type { Pane } from 'tweakpane';
-import type { AudioConfig } from './soundreactivity';
-import type { FlowConfig, VolumetricConfig } from '../config';
+import type { AudioConfig, AudioReactiveConfig } from '../config';
+import type { FlowConfig } from '../config';
 import type { Dashboard } from '../PANEL/dashboard';
+import { AudioVisualizationMode } from './audioreactive';
+import { VISUALIZATION_MODE_NAMES } from './audiovisual';
 
 export interface AudioPanelCallbacks {
   onAudioConfigChange?: (config: Partial<AudioConfig>) => void;
-  onVolumetricConfigChange?: (config: Partial<VolumetricConfig>) => void;
+  onAudioReactiveConfigChange?: (config: Partial<AudioReactiveConfig>) => void;
   onSourceChange?: (source: 'microphone' | 'file') => void;
   onFileLoad?: (url: string) => void;
   onTogglePlayback?: () => void;
@@ -18,8 +20,74 @@ export interface AudioPanelCallbacks {
 }
 
 /**
- * AudioPanel - Premium audio reactivity control panel
- * Beautiful, organized interface with real-time metrics
+ * Preset configurations for easy switching
+ */
+interface AudioPreset {
+  name: string;
+  description: string;
+  config: Partial<AudioReactiveConfig> & { audioSmoothing?: number };
+}
+
+const PRESETS: AudioPreset[] = [
+  {
+    name: '🌊 Gentle Waves',
+    description: 'Smooth, flowing motion - perfect for ambient music',
+    config: {
+      mode: AudioVisualizationMode.WAVE_FIELD,
+      bassInfluence: 0.8,
+      midInfluence: 0.6,
+      trebleInfluence: 0.4,
+      audioSmoothing: 0.9,
+    },
+  },
+  {
+    name: '💥 Energetic Dance',
+    description: 'High energy with strong beat response',
+    config: {
+      mode: AudioVisualizationMode.VORTEX_DANCE,
+      bassInfluence: 1.0,
+      midInfluence: 0.9,
+      trebleInfluence: 0.7,
+      audioSmoothing: 0.75,
+    },
+  },
+  {
+    name: '🌀 Fluid Vortex',
+    description: 'Swirling, organic motion',
+    config: {
+      mode: AudioVisualizationMode.KINETIC_FLOW,
+      bassInfluence: 0.9,
+      midInfluence: 1.0,
+      trebleInfluence: 0.5,
+      audioSmoothing: 0.85,
+    },
+  },
+  {
+    name: '✨ Shimmer Burst',
+    description: 'Quick, responsive with sparkle',
+    config: {
+      mode: AudioVisualizationMode.FRACTAL_BURST,
+      bassInfluence: 0.7,
+      midInfluence: 0.8,
+      trebleInfluence: 1.0,
+      audioSmoothing: 0.7,
+    },
+  },
+  {
+    name: '🌌 Galaxy Spiral',
+    description: 'Cosmic, expansive motion',
+    config: {
+      mode: AudioVisualizationMode.GALAXY_SPIRAL,
+      bassInfluence: 0.9,
+      midInfluence: 0.7,
+      trebleInfluence: 0.6,
+      audioSmoothing: 0.88,
+    },
+  },
+];
+
+/**
+ * AudioPanel - Clean and simple audio reactivity control
  */
 export class AudioPanel {
   private pane: any;
@@ -27,21 +95,28 @@ export class AudioPanel {
   private config: FlowConfig;
   
   // Control state
-  private audioState = {
+  private state = {
     enabled: true,
     source: 'microphone' as 'microphone' | 'file',
     volume: 1.0,
-    isPlaying: false,
+    preset: PRESETS[0].name,
+    masterIntensity: 1.0,
   };
   
-  // Metrics display
+  // Base values (for scaling)
+  private baseInfluences = {
+    bass: 1.0,
+    mid: 0.8,
+    treble: 0.6,
+  };
+  
+  // Live metrics (readonly displays)
   private metrics = {
+    overall: 0,
     bass: 0,
     mid: 0,
     treble: 0,
-    overall: 0,
-    beatIntensity: 0,
-    peakFrequency: 0,
+    beat: 0,
   };
   
   constructor(
@@ -66,117 +141,168 @@ export class AudioPanel {
   }
   
   private buildPanel(): void {
-    this.buildMetricsDisplay();
-    this.buildSourceControls();
-    this.buildReactivityControls();
-    this.buildAnalysisControls();
-    this.buildVolumetricControls();
+    // ==================== MAIN CONTROLS ====================
+    this.buildMainControls();
+    
+    // ==================== LIVE METRICS ====================
+    this.buildMetrics();
+    
+    // ==================== AUDIO INPUT ====================
+    this.buildAudioInput();
+    
+    // ==================== PRESETS ====================
+    this.buildPresets();
+    
+    // ==================== ADVANCED (Collapsed) ====================
+    this.buildAdvanced();
   }
   
   // ========================================
-  // REAL-TIME METRICS
+  // MAIN CONTROLS
   // ========================================
   
-  private buildMetricsDisplay(): void {
+  private buildMainControls(): void {
     const folder = this.pane.addFolder({
-      title: '📊 Live Audio Metrics',
+      title: '🎛️ Main Controls',
       expanded: true,
     });
-
+    
+    // Master enable/disable
+    folder.addBinding(this.state, 'enabled', {
+      label: 'Enable Audio FX',
+    }).on('change', (ev: any) => {
+      this.config.audioReactive.enabled = ev.value;
+      this.callbacks.onAudioReactiveConfigChange?.({ enabled: ev.value });
+    });
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Master intensity slider (scales all effects)
+    folder.addBinding(this.state, 'masterIntensity', {
+      label: 'Master Intensity',
+      min: 0,
+      max: 2,
+      step: 0.1,
+    }).on('change', (ev: any) => {
+      // Scale frequency influences from base values
+      const intensity = ev.value;
+      const scaledConfig = {
+        bassInfluence: this.baseInfluences.bass * intensity,
+        midInfluence: this.baseInfluences.mid * intensity,
+        trebleInfluence: this.baseInfluences.treble * intensity,
+      };
+      
+      Object.assign(this.config.audioReactive, scaledConfig);
+      this.callbacks.onAudioReactiveConfigChange?.(scaledConfig);
+    });
+  }
+  
+  // ========================================
+  // LIVE METRICS
+  // ========================================
+  
+  private buildMetrics(): void {
+    const folder = this.pane.addFolder({
+      title: '📊 Live Audio',
+      expanded: true,
+    });
+    
+    // Overall audio level (large display)
     folder.addBinding(this.metrics, 'overall', {
-      label: 'Overall',
+      label: 'Level',
       readonly: true,
       min: 0,
       max: 1,
+      view: 'graph',
+      rows: 3,
     });
-
+    
     folder.addBlade({ view: 'separator' });
-
-    const bandsFolder = folder.addFolder({
-      title: 'Frequency Bands',
-      expanded: true,
+    
+    // Frequency bands (compact)
+    const grid = folder.addBlade({
+      view: 'buttongrid',
+      size: [3, 1],
+      cells: (x: number, y: number) => ({
+        title: [
+          ['🔊 Bass', '🎸 Mid', '🎺 High']
+        ][y][x],
+      }),
+      label: 'Bands',
     });
-
-    bandsFolder.addBinding(this.metrics, 'bass', {
+    
+    // Small readonly indicators
+    folder.addBinding(this.metrics, 'bass', {
       label: 'Bass',
       readonly: true,
       min: 0,
       max: 1,
     });
-
-    bandsFolder.addBinding(this.metrics, 'mid', {
+    
+    folder.addBinding(this.metrics, 'mid', {
       label: 'Mid',
       readonly: true,
       min: 0,
       max: 1,
     });
-
-    bandsFolder.addBinding(this.metrics, 'treble', {
+    
+    folder.addBinding(this.metrics, 'treble', {
       label: 'Treble',
       readonly: true,
       min: 0,
       max: 1,
     });
-
+    
     folder.addBlade({ view: 'separator' });
-
-    folder.addBinding(this.metrics, 'beatIntensity', {
-      label: 'Beat',
+    
+    // Beat indicator
+    folder.addBinding(this.metrics, 'beat', {
+      label: '⚡ Beat',
       readonly: true,
       min: 0,
       max: 1,
     });
-
-    folder.addBinding(this.metrics, 'peakFrequency', {
-      label: 'Peak (Hz)',
-      readonly: true,
-      format: (v: number) => v.toFixed(0),
-    });
   }
   
   // ========================================
-  // AUDIO SOURCE
+  // AUDIO INPUT
   // ========================================
   
-  private buildSourceControls(): void {
+  private buildAudioInput(): void {
     const folder = this.pane.addFolder({
-      title: '🎤 Audio Input',
-      expanded: true,
+      title: '🎤 Audio Source',
+      expanded: false,
     });
     
-    folder.addBinding(this.audioState, 'enabled', {
-      label: 'Enable Audio',
-    }).on('change', (ev: any) => {
-      this.config.audio.enabled = ev.value;
-      this.callbacks.onAudioConfigChange?.({ enabled: ev.value });
-    });
-
-    folder.addBlade({ view: 'separator' });
-    
-    folder.addBinding(this.audioState, 'source', {
-      label: 'Source',
+    // Source selection
+    folder.addBinding(this.state, 'source', {
+      label: 'Input',
       options: {
-        Microphone: 'microphone',
-        'Audio File': 'file',
+        '🎤 Microphone': 'microphone',
+        '🎵 Audio File': 'file',
       },
     }).on('change', (ev: any) => {
       this.config.audio.source = ev.value;
       this.callbacks.onSourceChange?.(ev.value);
     });
     
-    folder.addBinding(this.audioState, 'volume', {
+    folder.addBlade({ view: 'separator' });
+    
+    // Volume control
+    folder.addBinding(this.state, 'volume', {
       label: 'Volume',
       min: 0,
       max: 1,
-      step: 0.01,
+      step: 0.05,
     }).on('change', (ev: any) => {
       this.callbacks.onVolumeChange?.(ev.value);
     });
-
+    
     folder.addBlade({ view: 'separator' });
     
+    // File controls
     folder.addButton({
-      title: 'Load Audio File',
+      title: '📂 Load Audio File',
     }).on('click', () => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -186,276 +312,193 @@ export class AudioPanel {
         if (file) {
           const url = URL.createObjectURL(file);
           this.callbacks.onFileLoad?.(url);
+          console.log(`🎵 Loaded: ${file.name}`);
         }
       };
       input.click();
     });
     
     folder.addButton({
-      title: '▶️ Play / ⏸️ Pause',
+      title: '▶️ Play / Pause',
     }).on('click', () => {
-      this.audioState.isPlaying = !this.audioState.isPlaying;
       this.callbacks.onTogglePlayback?.();
     });
   }
   
   // ========================================
-  // REACTIVITY INFLUENCE
+  // PRESETS
   // ========================================
   
-  private buildReactivityControls(): void {
+  private buildPresets(): void {
     const folder = this.pane.addFolder({
-      title: '🎚️ Reactivity Influence',
-      expanded: false,
+      title: '🎨 Visual Presets',
+      expanded: true,
     });
     
-    folder.addBinding(this.config.audio, 'particleInfluence', {
-      label: 'Particles',
-      min: 0,
-      max: 1,
-      step: 0.05,
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ particleInfluence: ev.value });
+    // Preset selector
+    const presetOptions: Record<string, string> = {};
+    PRESETS.forEach(preset => {
+      presetOptions[preset.name] = preset.name;
     });
     
-    folder.addBinding(this.config.audio, 'volumetricInfluence', {
-      label: 'Volumetric',
-      min: 0,
-      max: 1,
-      step: 0.05,
+    folder.addBinding(this.state, 'preset', {
+      label: 'Preset',
+      options: presetOptions,
     }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ volumetricInfluence: ev.value });
+      this.applyPreset(ev.value);
     });
     
-    folder.addBinding(this.config.audio, 'colorInfluence', {
-      label: 'Color',
-      min: 0,
-      max: 1,
-      step: 0.05,
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ colorInfluence: ev.value });
-    });
+    folder.addBlade({ view: 'separator' });
     
-    folder.addBinding(this.config.audio, 'postFXInfluence', {
-      label: 'Post-FX',
-      min: 0,
-      max: 1,
-      step: 0.05,
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ postFXInfluence: ev.value });
+    // Quick preset buttons
+    folder.addBlade({
+      view: 'buttongrid',
+      size: [2, 3],
+      cells: (x: number, y: number) => {
+        const index = y * 2 + x;
+        if (index < PRESETS.length) {
+          return { title: PRESETS[index].name };
+        }
+        return { title: '' };
+      },
+      label: 'Quick Select',
+    }).on('click', (ev: any) => {
+      const index = ev.index[1] * 2 + ev.index[0];
+      if (index < PRESETS.length) {
+        this.applyPreset(PRESETS[index].name);
+        this.state.preset = PRESETS[index].name;
+        this.pane.refresh();
+      }
     });
   }
   
   // ========================================
-  // ANALYSIS SETTINGS
+  // ADVANCED SETTINGS
   // ========================================
   
-  private buildAnalysisControls(): void {
+  private buildAdvanced(): void {
     const folder = this.pane.addFolder({
-      title: '🔬 Analysis Settings',
+      title: '⚙️ Advanced',
       expanded: false,
     });
     
-    // FFT Settings
-    const fftFolder = folder.addFolder({
-      title: 'FFT & Smoothing',
-      expanded: true,
-    });
-
-    fftFolder.addBinding(this.config.audio, 'fftSize', {
-      label: 'FFT Size',
-      options: {
-        '512': 512,
-        '1024': 1024,
-        '2048': 2048,
-        '4096': 4096,
-        '8192': 8192,
-      },
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ fftSize: ev.value });
+    // Visualization mode
+    const modeOptions: Record<string, number> = {};
+    Object.values(AudioVisualizationMode).forEach((mode) => {
+      if (typeof mode === 'number') {
+        modeOptions[VISUALIZATION_MODE_NAMES[mode]] = mode;
+      }
     });
     
-    fftFolder.addBinding(this.config.audio, 'smoothing', {
-      label: 'Smoothing',
+    folder.addBinding(this.config.audioReactive, 'mode', {
+      label: 'Visualization',
+      options: modeOptions,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ mode: ev.value });
+    });
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Fine-tune frequency influence
+    const frequencyFolder = folder.addFolder({
+      title: 'Frequency Balance',
+      expanded: false,
+    });
+    
+    frequencyFolder.addBinding(this.config.audioReactive, 'bassInfluence', {
+      label: '🔊 Bass',
       min: 0,
-      max: 0.99,
-      step: 0.01,
+      max: 1.5,
+      step: 0.1,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ bassInfluence: ev.value });
+    });
+    
+    frequencyFolder.addBinding(this.config.audioReactive, 'midInfluence', {
+      label: '🎸 Mid',
+      min: 0,
+      max: 1.5,
+      step: 0.1,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ midInfluence: ev.value });
+    });
+    
+    frequencyFolder.addBinding(this.config.audioReactive, 'trebleInfluence', {
+      label: '🎺 Treble',
+      min: 0,
+      max: 1.5,
+      step: 0.1,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ trebleInfluence: ev.value });
+    });
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Audio smoothing
+    folder.addBinding(this.config.audio, 'smoothing', {
+      label: 'Smoothness',
+      min: 0.5,
+      max: 0.95,
+      step: 0.05,
     }).on('change', (ev: any) => {
       this.callbacks.onAudioConfigChange?.({ smoothing: ev.value });
     });
     
-    // Frequency Gains
-    const gainsFolder = folder.addFolder({
-      title: 'Band Gains',
-      expanded: true,
-    });
-    
-    gainsFolder.addBinding(this.config.audio, 'bassGain', {
-      label: 'Bass',
-      min: 0,
-      max: 2,
-      step: 0.1,
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ bassGain: ev.value });
-    });
-    
-    gainsFolder.addBinding(this.config.audio, 'midGain', {
-      label: 'Mid',
-      min: 0,
-      max: 2,
-      step: 0.1,
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ midGain: ev.value });
-    });
-    
-    gainsFolder.addBinding(this.config.audio, 'trebleGain', {
-      label: 'Treble',
-      min: 0,
-      max: 2,
-      step: 0.1,
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ trebleGain: ev.value });
-    });
-    
-    // Beat Detection
-    const beatFolder = folder.addFolder({
-      title: 'Beat Detection',
-      expanded: true,
-    });
-    
-    beatFolder.addBinding(this.config.audio, 'beatDetectionEnabled', {
-      label: 'Enable',
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ beatDetectionEnabled: ev.value });
-    });
-    
-    beatFolder.addBinding(this.config.audio, 'beatThreshold', {
-      label: 'Threshold',
-      min: 0.5,
-      max: 3.0,
+    // Beat sensitivity
+    folder.addBinding(this.config.audio, 'beatThreshold', {
+      label: 'Beat Sensitivity',
+      min: 0.8,
+      max: 2.0,
       step: 0.1,
     }).on('change', (ev: any) => {
       this.callbacks.onAudioConfigChange?.({ beatThreshold: ev.value });
     });
-    
-    beatFolder.addBinding(this.config.audio, 'beatDecay', {
-      label: 'Decay',
-      min: 1,
-      max: 10,
-      step: 0.5,
-    }).on('change', (ev: any) => {
-      this.callbacks.onAudioConfigChange?.({ beatDecay: ev.value });
-    });
   }
   
   // ========================================
-  // VOLUMETRIC VISUALIZATION
+  // HELPERS
   // ========================================
   
-  private buildVolumetricControls(): void {
-    const folder = this.pane.addFolder({
-      title: '🌐 Volumetric Viz',
-      expanded: false,
-    });
+  /**
+   * Apply a preset configuration
+   */
+  private applyPreset(presetName: string): void {
+    const preset = PRESETS.find(p => p.name === presetName);
+    if (!preset) return;
     
-    folder.addBinding(this.config.volumetric, 'enabled', {
-      label: 'Enable Effect',
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ enabled: ev.value });
-    });
-
-    folder.addBlade({ view: 'separator' });
+    console.log(`🎨 Applying preset: ${preset.name}`);
+    console.log(`   ${preset.description}`);
     
-    folder.addBinding(this.config.volumetric, 'mode', {
-      label: 'Mode',
-      options: {
-        Sphere: 'sphere',
-        Cylinder: 'cylinder',
-        Waves: 'waves',
-        Particles: 'particles',
-        Tunnel: 'tunnel',
-      },
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ mode: ev.value });
-    });
+    // Extract base influences and store them
+    const { audioSmoothing, bassInfluence, midInfluence, trebleInfluence, ...otherConfig } = preset.config;
     
-    // Appearance
-    const appearanceFolder = folder.addFolder({
-      title: 'Appearance',
-      expanded: true,
-    });
+    // Store base influences
+    if (bassInfluence !== undefined) this.baseInfluences.bass = bassInfluence;
+    if (midInfluence !== undefined) this.baseInfluences.mid = midInfluence;
+    if (trebleInfluence !== undefined) this.baseInfluences.treble = trebleInfluence;
     
-    appearanceFolder.addBinding(this.config.volumetric, 'scale', {
-      label: 'Scale',
-      min: 0.5,
-      max: 3.0,
-      step: 0.1,
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ scale: ev.value });
-    });
+    // Apply scaled influences based on master intensity
+    const intensity = this.state.masterIntensity;
+    const scaledConfig = {
+      ...otherConfig,
+      bassInfluence: this.baseInfluences.bass * intensity,
+      midInfluence: this.baseInfluences.mid * intensity,
+      trebleInfluence: this.baseInfluences.treble * intensity,
+    };
     
-    appearanceFolder.addBinding(this.config.volumetric, 'complexity', {
-      label: 'Complexity',
-      min: 1,
-      max: 20,
-      step: 1,
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ complexity: ev.value });
-    });
+    this.callbacks.onAudioReactiveConfigChange?.(scaledConfig);
     
-    appearanceFolder.addBinding(this.config.volumetric, 'speed', {
-      label: 'Speed',
-      min: 0,
-      max: 3,
-      step: 0.1,
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ speed: ev.value });
-    });
+    // Apply audio smoothing if specified
+    if (audioSmoothing !== undefined) {
+      this.callbacks.onAudioConfigChange?.({ smoothing: audioSmoothing });
+      this.config.audio.smoothing = audioSmoothing;
+    }
     
-    appearanceFolder.addBinding(this.config.volumetric, 'opacity', {
-      label: 'Opacity',
-      min: 0,
-      max: 1,
-      step: 0.05,
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ opacity: ev.value });
-    });
+    // Update local config
+    Object.assign(this.config.audioReactive, scaledConfig);
     
-    // Color
-    const colorFolder = folder.addFolder({
-      title: 'Color',
-      expanded: true,
-    });
-    
-    colorFolder.addBinding(this.config.volumetric, 'colorMode', {
-      label: 'Mode',
-      options: {
-        Rainbow: 'rainbow',
-        Bass: 'bass',
-        Frequency: 'frequency',
-        Gradient: 'gradient',
-      },
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ colorMode: ev.value });
-    });
-    
-    colorFolder.addBinding(this.config.volumetric, 'hue', {
-      label: 'Hue',
-      min: 0,
-      max: 1,
-      step: 0.01,
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ hue: ev.value });
-    });
-    
-    colorFolder.addBinding(this.config.volumetric, 'saturation', {
-      label: 'Saturation',
-      min: 0,
-      max: 1,
-      step: 0.01,
-    }).on('change', (ev: any) => {
-      this.callbacks.onVolumetricConfigChange?.({ saturation: ev.value });
-    });
+    // Refresh panel
+    this.pane.refresh();
   }
   
   /**
@@ -473,8 +516,7 @@ export class AudioPanel {
     this.metrics.mid = mid;
     this.metrics.treble = treble;
     this.metrics.overall = overall;
-    this.metrics.beatIntensity = beatIntensity;
-    this.metrics.peakFrequency = peakFrequency;
+    this.metrics.beat = beatIntensity;
   }
   
   /**

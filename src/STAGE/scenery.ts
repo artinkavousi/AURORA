@@ -16,7 +16,7 @@ import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import type { CameraConfig, EnvironmentConfig, ToneMappingConfig } from '../config';
-import hdriFile from "../assets/autumn_field_puresky_1k.hdr";
+import hdriFile from "../assets/qwantani_night_puresky_4k.hdr";
 
 // ==================== Extended Configuration Interfaces ====================
 

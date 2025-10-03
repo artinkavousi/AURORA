@@ -131,11 +131,15 @@ export interface MeshRendererConfig {
 export class MeshRenderer {
   public readonly object: THREE.Mesh;
   private readonly geometry: THREE.InstancedBufferGeometry;
-  private readonly material: THREE.MeshStandardNodeMaterial;
+  public readonly material: THREE.MeshStandardNodeMaterial;  // Changed to public for visuals panel
   private readonly simulator: MlsMpmSimulator;
   private readonly sizeUniform: any;
   private readonly defaultIndexCount: number;
   private readonly shadowIndexCount: number;
+  
+  // Store base material properties for audio reactivity
+  private readonly baseMetalness: number;
+  private readonly baseRoughness: number;
 
   constructor(simulator: MlsMpmSimulator, config: MeshRendererConfig = {}) {
     this.simulator = simulator;
@@ -144,6 +148,10 @@ export class MeshRenderer {
       metalness = 0.900,
       roughness = 0.50,
     } = config;
+    
+    // Store base values
+    this.baseMetalness = metalness;
+    this.baseRoughness = roughness;
 
     // Create geometries
     const boxGeometry = BufferGeometryUtils.mergeVertices(new THREE.BoxGeometry(7, 7, 30), 3.0);
@@ -234,6 +242,25 @@ export class MeshRenderer {
     // Bloom will be handled by the post-processing system when re-enabled
     
     // Intentionally empty - no MRT manipulation
+  }
+  
+  /**
+   * Update material with audio data for audio-reactive effects
+   */
+  public updateAudioReactivity(audioData?: { bass: number; mid: number; treble: number; beatIntensity: number }): void {
+    if (!this.material || !audioData) return;
+    
+    // Modulate metalness with audio (subtle shimmer on treble)
+    const audioMetalness = this.baseMetalness + (audioData.treble * 0.1);
+    this.material.metalness = Math.min(1.0, audioMetalness);
+    
+    // Modulate roughness with audio (smoother on bass, rougher on treble)
+    const audioRoughness = this.baseRoughness - (audioData.bass * 0.2) + (audioData.treble * 0.1);
+    this.material.roughness = Math.max(0.0, Math.min(1.0, audioRoughness));
+    
+    // Emissive intensity pulse on beat
+    const beatEmissive = audioData.beatIntensity * 0.3;
+    this.material.emissiveIntensity = beatEmissive;
   }
 
   /**

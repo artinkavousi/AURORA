@@ -212,6 +212,76 @@ export class PhysicPanel {
       expanded: false 
     });
     
+    // FLIP/PIC Hybrid Controls
+    advFolder.addBlade({
+      view: 'list',
+      label: 'Transfer Mode',
+      value: this.config.simulation.transferMode,
+      options: [
+        { text: 'PIC (Stable)', value: 0 },
+        { text: 'FLIP (Energetic)', value: 1 },
+        { text: 'Hybrid (Best)', value: 2 },
+      ],
+    }).on('change', (ev: any) => {
+      this.config.simulation.transferMode = ev.value;
+      this.callbacks.onSimulationChange?.(this.config.simulation);
+    });
+    
+    advFolder.addBinding(this.config.simulation, "flipRatio", {
+      label: "FLIP Ratio",
+      min: 0.0,
+      max: 1.0,
+      step: 0.05,
+    }).on('change', () => this.callbacks.onSimulationChange?.(this.config.simulation));
+    
+    advFolder.addBlade({ view: 'separator' });
+    
+    // Vorticity Confinement
+    advFolder.addBinding(this.config.simulation, "vorticityEnabled", {
+      label: "✨ Vorticity",
+    }).on('change', () => this.callbacks.onSimulationChange?.(this.config.simulation));
+    
+    advFolder.addBinding(this.config.simulation, "vorticityEpsilon", {
+      label: "Strength",
+      min: 0.0,
+      max: 1.0,
+      step: 0.05,
+    }).on('change', () => this.callbacks.onSimulationChange?.(this.config.simulation));
+    
+    advFolder.addBlade({ view: 'separator' });
+    
+    // Surface Tension
+    advFolder.addBinding(this.config.simulation, "surfaceTensionEnabled", {
+      label: "💧 Surface Tension",
+    }).on('change', () => this.callbacks.onSimulationChange?.(this.config.simulation));
+    
+    advFolder.addBinding(this.config.simulation, "surfaceTensionCoeff", {
+      label: "Coefficient",
+      min: 0.0,
+      max: 2.0,
+      step: 0.1,
+    }).on('change', () => this.callbacks.onSimulationChange?.(this.config.simulation));
+    
+    advFolder.addBlade({ view: 'separator' });
+    
+    // Performance Optimizations
+    advFolder.addBinding(this.config.simulation, "sparseGrid", {
+      label: "⚡ Sparse Grid",
+    }).on('change', () => this.callbacks.onSimulationChange?.(this.config.simulation));
+    
+    advFolder.addBinding(this.config.simulation, "adaptiveTimestep", {
+      label: "🎯 Adaptive DT",
+    }).on('change', () => this.callbacks.onSimulationChange?.(this.config.simulation));
+    
+    advFolder.addBinding(this.config.simulation, "cflTarget", {
+      label: "CFL Target",
+      min: 0.3,
+      max: 1.0,
+      step: 0.05,
+    }).on('change', () => this.callbacks.onSimulationChange?.(this.config.simulation));
+    
+    advFolder.addBlade({ view: 'separator' });
+    
     advFolder.addBinding(this.config.simulation, "noise", {
       label: "Turbulence", 
       min: 0, 

@@ -20,6 +20,7 @@ import { SoundReactivity } from './AUDIO/soundreactivity';
 import { AudioReactiveBehavior } from './AUDIO/audioreactive';
 import { AudioVisualizationManager } from './AUDIO/audiovisual';
 import { AudioPanel } from './AUDIO/PANELsoundreactivity';
+import { AdaptivePerformanceManager, type PerformanceChangeContext, type PerformanceTier } from './APP/performance';
 
 export type ProgressCallback = (frac: number, delay?: number) => Promise<void>;
 
@@ -59,6 +60,11 @@ export class FlowApp {
   private soundReactivity!: SoundReactivity;
   private audioReactiveBehavior!: AudioReactiveBehavior;
   private audioVisualizationManager!: AudioVisualizationManager;
+
+  // Adaptive performance
+  private performanceManager!: AdaptivePerformanceManager;
+  private currentPerformanceTier: PerformanceTier = 'high';
+  private preferredRenderMode: ParticleRenderMode = ParticleRenderMode.MESH;
 
   // Mouse interaction
   private raycaster!: THREE.Raycaster;
@@ -164,6 +170,28 @@ export class FlowApp {
     this.currentRenderObject = this.rendererManager.getRenderer().object;
     this.currentRenderObject.visible = true;  // ✅ NEW SYSTEM IS PRIMARY
     this.scenery.add(this.currentRenderObject);
+
+    // Adaptive performance monitoring
+    this.preferredRenderMode = this.rendererManager.getCurrentMode();
+    this.performanceManager = new AdaptivePerformanceManager(
+      {
+        lowFpsThreshold: 45,
+        criticalFpsThreshold: 30,
+        highFpsThreshold: 70,
+        framesForLow: 45,
+        framesForCritical: 30,
+        framesForHigh: 180,
+      },
+      {
+        onTierChange: (context) => {
+          console.info(
+            `⚙️ Adaptive performance → ${context.tier} (${context.reason}) @ ${context.fps.toFixed(1)}fps`
+          );
+          this.applyPerformanceTier(context);
+        },
+      }
+    );
+    this.currentPerformanceTier = 'high';
     
     // Initialize legacy renderers (for backward compatibility if needed)
     this.meshRenderer = new MeshRenderer(this.mlsMpmSim, {
@@ -264,6 +292,8 @@ export class FlowApp {
     // Initialize visuals control panel (NEW)
     this.visualsPanel = new VisualsPanel(this.dashboard, {
       onRenderModeChange: (mode) => {
+        this.preferredRenderMode = mode;
+        this.performanceManager.registerManualOverride();
         this.switchRenderMode(mode);
       },
       onMaterialPresetChange: (preset) => {
@@ -475,6 +505,10 @@ export class FlowApp {
     } else {
       this.boundaries.update(elapsed);
     }
+
+    // Sync boundary uniforms so the physics pipeline receives the latest
+    // audio-driven viewport pulse even when no visual mesh is present.
+    this.mlsMpmSim.updateBoundaryUniforms();
     
     // Update audio panel metrics
     if (this.config.audio.enabled) {
@@ -639,9 +673,12 @@ export class FlowApp {
     }
 
     // Note: Audio influence on PostFX effects disabled until effects are re-implemented
-    
+
     // Render with PostFX pipeline (simplified mode)
     await this.postFX.render();
+
+    // Feed frame timing into adaptive performance after rendering completes
+    this.performanceManager.update(delta);
 
     // End FPS tracking (now in PhysicPanel)
     if (this.physicPanel?.fpsGraph) {
@@ -677,8 +714,35 @@ export class FlowApp {
       this.mlsMpmSim.numParticles,
       this.visualsPanel?.settings.particleSize || 1.0
     );
-    
+
     console.log(`✅ Now rendering with: ${RendererManager.getModeName(mode)}`);
+
+    // Keep legacy config flags aligned with the active renderer
+    this.config.rendering.points = mode === ParticleRenderMode.POINT;
+  }
+
+  private applyPerformanceTier(context: PerformanceChangeContext): void {
+    if (this.currentPerformanceTier === context.tier) {
+      return;
+    }
+
+    const previousTier = this.currentPerformanceTier;
+    this.currentPerformanceTier = context.tier;
+
+    let targetMode = this.preferredRenderMode;
+    if (context.tier === 'medium') {
+      targetMode = ParticleRenderMode.SPRITE;
+    } else if (context.tier === 'low') {
+      targetMode = ParticleRenderMode.POINT;
+    }
+
+    if (this.rendererManager.getCurrentMode() !== targetMode) {
+      console.info(
+        `🎯 Renderer mode adjusted for ${context.tier} tier (was ${previousTier}) → ${RendererManager.getModeName(targetMode)}`
+      );
+      this.switchRenderMode(targetMode);
+      this.visualsPanel?.syncRenderMode(targetMode);
+    }
   }
   
   /**

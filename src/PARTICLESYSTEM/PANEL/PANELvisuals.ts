@@ -583,7 +583,15 @@ export class VisualsPanel {
   public setRendererManager(manager: RendererManager): void {
     this.rendererManager = manager;
   }
-  
+
+  /**
+   * Sync render mode when changed externally (e.g. adaptive performance)
+   */
+  public syncRenderMode(mode: ParticleRenderMode): void {
+    this.settings.renderMode = mode;
+    this.pane.refresh();
+  }
+
   /**
    * Get texture manager
    */

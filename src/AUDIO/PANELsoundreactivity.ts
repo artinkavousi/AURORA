@@ -9,6 +9,7 @@ import type { FlowConfig } from '../config';
 import type { Dashboard } from '../PANEL/dashboard';
 import { AudioVisualizationMode } from './audioreactive';
 import { VISUALIZATION_MODE_NAMES } from './audiovisual';
+import type { AudioData } from './soundreactivity';
 
 export interface AudioPanelCallbacks {
   onAudioConfigChange?: (config: Partial<AudioConfig>) => void;
@@ -111,13 +112,47 @@ export class AudioPanel {
   };
   
   // Live metrics (readonly displays)
-  private metrics = {
+  private overviewMetrics = {
     overall: 0,
     bass: 0,
     mid: 0,
     treble: 0,
     beat: 0,
+    tempoPhase: 0,
   };
+
+  private featureMetrics = {
+    spectralFlux: 0,
+    onsetEnergy: 0,
+    harmonicRatio: 0,
+    harmonicEnergy: 0,
+    rhythmConfidence: 0,
+    tempo: 0,
+    stereoBalance: 0,
+    stereoWidth: 0,
+    groove: 0,
+    overallTrend: 0,
+  };
+
+  private modulationReadouts = {
+    pulse: 0,
+    flow: 0,
+    shimmer: 0,
+    warp: 0,
+    density: 0,
+    aura: 0,
+  };
+
+  private sparklineState = {
+    loudness: '─',
+    flux: '─',
+    beat: '─',
+  };
+
+  private metricBindings: any[] = [];
+  private featureBindings: any[] = [];
+  private modulatorBindings: any[] = [];
+  private sparklineBindings: any[] = [];
   
   constructor(
     dashboard: Dashboard,
@@ -143,13 +178,22 @@ export class AudioPanel {
   private buildPanel(): void {
     // ==================== MAIN CONTROLS ====================
     this.buildMainControls();
-    
-    // ==================== LIVE METRICS ====================
-    this.buildMetrics();
-    
+
+    // ==================== LIVE OVERVIEW ====================
+    this.buildOverview();
+
+    // ==================== FEATURE INSIGHTS ====================
+    this.buildFeatureInsights();
+
+    // ==================== MODULATION LAB ====================
+    this.buildModulationLab();
+
+    // ==================== HISTORY ====================
+    this.buildHistory();
+
     // ==================== AUDIO INPUT ====================
     this.buildAudioInput();
-    
+
     // ==================== PRESETS ====================
     this.buildPresets();
     
@@ -201,67 +245,286 @@ export class AudioPanel {
   // LIVE METRICS
   // ========================================
   
-  private buildMetrics(): void {
+  private buildOverview(): void {
     const folder = this.pane.addFolder({
-      title: '📊 Live Audio',
+      title: '📊 Live Overview',
       expanded: true,
     });
-    
-    // Overall audio level (large display)
-    folder.addBinding(this.metrics, 'overall', {
+
+    this.metricBindings.push(folder.addBinding(this.overviewMetrics, 'overall', {
       label: 'Level',
       readonly: true,
       min: 0,
       max: 1,
       view: 'graph',
       rows: 3,
-    });
-    
+    }));
+
     folder.addBlade({ view: 'separator' });
-    
-    // Frequency bands (compact)
-    const grid = folder.addBlade({
-      view: 'buttongrid',
-      size: [3, 1],
-      cells: (x: number, y: number) => ({
-        title: [
-          ['🔊 Bass', '🎸 Mid', '🎺 High']
-        ][y][x],
-      }),
-      label: 'Bands',
+
+    const bandsFolder = folder.addFolder({
+      title: 'Frequency Bands',
+      expanded: true,
     });
-    
-    // Small readonly indicators
-    folder.addBinding(this.metrics, 'bass', {
-      label: 'Bass',
+
+    this.metricBindings.push(bandsFolder.addBinding(this.overviewMetrics, 'bass', {
+      label: '🔊 Bass',
       readonly: true,
       min: 0,
       max: 1,
-    });
-    
-    folder.addBinding(this.metrics, 'mid', {
-      label: 'Mid',
+      format: (v: number) => v.toFixed(2),
+    }));
+
+    this.metricBindings.push(bandsFolder.addBinding(this.overviewMetrics, 'mid', {
+      label: '🎸 Mid',
       readonly: true,
       min: 0,
       max: 1,
-    });
-    
-    folder.addBinding(this.metrics, 'treble', {
-      label: 'Treble',
+      format: (v: number) => v.toFixed(2),
+    }));
+
+    this.metricBindings.push(bandsFolder.addBinding(this.overviewMetrics, 'treble', {
+      label: '🎺 High',
       readonly: true,
       min: 0,
       max: 1,
-    });
-    
+      format: (v: number) => v.toFixed(2),
+    }));
+
     folder.addBlade({ view: 'separator' });
-    
-    // Beat indicator
-    folder.addBinding(this.metrics, 'beat', {
-      label: '⚡ Beat',
+
+    this.metricBindings.push(folder.addBinding(this.overviewMetrics, 'beat', {
+      label: '⚡ Beat Pulse',
       readonly: true,
       min: 0,
       max: 1,
+      format: (v: number) => v.toFixed(2),
+    }));
+
+    this.metricBindings.push(folder.addBinding(this.overviewMetrics, 'tempoPhase', {
+      label: 'Tempo Phase',
+      readonly: true,
+      min: 0,
+      max: 1,
+      view: 'graph',
+    }));
+  }
+
+  private buildFeatureInsights(): void {
+    const folder = this.pane.addFolder({
+      title: '🧠 Feature Insights',
+      expanded: false,
     });
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'spectralFlux', {
+      label: 'Spectral Flux',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'onsetEnergy', {
+      label: 'Onset Energy',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'harmonicRatio', {
+      label: 'Harmonic Ratio',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'harmonicEnergy', {
+      label: 'Harmonic Energy',
+      readonly: true,
+      min: 0,
+      max: 1.5,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'rhythmConfidence', {
+      label: 'Rhythm Confidence',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'tempo', {
+      label: 'Tempo (BPM)',
+      readonly: true,
+      min: 40,
+      max: 200,
+      format: (v: number) => v.toFixed(1),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'stereoBalance', {
+      label: 'Stereo Balance',
+      readonly: true,
+      min: -1,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'stereoWidth', {
+      label: 'Stereo Width',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'groove', {
+      label: 'Groove Index',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.featureBindings.push(folder.addBinding(this.featureMetrics, 'overallTrend', {
+      label: 'Energy Trend',
+      readonly: true,
+      min: -1,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+  }
+
+  private buildModulationLab(): void {
+    const folder = this.pane.addFolder({
+      title: '🎚️ Modulation Lab',
+      expanded: false,
+    });
+
+    const readoutFolder = folder.addFolder({
+      title: 'Live Modulators',
+      expanded: true,
+    });
+
+    (['pulse', 'flow', 'shimmer', 'warp', 'density', 'aura'] as const).forEach((key) => {
+      this.modulatorBindings.push(readoutFolder.addBinding(this.modulationReadouts, key, {
+        label: key.charAt(0).toUpperCase() + key.slice(1),
+        readonly: true,
+        min: 0,
+        max: 1,
+        format: (v: number) => v.toFixed(3),
+      }));
+    });
+
+    folder.addBlade({ view: 'separator' });
+
+    const routingFolder = folder.addFolder({
+      title: 'Routing Intensities',
+      expanded: false,
+    });
+
+    routingFolder.addBinding(this.config.audioReactive, 'modulationPulseForce', {
+      label: 'Pulse → Forces',
+      min: 0,
+      max: 2,
+      step: 0.05,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ modulationPulseForce: ev.value });
+    });
+
+    routingFolder.addBinding(this.config.audioReactive, 'modulationFlowTurbulence', {
+      label: 'Flow → Fluidity',
+      min: 0,
+      max: 2,
+      step: 0.05,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ modulationFlowTurbulence: ev.value });
+    });
+
+    routingFolder.addBinding(this.config.audioReactive, 'modulationShimmerColor', {
+      label: 'Shimmer → Color',
+      min: 0,
+      max: 2,
+      step: 0.05,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ modulationShimmerColor: ev.value });
+    });
+
+    routingFolder.addBinding(this.config.audioReactive, 'modulationWarpSpatial', {
+      label: 'Warp → Spatial',
+      min: 0,
+      max: 2,
+      step: 0.05,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ modulationWarpSpatial: ev.value });
+    });
+
+    routingFolder.addBinding(this.config.audioReactive, 'modulationDensitySpawn', {
+      label: 'Density → Emit',
+      min: 0,
+      max: 2,
+      step: 0.05,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ modulationDensitySpawn: ev.value });
+    });
+
+    routingFolder.addBinding(this.config.audioReactive, 'modulationAuraBloom', {
+      label: 'Aura → Bloom',
+      min: 0,
+      max: 2,
+      step: 0.05,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ modulationAuraBloom: ev.value });
+    });
+
+    folder.addBlade({ view: 'separator' });
+
+    const temporalFolder = folder.addFolder({
+      title: 'Temporal Sculpting',
+      expanded: false,
+    });
+
+    temporalFolder.addBinding(this.config.audioReactive, 'timelineSmoothing', {
+      label: 'Timeline Smooth',
+      min: 0,
+      max: 1,
+      step: 0.05,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ timelineSmoothing: ev.value });
+    });
+
+    temporalFolder.addBinding(this.config.audioReactive, 'transitionResponsiveness', {
+      label: 'Transition Agility',
+      min: 0,
+      max: 1,
+      step: 0.05,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioReactiveConfigChange?.({ transitionResponsiveness: ev.value });
+    });
+  }
+
+  private buildHistory(): void {
+    const folder = this.pane.addFolder({
+      title: '🗂️ Motion History',
+      expanded: false,
+    });
+
+    this.sparklineBindings.push(folder.addBinding(this.sparklineState, 'loudness', {
+      label: 'Loudness',
+      readonly: true,
+    }));
+
+    this.sparklineBindings.push(folder.addBinding(this.sparklineState, 'flux', {
+      label: 'Flux',
+      readonly: true,
+    }));
+
+    this.sparklineBindings.push(folder.addBinding(this.sparklineState, 'beat', {
+      label: 'Beat Grid',
+      readonly: true,
+    }));
   }
   
   // ========================================
@@ -504,19 +767,63 @@ export class AudioPanel {
   /**
    * Update real-time metrics display
    */
-  updateMetrics(
-    bass: number,
-    mid: number,
-    treble: number,
-    overall: number,
-    beatIntensity: number,
-    peakFrequency: number
-  ): void {
-    this.metrics.bass = bass;
-    this.metrics.mid = mid;
-    this.metrics.treble = treble;
-    this.metrics.overall = overall;
-    this.metrics.beat = beatIntensity;
+  private renderSparkline(data: Float32Array, segments = 28): string {
+    if (!data.length) return '';
+    const glyphs = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    const stride = Math.max(1, Math.floor(data.length / segments));
+    const values: number[] = [];
+
+    for (let i = 0; i < data.length; i += stride) {
+      let sum = 0;
+      let count = 0;
+      for (let j = 0; j < stride && i + j < data.length; j++) {
+        sum += data[i + j];
+        count++;
+      }
+      values.push(count > 0 ? sum / count : 0);
+    }
+
+    return values.map((value) => {
+      const normalized = Math.min(1, Math.max(0, value));
+      const index = Math.min(glyphs.length - 1, Math.round(normalized * (glyphs.length - 1)));
+      return glyphs[index];
+    }).join('');
+  }
+
+  updateMetrics(audio: AudioData): void {
+    this.overviewMetrics.bass = audio.smoothBass;
+    this.overviewMetrics.mid = audio.smoothMid;
+    this.overviewMetrics.treble = audio.smoothTreble;
+    this.overviewMetrics.overall = audio.smoothOverall;
+    this.overviewMetrics.beat = audio.beatIntensity;
+    this.overviewMetrics.tempoPhase = audio.tempoPhase;
+
+    this.featureMetrics.spectralFlux = audio.features.spectralFlux;
+    this.featureMetrics.onsetEnergy = audio.features.onsetEnergy;
+    this.featureMetrics.harmonicRatio = audio.features.harmonicRatio;
+    this.featureMetrics.harmonicEnergy = audio.features.harmonicEnergy;
+    this.featureMetrics.rhythmConfidence = audio.features.rhythmConfidence;
+    this.featureMetrics.tempo = audio.features.tempo;
+    this.featureMetrics.stereoBalance = audio.features.stereoBalance;
+    this.featureMetrics.stereoWidth = audio.features.stereoWidth;
+    this.featureMetrics.groove = audio.features.groove;
+    this.featureMetrics.overallTrend = audio.overallTrend;
+
+    this.modulationReadouts.pulse = audio.modulators.pulse;
+    this.modulationReadouts.flow = audio.modulators.flow;
+    this.modulationReadouts.shimmer = audio.modulators.shimmer;
+    this.modulationReadouts.warp = audio.modulators.warp;
+    this.modulationReadouts.density = audio.modulators.density;
+    this.modulationReadouts.aura = audio.modulators.aura;
+
+    this.sparklineState.loudness = this.renderSparkline(audio.history.loudness);
+    this.sparklineState.flux = this.renderSparkline(audio.history.flux);
+    this.sparklineState.beat = this.renderSparkline(audio.history.beat);
+
+    this.metricBindings.forEach((binding) => binding.refresh());
+    this.featureBindings.forEach((binding) => binding.refresh());
+    this.modulatorBindings.forEach((binding) => binding.refresh());
+    this.sparklineBindings.forEach((binding) => binding.refresh());
   }
   
   /**

@@ -478,14 +478,7 @@ export class FlowApp {
     
     // Update audio panel metrics
     if (this.config.audio.enabled) {
-      this.audioPanel.updateMetrics(
-        audioData.smoothBass,
-        audioData.smoothMid,
-        audioData.smoothTreble,
-        audioData.smoothOverall,
-        audioData.beatIntensity,
-        audioData.peakFrequency
-      );
+      this.audioPanel.updateMetrics(audioData);
     }
     
     // Update audio-reactive behavior system

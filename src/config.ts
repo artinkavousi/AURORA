@@ -142,7 +142,15 @@ export interface AudioConfig {
   smoothing: number;
   minDecibels: number;
   maxDecibels: number;
-  
+
+  // Advanced analysis tuning
+  historySize: number;
+  featureSmoothing: number;
+  fluxSmoothing: number;
+  onsetSensitivity: number;
+  grooveSensitivity: number;
+  stereoEmphasis: number;
+
   // Frequency band gains
   bassGain: number;
   midGain: number;
@@ -166,7 +174,7 @@ export interface AudioConfig {
 export interface AudioReactiveConfig {
   enabled: boolean;
   mode: number; // AudioVisualizationMode enum
-  
+
   // Frequency mapping
   bassInfluence: number;      // 0-1
   midInfluence: number;       // 0-1
@@ -198,10 +206,22 @@ export interface AudioReactiveConfig {
   viscosityMax: number;       // Max viscosity (0-2)
   stiffnessMin: number;       // Min stiffness (0-500)
   stiffnessMax: number;       // Max stiffness (0-1000)
-  
+
   // Visual effects
   colorReactivity: number;    // Color modulation strength (0-1)
   scaleReactivity: number;    // Size modulation strength (0-1)
+
+  // Temporal sculpting
+  timelineSmoothing: number;
+  transitionResponsiveness: number;
+
+  // Modulation routing intensities
+  modulationPulseForce: number;
+  modulationFlowTurbulence: number;
+  modulationShimmerColor: number;
+  modulationWarpSpatial: number;
+  modulationDensitySpawn: number;
+  modulationAuraBloom: number;
 }
 
 export interface FlowConfig {
@@ -367,6 +387,12 @@ export const defaultConfig: FlowConfig = {
     smoothing: 0.88, // Higher smoothing for smoother, more fluid motion
     minDecibels: -90,
     maxDecibels: -10,
+    historySize: 192,
+    featureSmoothing: 0.82,
+    fluxSmoothing: 0.7,
+    onsetSensitivity: 0.55,
+    grooveSensitivity: 0.45,
+    stereoEmphasis: 1.0,
     bassGain: 1.2, // Moderate bass (reduced from 1.5)
     midGain: 1.0, // Moderate mid (reduced from 1.2)
     trebleGain: 0.9, // Slightly reduced treble
@@ -403,6 +429,14 @@ export const defaultConfig: FlowConfig = {
     stiffnessMax: 800,
     colorReactivity: 0.8,
     scaleReactivity: 0.3,
+    timelineSmoothing: 0.65,
+    transitionResponsiveness: 0.75,
+    modulationPulseForce: 1.0,
+    modulationFlowTurbulence: 0.8,
+    modulationShimmerColor: 0.9,
+    modulationWarpSpatial: 0.85,
+    modulationDensitySpawn: 0.7,
+    modulationAuraBloom: 0.6,
   },
   gravitySensorReading: new THREE.Vector3(),
   accelerometerReading: new THREE.Vector3(),

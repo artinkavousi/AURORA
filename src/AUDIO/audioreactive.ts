@@ -140,9 +140,17 @@ export const DEFAULT_AUDIO_REACTIVE_CONFIG: AudioReactiveConfig = {
   viscosityMax: 1.0,
   stiffnessMin: 50,
   stiffnessMax: 500,
-  
+
   colorReactivity: 0.8,
   scaleReactivity: 0.3,
+  timelineSmoothing: 0.65,
+  transitionResponsiveness: 0.75,
+  modulationPulseForce: 1.0,
+  modulationFlowTurbulence: 0.8,
+  modulationShimmerColor: 0.9,
+  modulationWarpSpatial: 0.85,
+  modulationDensitySpawn: 0.7,
+  modulationAuraBloom: 0.6,
 };
 
 /**
@@ -163,12 +171,23 @@ export class AudioReactiveBehavior {
     beatIntensity: uniform(0),
     beatActive: uniform(0, 'int'),
     peakFrequency: uniform(0),
-    
+    spectralFlux: uniform(0),
+    harmonicRatio: uniform(0),
+    harmonicEnergy: uniform(0),
+    onsetEnergy: uniform(0),
+    rhythmConfidence: uniform(0),
+    tempo: uniform(120),
+    tempoPhase: uniform(0),
+    overallTrend: uniform(0),
+    stereoBalance: uniform(0),
+    stereoWidth: uniform(0),
+    groove: uniform(0),
+
     // Smoothed values for animations
     smoothBass: uniform(0),
     smoothMid: uniform(0),
     smoothTreble: uniform(0),
-    
+
     // Configuration
     bassInfluence: uniform(1.0),
     midInfluence: uniform(0.8),
@@ -184,9 +203,25 @@ export class AudioReactiveBehavior {
     
     beatImpulse: uniform(20.0),
     beatRadius: uniform(15.0),
-    
+
     colorReactivity: uniform(0.8),
     scaleReactivity: uniform(0.3),
+    timelineSmoothing: uniform(0.65),
+    transitionResponsiveness: uniform(0.75),
+    modulationPulseForce: uniform(1.0),
+    modulationFlowTurbulence: uniform(0.8),
+    modulationShimmerColor: uniform(0.9),
+    modulationWarpSpatial: uniform(0.85),
+    modulationDensitySpawn: uniform(0.7),
+    modulationAuraBloom: uniform(0.6),
+
+    // Modulation bus snapshot
+    modPulse: uniform(0),
+    modFlow: uniform(0),
+    modShimmer: uniform(0),
+    modWarp: uniform(0),
+    modDensity: uniform(0),
+    modAura: uniform(0),
   };
   
   // Beat-triggered vortex tracking
@@ -230,6 +265,14 @@ export class AudioReactiveBehavior {
     this.audioUniforms.beatRadius.value = this.config.beatRadius;
     this.audioUniforms.colorReactivity.value = this.config.colorReactivity;
     this.audioUniforms.scaleReactivity.value = this.config.scaleReactivity;
+    this.audioUniforms.timelineSmoothing.value = this.config.timelineSmoothing;
+    this.audioUniforms.transitionResponsiveness.value = this.config.transitionResponsiveness;
+    this.audioUniforms.modulationPulseForce.value = this.config.modulationPulseForce;
+    this.audioUniforms.modulationFlowTurbulence.value = this.config.modulationFlowTurbulence;
+    this.audioUniforms.modulationShimmerColor.value = this.config.modulationShimmerColor;
+    this.audioUniforms.modulationWarpSpatial.value = this.config.modulationWarpSpatial;
+    this.audioUniforms.modulationDensitySpawn.value = this.config.modulationDensitySpawn;
+    this.audioUniforms.modulationAuraBloom.value = this.config.modulationAuraBloom;
   }
   
   /**
@@ -246,6 +289,23 @@ export class AudioReactiveBehavior {
     this.audioUniforms.smoothBass.value = audioData.smoothBass;
     this.audioUniforms.smoothMid.value = audioData.smoothMid;
     this.audioUniforms.smoothTreble.value = audioData.smoothTreble;
+    this.audioUniforms.spectralFlux.value = audioData.features.spectralFlux;
+    this.audioUniforms.harmonicRatio.value = audioData.features.harmonicRatio;
+    this.audioUniforms.harmonicEnergy.value = audioData.features.harmonicEnergy;
+    this.audioUniforms.onsetEnergy.value = audioData.features.onsetEnergy;
+    this.audioUniforms.rhythmConfidence.value = audioData.features.rhythmConfidence;
+    this.audioUniforms.tempo.value = audioData.features.tempo;
+    this.audioUniforms.tempoPhase.value = audioData.tempoPhase;
+    this.audioUniforms.overallTrend.value = audioData.overallTrend;
+    this.audioUniforms.stereoBalance.value = audioData.features.stereoBalance;
+    this.audioUniforms.stereoWidth.value = audioData.features.stereoWidth;
+    this.audioUniforms.groove.value = audioData.features.groove;
+    this.audioUniforms.modPulse.value = audioData.modulators.pulse;
+    this.audioUniforms.modFlow.value = audioData.modulators.flow;
+    this.audioUniforms.modShimmer.value = audioData.modulators.shimmer;
+    this.audioUniforms.modWarp.value = audioData.modulators.warp;
+    this.audioUniforms.modDensity.value = audioData.modulators.density;
+    this.audioUniforms.modAura.value = audioData.modulators.aura;
   }
   
   /**
@@ -267,32 +327,46 @@ export class AudioReactiveBehavior {
       return vortex.age < vortex.lifetime;
     });
     
+    const dynamicMax = Math.max(
+      2,
+      Math.round(this.maxVortexes + audioData.modulators.density * this.config.modulationDensitySpawn * 3)
+    );
+
     // Spawn new vortex on beat
-    if (audioData.isBeat && this.activeVortexes.length < this.maxVortexes) {
+    if (audioData.isBeat && this.activeVortexes.length < dynamicMax) {
       const beatStrength = audioData.beatIntensity;
-      
+      const pulseFactor = 0.6 + audioData.modulators.pulse * this.config.modulationPulseForce;
+      const warpFactor = 0.7 + audioData.modulators.warp * this.config.modulationWarpSpatial * 0.6;
+      const densityFactor = 0.6 + audioData.modulators.density * this.config.modulationDensitySpawn;
+      const flowLift = audioData.modulators.flow * this.config.modulationFlowTurbulence;
+      const balance = THREE.MathUtils.clamp(audioData.features.stereoBalance, -1, 1);
+      const heightPhase = THREE.MathUtils.lerp(0.2, 0.8, audioData.tempoPhase);
+
       if (this.config.forceFieldMode === AudioForceFieldMode.BEAT_VORTEX) {
-        // Random position in field
-        const position = new THREE.Vector3(
-          Math.random() * gridSize.x,
-          Math.random() * gridSize.y * 0.5 + gridSize.y * 0.25, // Middle vertical region
-          Math.random() * gridSize.z
+        const posX = THREE.MathUtils.clamp(
+          gridSize.x * (0.5 + (Math.random() - 0.5) * 0.8 + balance * warpFactor * 0.25),
+          0,
+          gridSize.x
         );
-        
-        // Random axis (slightly biased toward vertical)
+        const posY = THREE.MathUtils.clamp(gridSize.y * heightPhase, gridSize.y * 0.15, gridSize.y * 0.9);
+        const posZ = THREE.MathUtils.clamp(
+          gridSize.z * (0.5 + (Math.random() - 0.5) * densityFactor * 0.6),
+          0,
+          gridSize.z
+        );
+
+        const position = new THREE.Vector3(posX, posY, posZ);
         const axis = new THREE.Vector3(
-          (Math.random() - 0.5) * 0.3,
-          0.5 + Math.random() * 0.5,
-          (Math.random() - 0.5) * 0.3
+          (Math.random() - 0.5) * (0.2 + warpFactor * 0.3) + balance * 0.4,
+          0.4 + Math.random() * 0.6 + flowLift * 0.5,
+          (Math.random() - 0.5) * (0.2 + warpFactor * 0.3) - balance * 0.4
         ).normalize();
-        
-        // Vortex strength based on beat intensity
-        const strength = this.config.forceFieldStrength * beatStrength * (0.8 + Math.random() * 0.4);
-        
-        // Bass beats = longer lifetime, treble beats = shorter
+
+        const strength = this.config.forceFieldStrength * beatStrength * pulseFactor;
         const bassRatio = audioData.bass / (audioData.overall + 0.001);
-        const lifetime = 1.0 + bassRatio * 2.0; // 1-3 seconds
-        
+        const lifetime = 0.8 + bassRatio * (1.5 + flowLift);
+        const radius = this.config.beatRadius * warpFactor;
+
         this.activeVortexes.push({
           position,
           axis,
@@ -300,24 +374,23 @@ export class AudioReactiveBehavior {
           age: 0,
           lifetime,
         });
-        
-        // Add to force field manager
-        const fieldIndex = this.forceFieldManager.addField({
+
+        this.forceFieldManager.addField({
           type: ForceFieldType.VORTEX,
           enabled: true,
           position: position.clone(),
           direction: new THREE.Vector3(0, 1, 0),
           rotation: new THREE.Euler(),
-          strength: strength,
-          radius: this.config.beatRadius,
+          strength,
+          radius,
           falloff: ForceFalloff.SMOOTH,
           vortexAxis: axis.clone(),
-          turbulenceScale: 1.0,
+          turbulenceScale: 1.0 + audioData.modulators.shimmer * this.config.modulationShimmerColor,
           turbulenceOctaves: 2,
-          noiseSpeed: 1.0,
+          noiseSpeed: 1.0 + audioData.features.spectralFlux * 1.5,
           animated: true,
-          animationSpeed: 1.0,
-          animationAmplitude: 0,
+          animationSpeed: 1.0 + audioData.modulators.shimmer * 0.5,
+          animationAmplitude: audioData.modulators.aura * this.config.modulationAuraBloom * 2.0,
         });
       }
     }
@@ -338,24 +411,30 @@ export class AudioReactiveBehavior {
       return { viscosity: 0.5, stiffness: 250 };
     }
     
-    // Bass → higher viscosity (thicker, slower)
-    // Treble → lower viscosity (thinner, faster)
-    const bassRatio = audioData.smoothBass;
-    const trebleRatio = audioData.smoothTreble;
-    
+    const viscosityMix = THREE.MathUtils.clamp(
+      audioData.smoothBass * 0.5 + audioData.modulators.flow * this.config.modulationFlowTurbulence * 0.5,
+      0,
+      1
+    );
     const viscosity = THREE.MathUtils.lerp(
       this.config.viscosityMin,
       this.config.viscosityMax,
-      bassRatio
+      viscosityMix
     );
-    
-    // Beat → higher stiffness (more bouncy/responsive)
+
+    const stiffnessMix = THREE.MathUtils.clamp(
+      audioData.overall * 0.4 +
+        audioData.beatIntensity * 0.2 +
+        audioData.modulators.pulse * this.config.modulationPulseForce * 0.4,
+      0,
+      1
+    );
     const stiffness = THREE.MathUtils.lerp(
       this.config.stiffnessMin,
       this.config.stiffnessMax,
-      audioData.overall + audioData.beatIntensity * 0.5
+      stiffnessMix
     );
-    
+
     return { viscosity, stiffness };
   }
   

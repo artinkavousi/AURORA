@@ -77,41 +77,62 @@ export class WaveFieldVisualizer extends AudioVisualizer {
   generateForceTSL(audioUniforms: any) {
     return Fn(([particlePos, particleVel, gridSize]) => {
       const force = vec3(0).toVar('waveForce');
-      
+
       // Normalized position
       const normPos = particlePos.div(gridSize).toConst('normPos');
-      
+      const tempoWarp = audioUniforms.tempo.mul(0.015).add(0.35).toConst('tempoWarp');
+      const rhythmGain = audioUniforms.rhythmConfidence.mul(1.5).add(0.5).toConst('rhythmGain');
+      const shimmer = audioUniforms.modShimmer.add(0.1).toConst('shimmer');
+      const warp = audioUniforms.modWarp.sub(0.5).mul(2.0).toConst('warp');
+      const flow = audioUniforms.modFlow.add(0.2).toConst('flow');
+
+      const temporalPhase = time.mul(this.waveSpeed).mul(tempoWarp.mul(rhythmGain))
+        .add(audioUniforms.tempoPhase.mul(float(Math.PI * 2)))
+        .toConst('temporalPhase');
+
       // Bass wave (large wavelength, slow)
       const bassWavelength = float(8.0);
-      const bassPhase = time.mul(this.waveSpeed).mul(0.3)
+      const bassPhase = temporalPhase.mul(0.3)
         .add(dot(normPos, vec3(1, 0, 0)).mul(bassWavelength))
+        .add(audioUniforms.stereoBalance.mul(2.0))
         .toConst('bassPhase');
       const bassWave = sin(bassPhase).mul(audioUniforms.smoothBass).mul(this.waveScale).toConst('bassWave');
       force.y.addAssign(bassWave);
-      
+
       // Mid wave (medium wavelength, moderate speed)
       const midWavelength = float(4.0);
-      const midPhase = time.mul(this.waveSpeed).mul(0.6)
+      const midPhase = temporalPhase.mul(0.6)
         .add(dot(normPos, vec3(0.7, 0, 0.7).normalize()).mul(midWavelength))
         .toConst('midPhase');
-      const midWave = sin(midPhase).mul(audioUniforms.smoothMid).mul(this.waveScale.mul(0.7)).toConst('midWave');
+      const midWave = sin(midPhase).mul(audioUniforms.smoothMid)
+        .mul(this.waveScale.mul(0.7)).mul(flow)
+        .toConst('midWave');
       force.xz.addAssign(vec3(cos(midPhase), 0, sin(midPhase)).xz.mul(midWave));
-      
+
       // Treble wave (small wavelength, fast)
       const trebleWavelength = float(2.0);
-      const treblePhase = time.mul(this.waveSpeed).mul(1.0)
+      const treblePhase = temporalPhase.mul(1.2)
         .add(length(normPos.xz).mul(trebleWavelength))
         .toConst('treblePhase');
-      const trebleWave = sin(treblePhase).mul(audioUniforms.smoothTreble).mul(this.waveScale.mul(0.4)).toConst('trebleWave');
+      const trebleWave = sin(treblePhase).mul(audioUniforms.smoothTreble)
+        .mul(this.waveScale.mul(0.4)).mul(shimmer)
+        .toConst('trebleWave');
       force.addAssign(vec3(cos(treblePhase), sin(treblePhase.mul(2)), sin(treblePhase)).mul(trebleWave));
-      
+
+      const warpMotion = vec3(
+        normPos.z.sub(0.5),
+        sin(temporalPhase.mul(0.5)).mul(0.2),
+        normPos.x.sub(0.5)
+      ).mul(warp).mul(flow);
+      force.addAssign(warpMotion);
+
       // Beat pulse (radial wave)
       const beatWave = audioUniforms.beatIntensity.mul(
         sin(time.mul(10).sub(length(normPos.sub(vec3(0.5))).mul(20)))
-      ).mul(audioUniforms.beatImpulse.mul(0.05)).toConst('beatWave');
+      ).mul(audioUniforms.beatImpulse.mul(0.05)).mul(audioUniforms.modPulse.add(0.2)).toConst('beatWave');
       const beatDir = normalize(normPos.sub(vec3(0.5))).toConst('beatDir');
       force.addAssign(beatDir.mul(beatWave));
-      
+
       return force;
     }).setLayout({
       name: 'waveFieldForce',
@@ -141,12 +162,15 @@ export class FrequencyTowerVisualizer extends AudioVisualizer {
       const normX = particlePos.x.div(gridSize.x).toConst('normX');
       const bandIndex = int(normX.mul(float(this.numBands))).toConst('bandIndex');
       const bandCenter = float(bandIndex).add(0.5).div(float(this.numBands)).toConst('bandCenter');
-      
+
       // Distance from band center (for horizontal attraction)
       const distFromCenter = normX.sub(bandCenter).abs().mul(float(this.numBands)).toConst('distFromCenter');
-      
+
       // Frequency for this band (exponential distribution)
       const bandFreqNorm = float(bandIndex).div(float(this.numBands)).toConst('bandFreqNorm');
+      const grooveBoost = audioUniforms.groove.add(0.2).toConst('grooveBoost');
+      const density = audioUniforms.modDensity.add(0.3).toConst('density');
+      const shimmer = audioUniforms.modShimmer.add(0.1).toConst('shimmer');
       
       // Audio amplitude for this frequency range
       // Low bands = bass, mid bands = mid, high bands = treble
@@ -157,18 +181,29 @@ export class FrequencyTowerVisualizer extends AudioVisualizer {
       
       // Vertical force (tower height)
       const targetHeight = amplitude.mul(gridSize.y).mul(0.8).toConst('targetHeight');
-      const verticalForce = targetHeight.sub(particlePos.y).mul(0.1).toConst('verticalForce');
+      const verticalForce = targetHeight.sub(particlePos.y).mul(0.1).mul(grooveBoost).toConst('verticalForce');
       force.y.assign(verticalForce);
       
       // Horizontal attraction to band center
       const horizontalDir = bandCenter.mul(gridSize.x).sub(particlePos.x).toConst('horizontalDir');
       force.x.assign(horizontalDir.mul(0.2).mul(smoothstep(1.0, 0.0, distFromCenter)));
+      force.z.addAssign(horizontalDir.mul(audioUniforms.stereoBalance).mul(0.05));
       
       // Beat pulse (all towers pulse together)
-      const beatPulse = audioUniforms.beatIntensity.mul(sin(time.mul(15))).mul(this.towerStrength.mul(0.3)).toConst('beatPulse');
+      const beatPulse = audioUniforms.beatIntensity
+        .mul(sin(time.mul(15).add(bandFreqNorm.mul(6)).add(audioUniforms.tempoPhase.mul(8))))
+        .mul(this.towerStrength.mul(0.3))
+        .mul(grooveBoost)
+        .toConst('beatPulse');
       force.y.addAssign(beatPulse);
-      
-      return force.mul(this.towerStrength.mul(0.1));
+
+      const shimmerDrift = sin(time.mul(25).add(bandFreqNorm.mul(12)))
+        .mul(shimmer)
+        .mul(audioUniforms.spectralFlux.add(0.1))
+        .toConst('shimmerDrift');
+      force.z.addAssign(shimmerDrift.mul(0.15));
+
+      return force.mul(this.towerStrength.mul(0.1).mul(density));
     }).setLayout({
       name: 'frequencyTowerForce',
       type: 'vec3',
@@ -193,19 +228,47 @@ export class VortexDanceVisualizer extends AudioVisualizer {
     return Fn(([particlePos, particleVel, gridSize]) => {
       const force = vec3(0).toVar('vortexDanceForce');
       
+      const balance = audioUniforms.stereoBalance.toConst('stereoBalance');
+      const flow = audioUniforms.modFlow.add(0.2).toConst('flowMod');
+      const pulse = audioUniforms.modPulse.add(0.2).toConst('pulseMod');
+      const shimmer = audioUniforms.modShimmer.add(0.1).toConst('shimmerMod');
+      const width = audioUniforms.stereoWidth.add(0.1).toConst('widthMod');
+
       // Additional swaying motion based on audio
       const sway = vec3(
-        sin(time.mul(2).add(particlePos.z.mul(0.1))),
-        cos(time.mul(1.5).add(particlePos.x.mul(0.1))),
-        sin(time.mul(1.8).add(particlePos.y.mul(0.1)))
-      ).mul(audioUniforms.smoothOverall).mul(this.danceIntensity.mul(0.2)).toConst('sway');
-      
+        sin(time.mul(2).add(particlePos.z.mul(0.1))).mul(flow),
+        cos(time.mul(1.5).add(particlePos.x.mul(0.1))).mul(flow),
+        sin(time.mul(1.8).add(particlePos.y.mul(0.1))).add(balance.mul(0.5))
+      ).mul(audioUniforms.smoothOverall).mul(this.danceIntensity.mul(0.25)).toConst('sway');
       force.addAssign(sway);
-      
-      // Beat-synchronized bounce
-      const bounce = audioUniforms.beatIntensity.mul(sin(time.mul(12))).mul(this.danceIntensity.mul(0.5)).toConst('bounce');
+
+      const spin = vec3(
+        particleVel.z.mul(-1),
+        particleVel.y.mul(0.5).add(balance.mul(0.3)),
+        particleVel.x
+      ).mul(audioUniforms.beatIntensity).mul(this.danceIntensity.mul(0.35)).mul(pulse).toConst('spin');
+      force.addAssign(spin);
+
+      const lift = vec3(0, audioUniforms.smoothMid.mul(2.0).mul(flow), 0).toConst('lift');
+      force.addAssign(lift);
+
+      const bounce = audioUniforms.beatIntensity.mul(sin(time.mul(12))).mul(this.danceIntensity.mul(0.5)).mul(pulse).toConst('bounce');
       force.y.addAssign(bounce);
-      
+
+      const spiral = vec3(
+        particlePos.z.sub(gridSize.z.mul(0.5)).mul(-1),
+        0,
+        particlePos.x.sub(gridSize.x.mul(0.5))
+      ).mul(width).mul(shimmer).mul(0.08).toConst('spiral');
+      force.addAssign(spiral);
+
+      const aura = vec3(
+        sin(time.mul(6).add(particlePos.y.mul(0.2))).mul(0.1),
+        sin(time.mul(5).add(particlePos.x.mul(0.15))).mul(0.1),
+        sin(time.mul(4).add(particlePos.z.mul(0.12))).mul(0.1)
+      ).mul(audioUniforms.modAura.add(0.1)).toConst('aura');
+      force.addAssign(aura);
+
       return force;
     }).setLayout({
       name: 'vortexDanceForce',

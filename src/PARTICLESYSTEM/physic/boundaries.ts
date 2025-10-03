@@ -114,12 +114,13 @@ export class ParticleBoundaries {
   private boundaryMesh: THREE.Mesh | null = null;
   private customMesh: THREE.Mesh | null = null;
   private visualize: boolean;
-  
+
   // Audio reactivity
   private audioReactive: boolean;
   private audioPulseStrength: number;
   private baseRadius: number = 0;  // Store base radius for pulsing
   private baseScale: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
+  private viewportPulse: number = 0;  // Audio-driven viewport expansion when shape = NONE
   
   // Boundary limits (in grid space)
   public readonly min: THREE.Vector3;
@@ -397,6 +398,7 @@ export class ParticleBoundaries {
       collisionMode: this.collisionMode,
       gridCenter: this.gridSize.clone().multiplyScalar(0.5),
       boundaryRadius: Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness,
+      viewportPulse: this.viewportPulse,
     };
   }
   
@@ -437,21 +439,25 @@ export class ParticleBoundaries {
       boundaryRadius: any,
       dt: any,
       gridSize: any,
+      viewportPulse: any,
     }
   ): void {
     const xN = particlePosition.add(particleVelocity.mul(uniforms.dt).mul(3.0));
-    
+
     // === VIEWPORT MODE (NONE or disabled) ===
     // Particles use gridSize (viewport space) as boundaries
     // This keeps particles visible on page and adapts to page size
     If(uniforms.boundaryEnabled.equal(int(0)), () => {
-      const viewportMin = vec3(1, 1, 1);
-      const viewportMax = uniforms.gridSize.sub(1);
-      const softStiffness = float(0.08);  // Very gentle collision for viewport (softer)
-      
+      const pulse = uniforms.viewportPulse.clamp(0, 1);
+      const expansionAmount = pulse.mul(6.0);
+      const expansion = vec3(expansionAmount, expansionAmount, expansionAmount);
+      const viewportMin = vec3(1, 1, 1).sub(expansion);
+      const viewportMax = uniforms.gridSize.sub(1).add(expansion);
+      const softStiffness = float(0.08).add(pulse.mul(0.12));  // Gentle base + audio boost
+
       // Soft viewport boundaries (keeps particles visible)
-      If(xN.x.lessThan(viewportMin.x), () => { 
-        particleVelocity.x.addAssign(viewportMin.x.sub(xN.x).mul(softStiffness)); 
+      If(xN.x.lessThan(viewportMin.x), () => {
+        particleVelocity.x.addAssign(viewportMin.x.sub(xN.x).mul(softStiffness));
       });
       If(xN.x.greaterThan(viewportMax.x), () => { 
         particleVelocity.x.addAssign(viewportMax.x.sub(xN.x).mul(softStiffness)); 
@@ -749,14 +755,43 @@ export class ParticleBoundaries {
    * Update boundary with audio data (for audio-reactive animations)
    */
   public update(elapsed: number, audioData?: { bass: number; mid: number; treble: number; beatIntensity: number }): void {
-    if (!this.audioReactive || !audioData || !this.boundaryMesh) return;
-    
+    if (!this.audioReactive) {
+      this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, 0, 0.15);
+      return;
+    }
+
+    if (!audioData) {
+      this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, 0, 0.15);
+      return;
+    }
+
+    if (this.shape === BoundaryShape.NONE) {
+      // In viewport mode we do not have a mesh to animate. Instead we feed an
+      // audio-driven pulse back into the physics uniforms so the invisible
+      // viewport boundary expands and contracts with the beat. This prevents
+      // particles from drifting out of view when sound reactivity is enabled.
+      const combinedEnergy =
+        audioData.bass * 0.6 +
+        audioData.mid * 0.3 +
+        audioData.treble * 0.1 +
+        audioData.beatIntensity * 0.5;
+      const targetPulse = THREE.MathUtils.clamp(combinedEnergy * this.audioPulseStrength, 0, 1);
+      this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, targetPulse, 0.25);
+      return;
+    }
+
+    // For visible meshes we keep the viewport pulse relaxed to avoid bleeding
+    // into the viewport uniform logic.
+    this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, 0, 0.2);
+
+    if (!this.boundaryMesh) return;
+
     // Audio-reactive pulsing for glass containers
     if (this.shape === BoundaryShape.SPHERE || this.shape === BoundaryShape.DODECAHEDRON) {
       // Pulse scale based on bass
       const pulseScale = 1.0 + audioData.bass * this.audioPulseStrength;
       this.boundaryMesh.scale.setScalar(pulseScale);
-      
+
       // Beat flash (opacity pulse)
       if (this.boundaryMesh.material instanceof THREE.Material) {
         const material = this.boundaryMesh.material as THREE.MeshPhysicalNodeMaterial;
@@ -769,7 +804,7 @@ export class ParticleBoundaries {
       const radialPulse = 1.0 + audioData.mid * this.audioPulseStrength;
       const heightPulse = 1.0 + audioData.bass * this.audioPulseStrength * 0.5;
       this.boundaryMesh.scale.set(radialPulse, heightPulse, radialPulse);
-      
+
       // Beat flash
       if (this.boundaryMesh.material instanceof THREE.Material) {
         const material = this.boundaryMesh.material as THREE.MeshPhysicalNodeMaterial;
@@ -779,7 +814,7 @@ export class ParticleBoundaries {
       // Box: subtle pulse + rotation on beat
       const pulseScale = 1.0 + (audioData.bass + audioData.mid + audioData.treble) / 3 * this.audioPulseStrength * 0.3;
       this.boundaryMesh.scale.setScalar(pulseScale);
-      
+
       // Subtle rotation on strong beats
       if (audioData.beatIntensity > 0.7) {
         this.boundaryMesh.rotation.y += audioData.beatIntensity * 0.01;
@@ -813,7 +848,10 @@ export class ParticleBoundaries {
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
     this.setVisible(enabled);
-    
+    if (!enabled) {
+      this.viewportPulse = 0;
+    }
+
     // Note: GPU collision is controlled via boundaryEnabled uniform
     // which is synced via updateBoundaryUniforms() in mls-mpm.ts
   }

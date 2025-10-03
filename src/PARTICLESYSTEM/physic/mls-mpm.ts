@@ -236,6 +236,7 @@ export class MlsMpmSimulator {
     this.uniforms.boundaryWallStiffness = uniform(0.3);
     this.uniforms.boundaryCenter = uniform(this.gridSize.clone().multiplyScalar(0.5));
     this.uniforms.boundaryRadius = uniform(Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - 3);
+    this.uniforms.boundaryViewportPulse = uniform(0);
   }
 
   /**
@@ -899,6 +900,7 @@ export class MlsMpmSimulator {
           boundaryRadius: this.uniforms.boundaryRadius,
           dt: this.uniforms.dt,
           gridSize: this.uniforms.gridSize,  // For viewport-based collision
+          viewportPulse: this.uniforms.boundaryViewportPulse,
         });
       }
       // No else - boundaries module is required for proper collision handling
@@ -1168,6 +1170,7 @@ export class MlsMpmSimulator {
     this.uniforms.boundaryWallStiffness.value = boundaryData.wallStiffness;
     this.uniforms.boundaryCenter.value.copy(boundaryData.gridCenter);
     this.uniforms.boundaryRadius.value = boundaryData.boundaryRadius;
+    this.uniforms.boundaryViewportPulse.value = boundaryData.viewportPulse ?? 0;
   }
 }
 

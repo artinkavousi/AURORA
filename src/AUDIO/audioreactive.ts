@@ -27,6 +27,7 @@ import {
 } from "three/tsl";
 import type { AudioData } from './soundreactivity';
 import type { ForceFieldManager, ForceFieldConfig } from '../PARTICLESYSTEM/physic/forcefields';
+import type { AudioReactiveConfig as SharedAudioReactiveConfig } from '../config';
 import { ForceFieldType, ForceFalloff } from '../PARTICLESYSTEM/physic/forcefields';
 
 /**
@@ -67,45 +68,10 @@ export enum AudioForceFieldMode {
 /**
  * Audio-reactive configuration
  */
-export interface AudioReactiveConfig {
-  enabled: boolean;
+export interface AudioReactiveConfig extends Omit<SharedAudioReactiveConfig, "mode" | "spatialMode" | "forceFieldMode"> {
   mode: AudioVisualizationMode;
-  
-  // Frequency mapping
-  bassInfluence: number;      // 0-1
-  midInfluence: number;       // 0-1
-  trebleInfluence: number;    // 0-1
-  
-  // Spatial mapping
   spatialMode: SpatialMode;
-  spatialScale: number;       // Size of spatial regions
-  spatialIntensity: number;   // Strength of spatial effects
-  
-  // Dynamic response
-  inertia: number;            // Motion lag/smoothing (0-1)
-  resonance: number;          // Frequency resonance strength (0-2)
-  dampening: number;          // Energy dissipation (0-1)
-  
-  // Beat response
-  beatImpulse: number;        // Force magnitude on beats (0-100)
-  beatRadius: number;         // Radius of beat influence (0-50)
-  beatDecay: number;          // How fast beat effects fade (1-20)
-  
-  // Force field generation
-  forceFieldsEnabled: boolean;
   forceFieldMode: AudioForceFieldMode;
-  forceFieldStrength: number; // 0-100
-  
-  // Material modulation
-  materialModulation: boolean;
-  viscosityMin: number;       // Min viscosity (0-1)
-  viscosityMax: number;       // Max viscosity (0-2)
-  stiffnessMin: number;       // Min stiffness (0-500)
-  stiffnessMax: number;       // Max stiffness (0-1000)
-  
-  // Visual effects
-  colorReactivity: number;    // Color modulation strength (0-1)
-  scaleReactivity: number;    // Size modulation strength (0-1)
 }
 
 /**

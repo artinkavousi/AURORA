@@ -254,6 +254,10 @@ const isMobile = (): boolean => {
     const mobile = require("is-mobile");
     return mobile();
   } catch {
+    // During SSR/tests `navigator` may be undefined; assume non-mobile in that case.
+    if (typeof navigator === "undefined" || !navigator?.userAgent) {
+      return false;
+    }
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   }
 };

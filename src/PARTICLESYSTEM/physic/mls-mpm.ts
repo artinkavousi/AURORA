@@ -223,7 +223,7 @@ export class MlsMpmSimulator {
     this.uniforms.audioMid = uniform(0);
     this.uniforms.audioTreble = uniform(0);
     this.uniforms.audioBeatIntensity = uniform(0);
-    this.uniforms.audioVisualizationMode = uniform(0, "int");  // 0-7 for 8 visualization modes
+    this.uniforms.audioVisualizationMode = uniform(0, "int");  // 0-8 for 9 visualization modes
     
     // Color mode uniform
     this.uniforms.colorMode = uniform(0, "int");
@@ -674,26 +674,63 @@ export class MlsMpmSimulator {
           const latticeSpacing = float(4.0);
           const latticePos = particlePosition.div(latticeSpacing).floor().mul(latticeSpacing).add(latticeSpacing.mul(0.5)).toConst('latticePos');
           const toLattice = latticePos.sub(particlePosition).toConst('toLattice');
-          
+
           // Natural frequency based on lattice position
           const omega0 = length(latticePos.div(vec3(this.uniforms.gridSize))).mul(5).add(1).toConst('omega0');
-          
+
           // Audio frequency
           const audioFreq = this.uniforms.audioBass.mul(0.2).add(this.uniforms.audioTreble.mul(2.0)).add(1.0).toConst('audioFreq');
           const resonanceFactor = float(1).div(
             float(1).add(pow(audioFreq.sub(omega0).abs(), float(2)))
           ).toConst('resonanceFactor');
-          
+
           // Oscillation amplitude
           const amplitude = this.uniforms.audioBass.add(this.uniforms.audioMid).add(this.uniforms.audioTreble).div(3).mul(resonanceFactor).mul(7.5).toConst('amplitude');
           const oscillation = sin(time.mul(omega0)).mul(amplitude).toConst('oscillation');
           const oscillationDir = normalize(toLattice.add(0.001)).toConst('oscillationDir');
           forceAccumulator.addAssign(oscillationDir.mul(oscillation).mul(this.uniforms.dt));
-          
+
           // Spring force back to lattice
           forceAccumulator.addAssign(toLattice.mul(0.3).mul(this.uniforms.dt).mul(15.0));
         });
-        
+
+        // Mode 8: Aurora Veil - flowing curtains of light
+        If(this.uniforms.audioVisualizationMode.equal(int(8)), () => {
+          const curtainPhase = normPos.x.mul(8.0)
+            .add(time.mul(this.uniforms.audioMid.add(this.uniforms.audioTreble).mul(0.5).add(0.8)))
+            .toConst('curtainPhase');
+          const swayX = sin(curtainPhase).mul(this.uniforms.audioTreble.add(0.3)).toConst('swayX');
+          const swayZ = cos(curtainPhase).mul(this.uniforms.audioMid.add(0.2)).toConst('swayZ');
+          forceAccumulator.x.addAssign(swayX.mul(this.uniforms.dt).mul(8.0));
+          forceAccumulator.z.addAssign(swayZ.mul(this.uniforms.dt).mul(6.0));
+
+          const heightMask = smoothstep(0.1, 0.9, normPos.y).toConst('heightMask');
+          const lift = heightMask.mul(
+            this.uniforms.audioMid.mul(8.0).add(this.uniforms.audioTreble.mul(10.0))
+          ).toConst('lift');
+          forceAccumulator.y.addAssign(lift.mul(this.uniforms.dt));
+
+          const shimmer = triNoise3Dvec(
+            particlePosition.mul(0.04),
+            time.mul(this.uniforms.audioTreble.add(0.6)),
+            0.3
+          ).sub(0.5).mul(2).mul(
+            this.uniforms.audioTreble.add(this.uniforms.audioMid.mul(0.5))
+          ).toConst('shimmer');
+          forceAccumulator.addAssign(shimmer.mul(this.uniforms.dt).mul(4.0));
+
+          const beatCurtain = this.uniforms.audioBeatIntensity
+            .mul(sin(time.mul(9.0).add(normPos.z.mul(6.0))))
+            .mul(14.0)
+            .toConst('beatCurtain');
+          forceAccumulator.y.addAssign(beatCurtain.mul(this.uniforms.dt));
+
+          const convergence = vec3(0.5, smoothstep(0.2, 0.8, normPos.y), 0.5)
+            .sub(normPos)
+            .toConst('convergence');
+          forceAccumulator.addAssign(convergence.mul(0.6).mul(this.uniforms.audioMid).mul(this.uniforms.dt));
+        });
+
         // Beat pulse (global, applies to all modes)
         const center = vec3(0.5).toConst('center');
         const toCenter = center.sub(normPos).toConst('toCenter');
@@ -1111,7 +1148,7 @@ export class MlsMpmSimulator {
   }
   
   /**
-   * Set audio visualization mode (0-7)
+   * Set audio visualization mode (0-8)
    */
   public setAudioVisualizationMode(mode: number): void {
     this.uniforms.audioVisualizationMode.value = mode;

@@ -8,7 +8,8 @@
  */
 
 import * as THREE from "three/webgpu";
-import { Fn, pass, uniform, uv, vec2, vec3, vec4, float, mix, length, pow, smoothstep, step } from "three/tsl";
+import { Fn, pass, uniform, uv, vec2, vec3, vec4, float, mix, length, pow, smoothstep, step, min as tslMin } from "three/tsl";
+import type { AudioData } from '../AUDIO/soundreactivity';
 // @ts-ignore
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
 // @ts-ignore  
@@ -64,21 +65,28 @@ export class PostFX {
     // Bloom
     bloomEnabled: uniform(1.0),
     bloomBlendMode: uniform(0.0), // 0=add, 1=screen, 2=softlight
-    
+    bloomMixStrength: uniform(1.0),
+
     // Radial Focus/Blur
     focusEnabled: uniform(0.0),
     focusCenter: uniform(new THREE.Vector2(0.5, 0.5)),
     focusRadius: uniform(0.3),
     focusFalloffPower: uniform(2.0),
-    
+    focusBlendStrength: uniform(1.0),
+
     // Radial Chromatic Aberration
     caEnabled: uniform(0.0),
     caEdgeIntensity: uniform(1.5),
     caFalloffPower: uniform(2.5),
+    caBlendStrength: uniform(1.0),
   };
 
   // Store config for rebuild
   private currentConfig: PostFXOptions;
+  private baseMix = { bloom: 1, focus: 0, ca: 0 };
+  private baseEnabled = { bloom: 1, focus: 0, ca: 0 };
+  private audioResponse = { bloom: 1, focus: 0, ca: 0 };
+  private dynamicEnabled = { bloom: 1, focus: 0, ca: 0 };
 
   constructor(
     renderer: THREE.WebGPURenderer,
@@ -96,7 +104,9 @@ export class PostFX {
 
     // Build pipeline
     this.buildPipeline(options);
-    
+
+    this.initializeAudioDynamicsState();
+
     console.log('✅ PostFX: Refined pipeline with radial effects initialized');
   }
 
@@ -136,6 +146,43 @@ export class PostFX {
     }
     if (options.radialCA?.falloffPower !== undefined) {
       this.uniforms.caFalloffPower.value = options.radialCA.falloffPower;
+    }
+  }
+
+  private initializeAudioDynamicsState(): void {
+    this.baseEnabled = {
+      bloom: this.uniforms.bloomEnabled.value,
+      focus: this.uniforms.focusEnabled.value,
+      ca: this.uniforms.caEnabled.value,
+    };
+
+    this.baseMix = {
+      bloom: this.baseEnabled.bloom > 0 ? 1 : 0,
+      focus: this.baseEnabled.focus > 0 ? 1 : 0,
+      ca: this.baseEnabled.ca > 0 ? 1 : 0,
+    };
+
+    this.audioResponse = { ...this.baseMix };
+    this.dynamicEnabled = { ...this.baseEnabled };
+
+    this.uniforms.bloomMixStrength.value = this.audioResponse.bloom || 1;
+    this.uniforms.focusBlendStrength.value = this.audioResponse.focus || 1;
+    this.uniforms.caBlendStrength.value = this.audioResponse.ca || 1;
+  }
+
+  private updateBaseState(effect: 'bloom' | 'focus' | 'ca', enabled: boolean): void {
+    const enabledValue = enabled ? 1 : 0;
+    this.baseEnabled[effect] = enabledValue;
+    this.baseMix[effect] = enabledValue ? 1 : 0;
+    this.dynamicEnabled[effect] = enabledValue;
+    this.audioResponse[effect] = enabledValue ? Math.max(this.audioResponse[effect], 1) : 0;
+
+    if (effect === 'bloom') {
+      this.uniforms.bloomMixStrength.value = this.audioResponse[effect] || 1;
+    } else if (effect === 'focus') {
+      this.uniforms.focusBlendStrength.value = this.audioResponse[effect] || 1;
+    } else {
+      this.uniforms.caBlendStrength.value = this.audioResponse[effect] || 1;
     }
   }
 
@@ -206,7 +253,11 @@ export class PostFX {
       })();
       
       // Start with bloom or scene based on enable
-      let finalColor = mix(sceneColor, bloomBlend, this.uniforms.bloomEnabled).toVar();
+      const bloomWeight = tslMin(
+        float(1.0),
+        this.uniforms.bloomEnabled.mul(this.uniforms.bloomMixStrength)
+      );
+      let finalColor = mix(sceneColor, bloomBlend, bloomWeight).toVar();
       
       // ========================================
       // 2. RADIAL FOCUS/BLUR
@@ -224,8 +275,12 @@ export class PostFX {
       ).pow(this.uniforms.focusFalloffPower);
       
       // Mix sharp with blurred based on distance
+      const focusMix = tslMin(
+        float(1.0),
+        blurMask.mul(this.uniforms.focusEnabled).mul(this.uniforms.focusBlendStrength)
+      );
       finalColor.assign(
-        mix(finalColor, blurredScene, blurMask.mul(this.uniforms.focusEnabled))
+        mix(finalColor, blurredScene, focusMix)
       );
       
       // ========================================
@@ -236,8 +291,12 @@ export class PostFX {
       const caAmount = caDist.pow(this.uniforms.caFalloffPower).mul(this.uniforms.caEdgeIntensity);
       
       // Mix RGB shifted color based on radial distance
+      const caMix = tslMin(
+        float(1.0),
+        caAmount.mul(this.uniforms.caEnabled).mul(this.uniforms.caBlendStrength)
+      );
       finalColor.assign(
-        mix(finalColor, rgbShiftedScene, caAmount.mul(this.uniforms.caEnabled))
+        mix(finalColor, rgbShiftedScene, caMix)
       );
       
       return vec4(finalColor, 1.0);
@@ -262,6 +321,7 @@ export class PostFX {
   updateBloom(config: Partial<BloomConfig>): void {
     if (config.enabled !== undefined) {
       this.uniforms.bloomEnabled.value = config.enabled ? 1.0 : 0.0;
+      this.updateBaseState('bloom', config.enabled);
     }
     if (config.blendMode !== undefined) {
       const modes = { 'add': 0, 'screen': 1, 'softlight': 2 };
@@ -273,6 +333,7 @@ export class PostFX {
   updateRadialFocus(config: Partial<RadialFocusConfig>): void {
     if (config.enabled !== undefined) {
       this.uniforms.focusEnabled.value = config.enabled ? 1.0 : 0.0;
+      this.updateBaseState('focus', config.enabled);
     }
     if (config.focusCenter) {
       this.uniforms.focusCenter.value.set(config.focusCenter.x, config.focusCenter.y);
@@ -289,6 +350,7 @@ export class PostFX {
   updateRadialCA(config: Partial<RadialCAConfig>): void {
     if (config.enabled !== undefined) {
       this.uniforms.caEnabled.value = config.enabled ? 1.0 : 0.0;
+      this.updateBaseState('ca', config.enabled);
     }
     if (config.edgeIntensity !== undefined) {
       this.uniforms.caEdgeIntensity.value = config.edgeIntensity;
@@ -297,6 +359,86 @@ export class PostFX {
       this.uniforms.caFalloffPower.value = config.falloffPower;
     }
     // Note: strength and angle require restart
+  }
+
+  private smoothTowards(current: number, target: number, deltaTime: number, attackRate = 10, releaseRate = 4): number {
+    const rate = target > current ? attackRate : releaseRate;
+    const factor = 1 - Math.exp(-Math.max(deltaTime, 0) * rate);
+    return THREE.MathUtils.lerp(current, target, factor);
+  }
+
+  applyAudioDynamics(audioData: AudioData | null, influence: number, deltaTime: number): void {
+    const normalizedInfluence = THREE.MathUtils.clamp(influence ?? 0, 0, 1);
+
+    let bloomMixTarget = this.baseEnabled.bloom > 0 ? Math.max(this.baseMix.bloom, 1) : 0;
+    let focusMixTarget = this.baseEnabled.focus > 0 ? Math.max(this.baseMix.focus, 1) : 0;
+    let caMixTarget = this.baseEnabled.ca > 0 ? Math.max(this.baseMix.ca, 1) : 0;
+
+    let bloomEnableTarget = this.baseEnabled.bloom;
+    let focusEnableTarget = this.baseEnabled.focus;
+    let caEnableTarget = this.baseEnabled.ca;
+
+    if (audioData && normalizedInfluence > 0) {
+      const modulators = audioData.modulators ?? ({} as AudioData['modulators']);
+      const aura = modulators.aura ?? audioData.smoothOverall;
+      const flow = modulators.flow ?? audioData.smoothMid;
+      const shimmer = modulators.shimmer ?? audioData.smoothTreble;
+      const pulse = modulators.pulse ?? audioData.beatIntensity;
+      const warp = modulators.warp ?? 0;
+
+      bloomMixTarget = Math.max(bloomMixTarget, 0.6) + aura * 0.9 * normalizedInfluence;
+      focusMixTarget = Math.max(focusMixTarget, 0.4) + (flow * 0.7 + pulse * 0.3) * normalizedInfluence;
+      caMixTarget = Math.max(caMixTarget, 0.35) + (shimmer * 0.85 + warp * 0.2) * normalizedInfluence;
+
+      if (this.baseEnabled.bloom < 0.5) {
+        bloomEnableTarget = Math.min(1, aura * 1.25 * normalizedInfluence);
+      }
+      if (this.baseEnabled.focus < 0.5) {
+        focusEnableTarget = Math.min(1, flow * 1.15 * normalizedInfluence);
+      }
+      if (this.baseEnabled.ca < 0.5) {
+        caEnableTarget = Math.min(1, shimmer * 1.25 * normalizedInfluence);
+      }
+    }
+
+    this.audioResponse.bloom = THREE.MathUtils.clamp(
+      this.smoothTowards(this.audioResponse.bloom, bloomMixTarget, deltaTime, 12, 4),
+      0,
+      3
+    );
+    this.audioResponse.focus = THREE.MathUtils.clamp(
+      this.smoothTowards(this.audioResponse.focus, focusMixTarget, deltaTime, 9, 3),
+      0,
+      2.5
+    );
+    this.audioResponse.ca = THREE.MathUtils.clamp(
+      this.smoothTowards(this.audioResponse.ca, caMixTarget, deltaTime, 11, 4),
+      0,
+      2.5
+    );
+
+    this.dynamicEnabled.bloom = THREE.MathUtils.clamp(
+      this.smoothTowards(this.dynamicEnabled.bloom, bloomEnableTarget, deltaTime, 10, 3),
+      0,
+      1
+    );
+    this.dynamicEnabled.focus = THREE.MathUtils.clamp(
+      this.smoothTowards(this.dynamicEnabled.focus, focusEnableTarget, deltaTime, 8, 3),
+      0,
+      1
+    );
+    this.dynamicEnabled.ca = THREE.MathUtils.clamp(
+      this.smoothTowards(this.dynamicEnabled.ca, caEnableTarget, deltaTime, 9, 3),
+      0,
+      1
+    );
+
+    this.uniforms.bloomMixStrength.value = this.audioResponse.bloom;
+    this.uniforms.focusBlendStrength.value = this.audioResponse.focus;
+    this.uniforms.caBlendStrength.value = this.audioResponse.ca;
+    this.uniforms.bloomEnabled.value = this.dynamicEnabled.bloom;
+    this.uniforms.focusEnabled.value = this.dynamicEnabled.focus;
+    this.uniforms.caEnabled.value = this.dynamicEnabled.ca;
   }
 
   async render(): Promise<void> {

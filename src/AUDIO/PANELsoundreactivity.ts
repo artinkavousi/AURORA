@@ -85,6 +85,17 @@ const PRESETS: AudioPreset[] = [
       audioSmoothing: 0.88,
     },
   },
+  {
+    name: '🌠 Aurora Veil',
+    description: 'Silky light curtains shimmer with treble energy',
+    config: {
+      mode: AudioVisualizationMode.AURORA_VEIL,
+      bassInfluence: 0.6,
+      midInfluence: 0.7,
+      trebleInfluence: 1.0,
+      audioSmoothing: 0.82,
+    },
+  },
 ];
 
 /**

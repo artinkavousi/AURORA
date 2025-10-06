@@ -10,6 +10,8 @@ export interface PipelineStep {
   readonly label: string;
   /** Relative weight used when computing progress fractions. Defaults to 1. */
   readonly weight?: number;
+  /** Optional predicate determining whether this step should execute. */
+  readonly enabled?: () => boolean;
   /** Function invoked to execute the step. */
   run: () => Promise<void> | void;
 }
@@ -20,6 +22,7 @@ export interface PipelineStep {
 export interface PipelineReporter {
   onStepStart?(event: { step: PipelineStep; index: number }): void;
   onStepComplete?(event: { step: PipelineStep; index: number; durationMs: number }): void;
+  onStepSkipped?(event: { step: PipelineStep; index: number }): void;
 }
 
 /** Options accepted by {@link AppPipeline.execute}. */
@@ -41,15 +44,28 @@ export class AppPipeline {
    */
   public async execute(options: PipelineRunOptions = {}): Promise<void> {
     const { progress, reporter, settleDelayMs = 0 } = options;
-    const totalWeight = this.steps.reduce((sum, step) => sum + (step.weight ?? 1), 0);
+    const stepStates = this.steps.map((step) => ({
+      step,
+      enabled: step.enabled ? step.enabled() : true,
+    }));
+
+    const totalWeight = stepStates
+      .filter((state) => state.enabled)
+      .reduce((sum, state) => sum + (state.step.weight ?? 1), 0) || 1;
     let completedWeight = 0;
 
     if (progress) {
       await progress(0);
     }
 
-    for (let index = 0; index < this.steps.length; index++) {
-      const step = this.steps[index];
+    for (let index = 0; index < stepStates.length; index++) {
+      const { step, enabled } = stepStates[index];
+
+      if (!enabled) {
+        reporter?.onStepSkipped?.({ step, index });
+        continue;
+      }
+
       reporter?.onStepStart?.({ step, index });
       const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
       await step.run();

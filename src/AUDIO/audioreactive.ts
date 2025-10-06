@@ -42,6 +42,7 @@ export enum AudioVisualizationMode {
   KINETIC_FLOW = 5,      // Velocity field visualization
   FRACTAL_BURST = 6,     // Beat-triggered fractals
   HARMONIC_LATTICE = 7,  // Oscillating grid structure
+  AURORA_VEIL = 8,       // Ethereal curtains of light
 }
 
 /**

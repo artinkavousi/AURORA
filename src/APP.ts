@@ -19,6 +19,7 @@ import { RendererManager, ParticleRenderMode } from './PARTICLESYSTEM/RENDERER/r
 import { PhysicPanel, ColorMode } from './PARTICLESYSTEM/PANELphysic';
 import { VisualsPanel } from './PARTICLESYSTEM/PANEL/PANELvisuals';
 import { SoundReactivity } from './AUDIO/soundreactivity';
+import type { AudioData } from './AUDIO/soundreactivity';
 import { AudioReactiveBehavior } from './AUDIO/audioreactive';
 import { AudioVisualizationManager } from './AUDIO/audiovisual';
 import { AudioPanel } from './AUDIO/PANELsoundreactivity';
@@ -71,6 +72,11 @@ export class FlowApp {
   // Shared grid metrics
   private readonly baseGridSize = new THREE.Vector3(64, 64, 64);
   private viewportGridSize = new THREE.Vector3(64, 64, 64);
+  private lastAudioData: AudioData | null = null;
+  private readonly tmpGravity = new THREE.Vector3();
+  private readonly tmpMouseOrigin = new THREE.Vector3();
+  private readonly tmpMouseDirection = new THREE.Vector3();
+  private readonly tmpMouseForce = new THREE.Vector3();
 
   // Mouse interaction
   private raycaster!: THREE.Raycaster;
@@ -101,6 +107,9 @@ export class FlowApp {
       onStepComplete: ({ step, durationMs }) => {
         console.info(`✅ [${step.id}] ${step.label} (${durationMs.toFixed(1)}ms)`);
       },
+      onStepSkipped: ({ step }) => {
+        console.info(`⏭️ [${step.id}] ${step.label} skipped`);
+      },
     };
   }
 
@@ -113,11 +122,15 @@ export class FlowApp {
       { id: 'physics', label: 'Particle physics solver', weight: 2, run: async () => this.initializePhysics() },
       { id: 'renderers', label: 'Renderer systems', weight: 2, run: async () => this.initializeRenderers() },
       { id: 'panels', label: 'Core control panels', weight: 1, run: async () => this.initializeCorePanels() },
-      { id: 'audio', label: 'Audio reactivity stack', weight: 1, run: async () => this.initializeAudioSystems() },
+      { id: 'audio', label: 'Audio reactivity stack', weight: 1, enabled: () => this.isAudioPipelineEnabled(), run: async () => this.initializeAudioSystems() },
       { id: 'visuals', label: 'Visual controls', weight: 1, run: async () => this.initializeVisualsPanel() },
-      { id: 'audio-panel', label: 'Audio control panel', weight: 1, run: async () => this.initializeAudioPanel() },
+      { id: 'audio-panel', label: 'Audio control panel', weight: 1, enabled: () => this.isAudioPipelineEnabled(), run: async () => this.initializeAudioPanel() },
       { id: 'interaction', label: 'Input & resize wiring', weight: 1, run: async () => this.initializeInteraction() },
     ]);
+  }
+
+  private isAudioPipelineEnabled(): boolean {
+    return this.config.audio.enabled || this.config.audioReactive.enabled;
   }
 
   private initializeConfigAndDashboard(): void {
@@ -463,19 +476,38 @@ export class FlowApp {
    * Update loop
    */
   public async update(delta: number, elapsed: number): Promise<void> {
-    // Begin FPS tracking (now in PhysicPanel)
     if (this.physicPanel?.fpsGraph) {
       this.physicPanel.fpsGraph.begin();
     }
 
-    // Update scenery (camera controls, lights, etc.)
     this.scenery.update(delta, elapsed);
 
-    // Update audio reactivity
-    const audioData = this.soundReactivity.getAudioData();
-    
-    // Update boundaries with audio data (for audio-reactive animations)
-    if (this.config.audio.enabled && this.config.audioReactive.enabled) {
+    const audioData = this.updateAudioReactivity(delta, elapsed);
+
+    this.updateRendererState(audioData);
+
+    await this.updateSimulation(delta, elapsed, audioData);
+
+    await this.postFX.render();
+
+    this.performanceManager.update(delta);
+
+    if (this.physicPanel?.fpsGraph) {
+      this.physicPanel.fpsGraph.end();
+    }
+  }
+
+  private updateAudioReactivity(delta: number, elapsed: number): AudioData | null {
+    if (!this.boundaries) {
+      return null;
+    }
+
+    const audioReady = Boolean(this.soundReactivity) && this.isAudioPipelineEnabled();
+    const audioData = audioReady ? this.soundReactivity!.getAudioData() : null;
+    const audioEnabled = this.config.audio.enabled;
+    const reactiveEnabled = this.config.audioReactive.enabled && audioEnabled;
+
+    if (audioData && reactiveEnabled) {
       this.boundaries.update(elapsed, {
         bass: audioData.smoothBass,
         mid: audioData.smoothMid,
@@ -486,185 +518,159 @@ export class FlowApp {
       this.boundaries.update(elapsed);
     }
 
-    // Sync boundary uniforms so the physics pipeline receives the latest
-    // audio-driven viewport pulse even when no visual mesh is present.
-    this.mlsMpmSim.updateBoundaryUniforms();
-    
-    // Update audio panel metrics
-    if (this.config.audio.enabled) {
-      this.audioPanel.updateMetrics(audioData);
+    this.mlsMpmSim?.updateBoundaryUniforms();
+
+    if (audioData && audioEnabled) {
+      this.audioPanel?.updateMetrics(audioData);
     }
-    
-    // Update audio-reactive behavior system
-    if (this.config.audioReactive.enabled) {
-      // Debug: Log audio values periodically (~1/sec at 60fps)
+
+    if (audioData && this.config.audioReactive.enabled) {
       if (import.meta.env.DEV && Math.random() < 0.016) {
         console.log('🎵 Audio:', {
           bass: audioData.smoothBass.toFixed(2),
           mid: audioData.smoothMid.toFixed(2),
           treble: audioData.smoothTreble.toFixed(2),
           beat: audioData.isBeat ? '🔴' : '⚫',
-          beatIntensity: audioData.beatIntensity.toFixed(2)
+          beatIntensity: audioData.beatIntensity.toFixed(2),
         });
       }
-      
-      // Upload audio data to GPU
-      this.audioReactiveBehavior.updateAudioData(audioData);
-      
-      // Update beat-triggered effects (vortexes, etc.)
-      this.audioReactiveBehavior.updateBeatEffects(
-        audioData,
-        delta,
-        this.viewportGridSize
-      );
-      
-      // Update visualization mode
-      this.audioVisualizationManager.update(audioData, delta);
-      
-      // Apply material modulation if enabled
+
+      this.audioReactiveBehavior?.updateAudioData(audioData);
+      this.audioReactiveBehavior?.updateBeatEffects(audioData, delta, this.viewportGridSize);
+      this.audioVisualizationManager?.update(audioData, delta);
+
       if (this.config.audioReactive.materialModulation) {
-        const { viscosity, stiffness } = this.audioReactiveBehavior.getMaterialModulation(audioData);
-        // Note: Material modulation will be applied in physics update below
-        this.config.simulation.dynamicViscosity = viscosity;
-        this.config.simulation.stiffness = stiffness;
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // UNIFIED RENDERER UPDATE - Primary System
-    // ═══════════════════════════════════════════════════════════
-    
-    if (this.useLegacyRenderers) {
-      // LEGACY PATH (deprecated, for compatibility only)
-      this.meshRenderer.object.visible = !this.config.rendering.points;
-      this.pointRenderer.object.visible = this.config.rendering.points;
-      this.meshRenderer.update(this.config.particles.count, this.config.particles.actualSize);
-      this.pointRenderer.update(this.config.particles.count);
-      
-      if (this.config.bloom.enabled) {
-        this.meshRenderer.setBloomIntensity(1);
-      } else {
-        this.meshRenderer.setBloomIntensity(0);
-      }
-    } else {
-      // NEW UNIFIED SYSTEM (default, always active)
-      const particleSize =
-        this.visualsPanel?.settings.particleSize ??
-        this.config.particles.actualSize ??
-        this.config.particles.size ??
-        1.0;
-
-      this.rendererManager.update(
-        this.config.particles.count,
-        particleSize
-      );
-      
-      // Update renderer with audio reactivity if enabled
-      if (this.config.audio.enabled && this.config.audioReactive.enabled) {
-        const renderer = this.rendererManager.getRenderer() as MeshRenderer;
-        if (renderer && typeof (renderer as any).updateAudioReactivity === 'function') {
-          (renderer as any).updateAudioReactivity({
-            bass: audioData.smoothBass,
-            mid: audioData.smoothMid,
-            treble: audioData.smoothTreble,
-            beatIntensity: audioData.beatIntensity,
-          });
+        const modulation = this.audioReactiveBehavior?.getMaterialModulation(audioData);
+        if (modulation) {
+          this.config.simulation.dynamicViscosity = modulation.viscosity;
+          this.config.simulation.stiffness = modulation.stiffness;
         }
       }
     }
 
-    // Update physics simulation
-    if (this.config.simulation.run) {
-      // Update force fields
-      this.mlsMpmSim.updateForceFields(this.physicPanel.forceFieldManager);
-      
-      // Update color mode
-      this.mlsMpmSim.setColorMode(this.physicPanel.colorMode);
-      
-      // Update emitters
-      const emittedParticles = this.physicPanel.emitterManager.update(delta);
-      // TODO: Inject emitted particles into simulation
-      
-      const gravity = new THREE.Vector3();
-      const gravityType = this.config.simulation.gravityType;
+    const postFXInfluence = this.config.audio.postFXInfluence ?? 0;
+    this.postFX?.applyAudioDynamics(audioData, postFXInfluence, delta);
 
-      if (gravityType === 0) {
-        gravity.set(0, 0, 0.2);
-      } else if (gravityType === 1) {
-        gravity.set(0, -0.2, 0);
-      } else if (gravityType === 3) {
-        gravity.copy(this.config.gravitySensorReading).add(this.config.accelerometerReading);
-      }
-
-      // Apply audio influence to physics (if enabled)
-      let audioInfluencedSpeed = this.config.simulation.speed;
-      let audioInfluencedNoise = this.config.simulation.noise;
-      
-      if (this.config.audio.enabled && this.config.audio.particleInfluence > 0) {
-        const influence = this.config.audio.particleInfluence;
-        audioInfluencedSpeed *= (1.0 + audioData.smoothOverall * influence);
-        audioInfluencedNoise *= (1.0 + audioData.smoothBass * influence * 0.5);
-      }
-
-      await this.mlsMpmSim.update(
-        {
-          numParticles: this.config.particles.count,
-          dt: audioInfluencedSpeed,
-          noise: audioInfluencedNoise,
-          stiffness: this.config.simulation.stiffness,
-          restDensity: this.config.simulation.restDensity,
-          dynamicViscosity: this.config.simulation.dynamicViscosity,
-          gravityType: this.config.simulation.gravityType,
-          gravity,
-          mouseRayOrigin: new THREE.Vector3(),
-          mouseRayDirection: new THREE.Vector3(),
-          mouseForce: new THREE.Vector3(),
-          
-          // FLIP/PIC Hybrid parameters
-          transferMode: this.config.simulation.transferMode,
-          flipRatio: this.config.simulation.flipRatio,
-          
-          // Vorticity confinement parameters
-          vorticityEnabled: this.config.simulation.vorticityEnabled,
-          vorticityEpsilon: this.config.simulation.vorticityEpsilon,
-          
-          // Surface tension parameters
-          surfaceTensionEnabled: this.config.simulation.surfaceTensionEnabled,
-          surfaceTensionCoeff: this.config.simulation.surfaceTensionCoeff,
-          
-          // Performance parameters
-          sparseGrid: this.config.simulation.sparseGrid,
-          adaptiveTimestep: this.config.simulation.adaptiveTimestep,
-          cflTarget: this.config.simulation.cflTarget,
-        },
-        delta,
-        elapsed,
-        // Pass audio data if reactive is enabled
-        this.config.audioReactive.enabled ? audioData : undefined
-      );
-      
-      // Update performance metrics
-      const fps = delta > 0 ? 1 / delta : 0;
-      const frameMs = delta > 0 ? delta * 1000 : 0;
-      this.physicPanel.updateMetrics(
-        this.config.particles.count,
-        fps,
-        frameMs
-      );
+    if (audioData) {
+      this.lastAudioData = audioData;
+    } else if (!audioReady) {
+      this.lastAudioData = null;
     }
 
-    // Note: Audio influence on PostFX effects disabled until effects are re-implemented
+    return audioData;
+  }
 
-    // Render with PostFX pipeline (simplified mode)
-    await this.postFX.render();
-
-    // Feed frame timing into adaptive performance after rendering completes
-    this.performanceManager.update(delta);
-
-    // End FPS tracking (now in PhysicPanel)
-    if (this.physicPanel?.fpsGraph) {
-      this.physicPanel.fpsGraph.end();
+  private updateRendererState(audioData: AudioData | null): void {
+    if (!this.rendererManager) {
+      return;
     }
+
+    if (this.useLegacyRenderers) {
+      this.meshRenderer.object.visible = !this.config.rendering.points;
+      this.pointRenderer.object.visible = this.config.rendering.points;
+      this.meshRenderer.update(this.config.particles.count, this.config.particles.actualSize);
+      this.pointRenderer.update(this.config.particles.count);
+      this.meshRenderer.setBloomIntensity(this.config.bloom.enabled ? 1 : 0);
+      return;
+    }
+
+    const particleSize =
+      this.visualsPanel?.settings.particleSize ??
+      this.config.particles.actualSize ??
+      this.config.particles.size ??
+      1.0;
+
+    const particleCount = this.mlsMpmSim?.numParticles ?? this.config.particles.count;
+    this.rendererManager.update(particleCount, particleSize);
+
+    const reactiveSample = audioData ?? this.lastAudioData;
+    if (
+      reactiveSample &&
+      this.config.audio.enabled &&
+      this.config.audioReactive.enabled
+    ) {
+      const renderer = this.rendererManager.getRenderer() as MeshRenderer;
+      if (renderer && typeof (renderer as any).updateAudioReactivity === 'function') {
+        (renderer as any).updateAudioReactivity({
+          bass: reactiveSample.smoothBass,
+          mid: reactiveSample.smoothMid,
+          treble: reactiveSample.smoothTreble,
+          beatIntensity: reactiveSample.beatIntensity,
+        });
+      }
+    }
+  }
+
+  private async updateSimulation(delta: number, elapsed: number, audioData: AudioData | null): Promise<void> {
+    if (!this.config.simulation.run) {
+      return;
+    }
+
+    this.mlsMpmSim.updateForceFields(this.physicPanel.forceFieldManager);
+    this.mlsMpmSim.setColorMode(this.physicPanel.colorMode);
+    this.physicPanel.emitterManager.update(delta);
+
+    const gravityType = this.config.simulation.gravityType;
+    this.tmpGravity.set(0, 0, 0);
+
+    if (gravityType === 0) {
+      this.tmpGravity.set(0, 0, 0.2);
+    } else if (gravityType === 1) {
+      this.tmpGravity.set(0, -0.2, 0);
+    } else if (gravityType === 3) {
+      this.tmpGravity
+        .copy(this.config.gravitySensorReading)
+        .add(this.config.accelerometerReading);
+    }
+
+    let audioInfluencedSpeed = this.config.simulation.speed;
+    let audioInfluencedNoise = this.config.simulation.noise;
+
+    if (audioData && this.config.audio.enabled && this.config.audio.particleInfluence > 0) {
+      const influence = this.config.audio.particleInfluence;
+      audioInfluencedSpeed *= 1.0 + audioData.smoothOverall * influence;
+      audioInfluencedNoise *= 1.0 + audioData.smoothBass * influence * 0.5;
+    }
+
+    this.tmpMouseOrigin.set(0, 0, 0);
+    this.tmpMouseDirection.set(0, 0, 0);
+    this.tmpMouseForce.set(0, 0, 0);
+
+    await this.mlsMpmSim.update(
+      {
+        numParticles: this.config.particles.count,
+        dt: audioInfluencedSpeed,
+        noise: audioInfluencedNoise,
+        stiffness: this.config.simulation.stiffness,
+        restDensity: this.config.simulation.restDensity,
+        dynamicViscosity: this.config.simulation.dynamicViscosity,
+        gravityType: this.config.simulation.gravityType,
+        gravity: this.tmpGravity,
+        mouseRayOrigin: this.tmpMouseOrigin,
+        mouseRayDirection: this.tmpMouseDirection,
+        mouseForce: this.tmpMouseForce,
+        transferMode: this.config.simulation.transferMode,
+        flipRatio: this.config.simulation.flipRatio,
+        vorticityEnabled: this.config.simulation.vorticityEnabled,
+        vorticityEpsilon: this.config.simulation.vorticityEpsilon,
+        surfaceTensionEnabled: this.config.simulation.surfaceTensionEnabled,
+        surfaceTensionCoeff: this.config.simulation.surfaceTensionCoeff,
+        sparseGrid: this.config.simulation.sparseGrid,
+        adaptiveTimestep: this.config.simulation.adaptiveTimestep,
+        cflTarget: this.config.simulation.cflTarget,
+      },
+      delta,
+      elapsed,
+      this.config.audioReactive.enabled && audioData ? audioData : undefined
+    );
+
+    const fps = delta > 0 ? 1 / delta : 0;
+    const frameMs = delta > 0 ? delta * 1000 : 0;
+    this.physicPanel.updateMetrics(
+      this.mlsMpmSim.numParticles,
+      fps,
+      frameMs
+    );
   }
 
   /**
@@ -743,20 +749,19 @@ export class FlowApp {
 
     this.renderer.domElement.removeEventListener("pointermove", this.pointerMoveHandler);
     
-    this.dashboard.dispose();
-    this.scenery.dispose();
-    this.postFX.dispose();  // RE-ENABLED
-    this.boundaries.dispose();
-    this.meshRenderer.dispose();
-    this.pointRenderer.dispose();
-    this.rendererManager.dispose();  // NEW
-    // this.postFXPanel.dispose(); // PostFXPanel doesn't have dispose method
-    this.physicPanel.dispose();
-    this.visualsPanel.dispose();  // NEW
-    this.audioPanel.dispose();
-    this.soundReactivity.dispose();
-    this.audioReactiveBehavior.dispose();
-    this.audioVisualizationManager.dispose();
+    this.dashboard?.dispose();
+    this.scenery?.dispose();
+    this.postFX?.dispose();  // RE-ENABLED
+    this.boundaries?.dispose();
+    this.meshRenderer?.dispose();
+    this.pointRenderer?.dispose();
+    this.rendererManager?.dispose();  // NEW
+    this.physicPanel?.dispose();
+    this.visualsPanel?.dispose();  // NEW
+    this.audioPanel?.dispose();
+    this.soundReactivity?.dispose();
+    this.audioReactiveBehavior?.dispose();
+    this.audioVisualizationManager?.dispose();
   }
 }
 

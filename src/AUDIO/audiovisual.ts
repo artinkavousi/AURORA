@@ -517,7 +517,7 @@ export class FractalBurstVisualizer extends AudioVisualizer {
 export class HarmonicLatticeVisualizer extends AudioVisualizer {
   private latticeStrength = uniform(15.0);
   private latticeSpacing = uniform(4.0);
-  
+
   generateForceTSL(audioUniforms: any) {
     return Fn(([particlePos, particleVel, gridSize]) => {
       const force = vec3(0).toVar('harmonicForce');
@@ -571,6 +571,67 @@ export class HarmonicLatticeVisualizer extends AudioVisualizer {
 }
 
 /**
+ * 9. AURORA VEIL MODE
+ * Ethereal curtains of light that sway with stereo shimmer
+ */
+export class AuroraVeilVisualizer extends AudioVisualizer {
+  private curtainDrift = uniform(6.0);
+  private liftStrength = uniform(12.0);
+
+  generateForceTSL(audioUniforms: any) {
+    return Fn(([particlePos, particleVel, gridSize]) => {
+      const force = vec3(0).toVar('auroraForce');
+
+      const normPos = particlePos.div(gridSize).toConst('normPos');
+      const curtainPhase = normPos.x.mul(8.0)
+        .add(time.mul(audioUniforms.tempo.mul(0.02).add(0.8)))
+        .add(audioUniforms.stereoBalance.mul(2.0))
+        .toConst('curtainPhase');
+
+      const swayX = sin(curtainPhase).mul(audioUniforms.modWarp.add(0.6)).mul(this.curtainDrift).toConst('swayX');
+      const swayZ = cos(curtainPhase).mul(audioUniforms.modFlow.add(0.5)).mul(this.curtainDrift.mul(0.6)).toConst('swayZ');
+      force.x.addAssign(swayX);
+      force.z.addAssign(swayZ);
+
+      const heightMask = smoothstep(0.15, 0.85, normPos.y).toConst('heightMask');
+      const lift = heightMask
+        .mul(audioUniforms.smoothMid.mul(0.6).add(audioUniforms.smoothTreble.mul(0.9)))
+        .mul(this.liftStrength)
+        .toConst('lift');
+      force.y.addAssign(lift);
+
+      const shimmerNoise = triNoise3Dvec(
+        vec3(normPos.x.mul(5.0), normPos.y.mul(10.0), time.mul(0.8)),
+        time.mul(audioUniforms.modShimmer.add(0.4)),
+        0.32
+      ).sub(0.5).mul(2).toConst('shimmerNoise');
+      const shimmer = shimmerNoise
+        .mul(audioUniforms.modShimmer.add(audioUniforms.smoothTreble))
+        .mul(6.0)
+        .toConst('shimmer');
+      force.addAssign(vec3(shimmer.mul(0.25), shimmer, shimmer.mul(0.2)));
+
+      const beatPulse = audioUniforms.beatIntensity
+        .mul(audioUniforms.modPulse.add(0.4))
+        .mul(18.0)
+        .toConst('beatPulse');
+      const curtainCenter = vec3(0.5, smoothstep(0.2, 0.8, normPos.y), 0.5).toConst('curtainCenter');
+      force.addAssign(normalize(curtainCenter.sub(normPos)).mul(beatPulse));
+
+      return force;
+    }).setLayout({
+      name: 'auroraVeilForce',
+      type: 'vec3',
+      inputs: [
+        { name: 'particlePos', type: 'vec3' },
+        { name: 'particleVel', type: 'vec3' },
+        { name: 'gridSize', type: 'vec3' },
+      ],
+    });
+  }
+}
+
+/**
  * Visualization Mode Factory
  * Creates and manages visualizer instances
  */
@@ -598,6 +659,7 @@ export class AudioVisualizationManager {
     this.visualizers.set(AudioVisualizationMode.KINETIC_FLOW, new KineticFlowVisualizer(this.renderer, this.gridSize));
     this.visualizers.set(AudioVisualizationMode.FRACTAL_BURST, new FractalBurstVisualizer(this.renderer, this.gridSize));
     this.visualizers.set(AudioVisualizationMode.HARMONIC_LATTICE, new HarmonicLatticeVisualizer(this.renderer, this.gridSize));
+    this.visualizers.set(AudioVisualizationMode.AURORA_VEIL, new AuroraVeilVisualizer(this.renderer, this.gridSize));
   }
   
   /**
@@ -653,6 +715,7 @@ export const VISUALIZATION_MODE_NAMES: Record<AudioVisualizationMode, string> = 
   [AudioVisualizationMode.KINETIC_FLOW]: 'Kinetic Flow',
   [AudioVisualizationMode.FRACTAL_BURST]: 'Fractal Burst',
   [AudioVisualizationMode.HARMONIC_LATTICE]: 'Harmonic Lattice',
+  [AudioVisualizationMode.AURORA_VEIL]: 'Aurora Veil',
 };
 
 /**
@@ -667,5 +730,6 @@ export const VISUALIZATION_MODE_DESCRIPTIONS: Record<AudioVisualizationMode, str
   [AudioVisualizationMode.KINETIC_FLOW]: 'Fluid-like velocity fields shaped by audio',
   [AudioVisualizationMode.FRACTAL_BURST]: 'Explosive fractal patterns bloom on beats',
   [AudioVisualizationMode.HARMONIC_LATTICE]: 'Crystalline grid with resonant oscillations',
+  [AudioVisualizationMode.AURORA_VEIL]: 'Floating aurora curtains shimmer with stereo energy',
 };
 

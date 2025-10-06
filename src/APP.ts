@@ -4,6 +4,8 @@
  */
 
 import * as THREE from "three/webgpu";
+import { AppPipeline, type PipelineReporter } from './APP/pipeline';
+import type { ProgressCallback } from './APP/types';
 import { defaultConfig, updateParticleParams, type FlowConfig } from './config';
 import { Dashboard } from './PANEL/dashboard';
 import { Scenery } from './STAGE/scenery';
@@ -22,7 +24,7 @@ import { AudioVisualizationManager } from './AUDIO/audiovisual';
 import { AudioPanel } from './AUDIO/PANELsoundreactivity';
 import { AdaptivePerformanceManager, type PerformanceChangeContext, type PerformanceTier } from './APP/performance';
 
-export type ProgressCallback = (frac: number, delay?: number) => Promise<void>;
+export type { ProgressCallback } from './APP/types';
 
 /**
  * FlowApp - Main application class
@@ -66,6 +68,10 @@ export class FlowApp {
   private currentPerformanceTier: PerformanceTier = 'high';
   private preferredRenderMode: ParticleRenderMode = ParticleRenderMode.MESH;
 
+  // Shared grid metrics
+  private readonly baseGridSize = new THREE.Vector3(64, 64, 64);
+  private viewportGridSize = new THREE.Vector3(64, 64, 64);
+
   // Mouse interaction
   private raycaster!: THREE.Raycaster;
   private plane!: THREE.Plane;
@@ -79,20 +85,50 @@ export class FlowApp {
    * Initialize all modules
    */
   public async init(progressCallback?: ProgressCallback): Promise<void> {
-    const progress = progressCallback || (async () => {});
+    const pipeline = this.createInitializationPipeline();
+    await pipeline.execute({
+      progress: progressCallback,
+      reporter: this.createPipelineReporter(),
+      settleDelayMs: 100,
+    });
+  }
 
-    // Initialize config
+  private createPipelineReporter(): PipelineReporter {
+    return {
+      onStepStart: ({ step }) => {
+        console.info(`⏳ [${step.id}] ${step.label}...`);
+      },
+      onStepComplete: ({ step, durationMs }) => {
+        console.info(`✅ [${step.id}] ${step.label} (${durationMs.toFixed(1)}ms)`);
+      },
+    };
+  }
+
+  private createInitializationPipeline(): AppPipeline {
+    return new AppPipeline([
+      { id: 'config', label: 'Configuration & dashboard', weight: 1, run: async () => this.initializeConfigAndDashboard() },
+      { id: 'scenery', label: 'Scene & camera', weight: 2, run: async () => this.initializeScenery() },
+      { id: 'postfx', label: 'Post-processing stack', weight: 1, run: async () => this.initializePostFX() },
+      { id: 'boundaries', label: 'Particle boundaries', weight: 1, run: async () => this.initializeBoundaries() },
+      { id: 'physics', label: 'Particle physics solver', weight: 2, run: async () => this.initializePhysics() },
+      { id: 'renderers', label: 'Renderer systems', weight: 2, run: async () => this.initializeRenderers() },
+      { id: 'panels', label: 'Core control panels', weight: 1, run: async () => this.initializeCorePanels() },
+      { id: 'audio', label: 'Audio reactivity stack', weight: 1, run: async () => this.initializeAudioSystems() },
+      { id: 'visuals', label: 'Visual controls', weight: 1, run: async () => this.initializeVisualsPanel() },
+      { id: 'audio-panel', label: 'Audio control panel', weight: 1, run: async () => this.initializeAudioPanel() },
+      { id: 'interaction', label: 'Input & resize wiring', weight: 1, run: async () => this.initializeInteraction() },
+    ]);
+  }
+
+  private initializeConfigAndDashboard(): void {
     updateParticleParams(this.config);
-
-    // Initialize dashboard (UI framework) - FPS in PhysicPanel, Info panel removed
     this.dashboard = new Dashboard({ showInfo: false, showFPS: false });
+  }
 
-    await progress(0.1);
-
-    // Initialize scenery (scene, camera, lights, HDR environment)
+  private async initializeScenery(): Promise<void> {
     this.scenery = new Scenery(
-      this.renderer, // Pass the renderer
-      this.renderer.domElement, // And the DOM element for controls
+      this.renderer,
+      this.renderer.domElement,
       {
         camera: this.config.camera,
         environment: this.config.environment,
@@ -109,10 +145,9 @@ export class FlowApp {
       }
     );
     await this.scenery.init();
+  }
 
-    await progress(0.3);
-
-    // Initialize PostFX (refined: bloom + radial focus + radial CA)
+  private async initializePostFX(): Promise<void> {
     this.postFX = new PostFX(
       this.renderer,
       this.scenery.scene,
@@ -124,57 +159,47 @@ export class FlowApp {
       }
     );
     await this.postFX.init();
-    
-    // Disable scenery tone mapping - PostFX handles it
     this.scenery.disableToneMappingForPostFX();
+  }
 
-    await progress(0.4);
-
-    // Initialize particle boundaries (default: disabled for viewport mode)
+  private async initializeBoundaries(): Promise<void> {
+    this.viewportGridSize.copy(this.baseGridSize);
     this.boundaries = new ParticleBoundaries({
-      gridSize: new THREE.Vector3(64, 64, 64),
+      gridSize: this.viewportGridSize,
       wallThickness: 3,
       wallStiffness: 0.3,
-      visualize: false,  // Hidden by default
-      audioReactive: true,  // Enable audio-reactive animations
-      audioPulseStrength: 0.15,  // Moderate pulse strength
+      visualize: false,
+      audioReactive: true,
+      audioPulseStrength: 0.15,
     });
     await this.boundaries.init();
     this.scenery.add(this.boundaries.object);
-    
-    // Set boundaries to disabled (viewport mode) by default
     this.boundaries.setEnabled(false);
+  }
 
-    await progress(0.5);
-
-    // Initialize particle physics
+  private async initializePhysics(): Promise<void> {
     this.mlsMpmSim = new MlsMpmSimulator(this.renderer, {
       maxParticles: this.config.particles.maxCount,
-      gridSize: new THREE.Vector3(64, 64, 64),
+      gridSize: this.viewportGridSize.clone(),
     });
     await this.mlsMpmSim.init();
-    
-    // Connect boundaries to physics simulator
     this.mlsMpmSim.setBoundaries(this.boundaries);
+  }
 
-    await progress(0.7);
-
-    // Initialize PRIMARY unified renderer system
+  private async initializeRenderers(): Promise<void> {
     this.rendererManager = new RendererManager(this.mlsMpmSim, {
       mode: this.config.rendering.points ? ParticleRenderMode.POINT : ParticleRenderMode.MESH,
-      quality: 2 as import('./PARTICLESYSTEM/RENDERER/renderercore').RenderQuality,  // HIGH = 2
+      quality: 2 as import('./PARTICLESYSTEM/RENDERER/renderercore').RenderQuality,
       lodEnabled: false,
       sortingEnabled: false,
       cullingEnabled: false,
       maxParticles: this.config.particles.maxCount,
     });
-    
-    // Get renderer and add to scene (ACTIVE by default)
+
     this.currentRenderObject = this.rendererManager.getRenderer().object;
-    this.currentRenderObject.visible = true;  // ✅ NEW SYSTEM IS PRIMARY
+    this.currentRenderObject.visible = true;
     this.scenery.add(this.currentRenderObject);
 
-    // Adaptive performance monitoring
     this.preferredRenderMode = this.rendererManager.getCurrentMode();
     this.performanceManager = new AdaptivePerformanceManager(
       {
@@ -195,57 +220,39 @@ export class FlowApp {
       }
     );
     this.currentPerformanceTier = 'high';
-    
-    // Initialize legacy renderers (for backward compatibility if needed)
+
     this.meshRenderer = new MeshRenderer(this.mlsMpmSim, {
-      metalness: 0.900,
-      roughness: 0.50,
+      metalness: 0.9,
+      roughness: 0.5,
     });
     this.pointRenderer = new PointRenderer(this.mlsMpmSim);
-    
-    // Add to scene but keep HIDDEN (legacy system disabled by default)
+
     this.meshRenderer.object.visible = false;
     this.pointRenderer.object.visible = false;
     this.scenery.add(this.meshRenderer.object);
     this.scenery.add(this.pointRenderer.object);
+  }
 
-    await progress(0.8);
-
-    // Initialize control panels (standalone draggable panes)
+  private initializeCorePanels(): void {
     this.physicPanel = new PhysicPanel(this.dashboard, this.config, {
-      onParticleCountChange: (count) => {
-        // Handled in update loop
-      },
-      onSizeChange: (size) => {
-        // Handled in update loop
-      },
-      onSimulationChange: (simConfig) => {
-        // Handled in update loop
-      },
+      onParticleCountChange: (_count) => {},
+      onSizeChange: (_size) => {},
+      onSimulationChange: (_simConfig) => {},
       onMaterialChange: () => {
-        // Material type changed - update color mode if needed
         if (this.physicPanel.colorMode === ColorMode.MATERIAL) {
           this.mlsMpmSim.setColorMode(ColorMode.MATERIAL);
         }
       },
       onForceFieldsChange: () => {
-        // Force fields updated - sync to simulator
         this.mlsMpmSim.updateForceFields(this.physicPanel.forceFieldManager);
       },
-      onEmittersChange: () => {
-        // Emitters updated
-        // TODO: Future emitter particle injection
-      },
+      onEmittersChange: () => {},
       onBoundariesChange: () => {
-        // Boundaries updated - sync to physics simulator
         this.mlsMpmSim.updateBoundaryUniforms();
       },
     });
-    
-    // Connect boundaries to panel
     this.physicPanel.boundaries = this.boundaries;
 
-    // Initialize PostFX control panel (clean: bloom + radial blur + radial CA)
     this.postFXPanel = new PostFXPanel(this.dashboard, this.config, {
       onBloomChange: (bloomConfig) => {
         this.postFX.updateBloom(bloomConfig);
@@ -257,11 +264,10 @@ export class FlowApp {
         this.postFX.updateRadialCA(radialCAConfig);
       },
     });
+  }
 
-    // Initialize audio reactivity system (don't start by default)
+  private async initializeAudioSystems(): Promise<void> {
     this.soundReactivity = new SoundReactivity(this.config.audio);
-    
-    // Actually initialize the audio context and request microphone permission
     if (this.config.audio.enabled) {
       try {
         await this.soundReactivity.init();
@@ -270,29 +276,19 @@ export class FlowApp {
         console.warn('⚠️ Failed to initialize audio (microphone access denied?):', error);
       }
     }
-    
-    // Initialize audio-reactive behavior system
-    console.log('🎵 Initializing AudioReactiveBehavior...', this.config.audioReactive);
+
     this.audioReactiveBehavior = new AudioReactiveBehavior(this.renderer, this.config.audioReactive);
-    console.log('🎵 AudioReactiveBehavior created, setting force field manager...');
     this.audioReactiveBehavior.setForceFieldManager(this.physicPanel.forceFieldManager);
-    console.log('🎵 Force field manager set successfully');
-    
-    // Initialize visualization manager (handles 8 visualization modes)
-    console.log('🎵 Initializing AudioVisualizationManager...');
+
     this.audioVisualizationManager = new AudioVisualizationManager(
       this.renderer,
-      new THREE.Vector3(64, 64, 64)
+      this.viewportGridSize,
     );
-    console.log('🎵 Setting visualization mode:', this.config.audioReactive.mode);
     this.audioVisualizationManager.setMode(this.config.audioReactive.mode);
-    
-    // Sync initial visualization mode to physics simulator
     this.mlsMpmSim.setAudioVisualizationMode(this.config.audioReactive.mode);
-    
-    console.log('🎵 Audio system initialized successfully!');
-    
-    // Initialize visuals control panel (NEW)
+  }
+
+  private initializeVisualsPanel(): void {
     this.visualsPanel = new VisualsPanel(this.dashboard, {
       onRenderModeChange: (mode) => {
         this.preferredRenderMode = mode;
@@ -301,13 +297,10 @@ export class FlowApp {
       },
       onMaterialPresetChange: (preset) => {
         console.log(`🎨 Applying preset: ${preset.name}`);
-        
-        // Update visuals panel settings
         this.visualsPanel.settings.metalness = preset.metalness;
         this.visualsPanel.settings.roughness = preset.roughness;
         this.visualsPanel.settings.emissive = preset.emissive;
-        
-        // Apply to active renderer if it's a mesh-based material
+
         const currentMode = this.rendererManager.getCurrentMode();
         if (currentMode === ParticleRenderMode.MESH) {
           const renderer = this.rendererManager.getRenderer() as MeshRenderer;
@@ -317,8 +310,7 @@ export class FlowApp {
             renderer.material.needsUpdate = true;
           }
         }
-        
-        // Also update legacy mesh renderer for compatibility
+
         if (this.meshRenderer && this.meshRenderer.material) {
           this.meshRenderer.material.metalness = preset.metalness;
           this.meshRenderer.material.roughness = preset.roughness;
@@ -326,22 +318,18 @@ export class FlowApp {
         }
       },
       onColorModeChange: (mode) => {
-        // Map new ColorMode to legacy ColorMode
         const legacyColorMode = mode as number;
         this.mlsMpmSim.setColorMode(legacyColorMode);
       },
       onColorGradientChange: (gradientName) => {
         console.log('🌈 Color gradient changed:', gradientName);
-        // Gradient system will be fully integrated in Phase 2
-        // For now, just acknowledge the change
       },
       onSizeChange: (size) => {
         this.rendererManager.update(this.mlsMpmSim.numParticles, size);
       },
       onMaterialPropertyChange: (property, value) => {
         console.log(`🎨 ${property}: ${value.toFixed(2)}`);
-        
-        // Apply to active renderer if it supports material properties
+
         const currentMode = this.rendererManager.getCurrentMode();
         if (currentMode === ParticleRenderMode.MESH) {
           const renderer = this.rendererManager.getRenderer() as MeshRenderer;
@@ -353,8 +341,7 @@ export class FlowApp {
             }
           }
         }
-        
-        // Also update legacy mesh renderer
+
         if (this.meshRenderer && this.meshRenderer.material) {
           const material = this.meshRenderer.material as any;
           if (property in material) {
@@ -364,11 +351,11 @@ export class FlowApp {
         }
       },
     });
-    
-    // Connect renderer manager to visuals panel
+
     this.visualsPanel.setRendererManager(this.rendererManager);
-    
-    // Initialize audio control panel
+  }
+
+  private initializeAudioPanel(): void {
     this.audioPanel = new AudioPanel(this.dashboard, this.config, {
       onAudioConfigChange: (audioConfig) => {
         this.soundReactivity.updateConfig(audioConfig);
@@ -377,13 +364,11 @@ export class FlowApp {
         this.audioReactiveBehavior.updateConfig(audioReactiveConfig);
         if (audioReactiveConfig.mode !== undefined) {
           this.audioVisualizationManager.setMode(audioReactiveConfig.mode);
-          // Sync visualization mode to physics simulator for GPU forces
           this.mlsMpmSim.setAudioVisualizationMode(audioReactiveConfig.mode);
           console.log(`🎵 Visualization mode changed to: ${audioReactiveConfig.mode}`);
         }
       },
       onSourceChange: async (source) => {
-        // Reinitialize audio with new source
         this.soundReactivity.dispose();
         this.config.audio.source = source;
         this.soundReactivity = new SoundReactivity(this.config.audio);
@@ -404,18 +389,13 @@ export class FlowApp {
         this.soundReactivity.setVolume(volume);
       },
     });
+  }
 
-    await progress(0.9);
-
-    // Setup mouse interaction
+  private initializeInteraction(): void {
     this.raycaster = this.scenery.createRaycaster();
     this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.2);
     this.renderer.domElement.addEventListener("pointermove", this.pointerMoveHandler);
-
-    // Setup window resize handler for adaptive viewport boundaries
     this.setupResizeHandler();
-
-    await progress(1.0, 100);
   }
   
   /**
@@ -429,21 +409,20 @@ export class FlowApp {
       // Adaptive gridSize based on viewport aspect ratio
       // Maintains particle visibility when page resizes
       const aspect = window.innerWidth / window.innerHeight;
-      const baseSize = 64;
-      
-      const newGridSize = new THREE.Vector3(
-        baseSize * Math.max(1, aspect),      // Wider for landscape
-        baseSize * Math.max(1, 1 / aspect),  // Taller for portrait
-        baseSize
+
+      this.viewportGridSize.set(
+        this.baseGridSize.x * Math.max(1, aspect),
+        this.baseGridSize.y * Math.max(1, 1 / aspect),
+        this.baseGridSize.z
       );
-      
+
       // Update boundaries gridSize
-      this.boundaries.setGridSize(newGridSize);
-      
+      this.boundaries.setGridSize(this.viewportGridSize);
+
       // Update simulator uniforms
       this.mlsMpmSim.updateBoundaryUniforms();
-      
-      console.log('📐 Viewport adapted:', newGridSize.toArray().map(v => v.toFixed(1)));
+
+      console.log('📐 Viewport adapted:', this.viewportGridSize.toArray().map(v => v.toFixed(1)));
     };
     
     window.addEventListener('resize', this.resizeHandler);
@@ -519,7 +498,7 @@ export class FlowApp {
     // Update audio-reactive behavior system
     if (this.config.audioReactive.enabled) {
       // Debug: Log audio values periodically (~1/sec at 60fps)
-      if (Math.random() < 0.016) {
+      if (import.meta.env.DEV && Math.random() < 0.016) {
         console.log('🎵 Audio:', {
           bass: audioData.smoothBass.toFixed(2),
           mid: audioData.smoothMid.toFixed(2),
@@ -536,7 +515,7 @@ export class FlowApp {
       this.audioReactiveBehavior.updateBeatEffects(
         audioData,
         delta,
-        new THREE.Vector3(64, 64, 64)
+        this.viewportGridSize
       );
       
       // Update visualization mode
@@ -569,9 +548,15 @@ export class FlowApp {
       }
     } else {
       // NEW UNIFIED SYSTEM (default, always active)
+      const particleSize =
+        this.visualsPanel?.settings.particleSize ??
+        this.config.particles.actualSize ??
+        this.config.particles.size ??
+        1.0;
+
       this.rendererManager.update(
         this.config.particles.count,
-        this.visualsPanel?.settings.particleSize || this.config.particles.actualSize
+        particleSize
       );
       
       // Update renderer with audio reactivity if enabled
@@ -659,10 +644,12 @@ export class FlowApp {
       );
       
       // Update performance metrics
+      const fps = delta > 0 ? 1 / delta : 0;
+      const frameMs = delta > 0 ? delta * 1000 : 0;
       this.physicPanel.updateMetrics(
         this.config.particles.count,
-        1 / delta,
-        delta * 1000
+        fps,
+        frameMs
       );
     }
 
@@ -704,9 +691,15 @@ export class FlowApp {
     this.currentRenderObject = newRenderObject;
     
     // Update renderer with current particle count
+    const particleSize =
+      this.visualsPanel?.settings.particleSize ??
+      this.config.particles.actualSize ??
+      this.config.particles.size ??
+      1.0;
+
     this.rendererManager.update(
       this.mlsMpmSim.numParticles,
-      this.visualsPanel?.settings.particleSize || 1.0
+      particleSize
     );
 
     console.log(`✅ Now rendering with: ${RendererManager.getModeName(mode)}`);

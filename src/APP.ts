@@ -69,6 +69,9 @@ export class FlowApp {
   // Mouse interaction
   private raycaster!: THREE.Raycaster;
   private plane!: THREE.Plane;
+  private readonly pointerMoveHandler = (event: PointerEvent) => {
+    this.onMouseMove(event);
+  };
 
   constructor(private renderer: THREE.WebGPURenderer) {}
 
@@ -407,9 +410,7 @@ export class FlowApp {
     // Setup mouse interaction
     this.raycaster = this.scenery.createRaycaster();
     this.plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.2);
-    this.renderer.domElement.addEventListener("pointermove", (event) => {
-      this.onMouseMove(event);
-    });
+    this.renderer.domElement.addEventListener("pointermove", this.pointerMoveHandler);
 
     // Setup window resize handler for adaptive viewport boundaries
     this.setupResizeHandler();
@@ -746,6 +747,8 @@ export class FlowApp {
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
     }
+
+    this.renderer.domElement.removeEventListener("pointermove", this.pointerMoveHandler);
     
     this.dashboard.dispose();
     this.scenery.dispose();

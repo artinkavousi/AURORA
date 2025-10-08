@@ -4,9 +4,10 @@
  */
 
 import { Pane } from 'tweakpane';
+import type { TpPluginBundle } from 'tweakpane';
 import * as EssentialsPlugin from '@tweakpane/plugin-essentials';
 import * as InfodumpPlugin from 'tweakpane-plugin-infodump';
-import type { FpsGraphBladeApi } from '@tweakpane/plugin-essentials/dist/types/fps-graph/api/fps-graph';
+import type { FpsGraphBladeApi } from '@tweakpane/plugin-essentials';
 
 export type DashboardDock = 'left' | 'right' | 'bottom';
 
@@ -78,6 +79,9 @@ const DEFAULT_THEME: DashboardTheme = {
 };
 
 const THEME_STORAGE_KEY = 'aurora.dashboard.theme.default';
+
+const ESSENTIALS_BUNDLE = EssentialsPlugin as unknown as TpPluginBundle;
+const INFODUMP_BUNDLE = InfodumpPlugin as unknown as TpPluginBundle;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -182,8 +186,6 @@ export class Dashboard {
   };
 
   constructor(options: DashboardOptions = {}) {
-    // Tweakpane v4 doesn't require global plugin registration
-
     this.theme = this.loadPersistedTheme() ?? { ...DEFAULT_THEME };
     this.dock = options.defaultDock ?? 'right';
 
@@ -205,7 +207,6 @@ export class Dashboard {
     this.root.appendChild(this.resizeHandle);
 
     document.body.appendChild(this.root);
-    console.log('[Dashboard] Root element appended to body', this.root);
 
     this.applyDock(this.dock);
     if (typeof window !== 'undefined') {
@@ -226,6 +227,11 @@ export class Dashboard {
     console.log('[Dashboard] Initialized successfully. Panels count:', this.panels.size);
   }
 
+  private configurePane(pane: Pane): void {
+    pane.registerPlugin(ESSENTIALS_BUNDLE);
+    pane.registerPlugin(INFODUMP_BUNDLE);
+  }
+
   /** Register a panel and return its Tweakpane instance */
   public registerPanel(options: DashboardPanelOptions): Pane {
     console.log(`[Dashboard] Registering panel: ${options.id} - ${options.title}`);
@@ -244,6 +250,7 @@ export class Dashboard {
       container: page,
       title: options.title,
     });
+    this.configurePane(pane);
     pane.element.classList.add('aurora-pane');
     pane.element.setAttribute('data-panel-id', options.id);
 
@@ -277,14 +284,12 @@ export class Dashboard {
 
   /** Activate a panel by id */
   public activatePanel(id: string): void {
-    console.log(`[Dashboard] Activating panel: ${id}`);
     const target = this.panels.get(id);
     if (!target) {
       console.warn(`[Dashboard] Panel "${id}" not found.`);
       return;
     }
     if (this.activePanelId === id) {
-      console.log(`[Dashboard] Panel ${id} already active, expanding...`);
       this.expand();
       return;
     }
@@ -296,13 +301,11 @@ export class Dashboard {
       panel.tab.classList.toggle('is-active', active);
       panel.tab.setAttribute('aria-selected', active ? 'true' : 'false');
       if (active) {
-        // @ts-expect-error - Tweakpane v4 has refresh() but types may be incomplete
         requestAnimationFrame(() => panel.pane.refresh());
       }
     });
 
     this.activePanelId = id;
-    console.log(`[Dashboard] Panel ${id} activated. Dashboard collapsed:`, this.collapsed);
     this.expand();
   }
 
@@ -327,11 +330,7 @@ export class Dashboard {
   }
 
   public expand(): void {
-    if (!this.collapsed) {
-      console.log('[Dashboard] Already expanded, skipping');
-      return;
-    }
-    console.log('[Dashboard] Expanding dashboard');
+    if (!this.collapsed) return;
     this.collapsed = false;
     this.root.classList.remove('is-collapsed');
     this.collapseButton.setAttribute('aria-expanded', 'true');
@@ -395,7 +394,6 @@ export class Dashboard {
     root.addEventListener('transitionend', () => {
       if (this.activePanelId) {
         const panel = this.panels.get(this.activePanelId);
-        // @ts-expect-error - Tweakpane v4 has refresh() but types may be incomplete
         panel?.pane.refresh();
       }
     });
@@ -599,7 +597,6 @@ export class Dashboard {
 
     this.updateTabOrientation();
     if (this.activePanelId) {
-      // @ts-expect-error - Tweakpane v4 has refresh() but types may be incomplete
       this.panels.get(this.activePanelId)?.pane.refresh();
     }
   }
@@ -1166,10 +1163,6 @@ export class Dashboard {
   }
 
   private createPerformancePanel(): void {
-    // TODO: Re-enable when @tweakpane/plugin-essentials is updated for Tweakpane v4
-    // FPS graph requires plugin that's not yet compatible with Tweakpane v4
-    console.warn('[Dashboard] FPS panel disabled - waiting for Tweakpane v4 compatible plugin-essentials');
-    /*
     const pane = this.registerPanel({
       id: 'performance',
       title: 'Performance',
@@ -1182,7 +1175,6 @@ export class Dashboard {
       lineCount: 2,
     }) as unknown as FpsGraphBladeApi;
     this.fpsGraph = fps;
-    */
   }
 
   private createInfoPanel(): void {
@@ -1193,10 +1185,9 @@ export class Dashboard {
       description: 'System overview',
     });
 
-    // @ts-expect-error - Tweakpane v4 has addFolder() but types may be incomplete
     const info = pane.addFolder({ title: 'Aurora Control Surface', expanded: true });
-    info.addBinding({ version: '1.0' }, 'version', { readonly: true, label: 'Version' });
-    info.addBinding({ build: 'adaptive-dashboard' }, 'build', { readonly: true, label: 'Build' });
+    info.addMonitor({ version: '1.0', build: 'adaptive-dashboard' }, 'version', { label: 'Version' });
+    info.addMonitor({ build: 'adaptive-dashboard' }, 'build', { label: 'Build' });
   }
 }
 

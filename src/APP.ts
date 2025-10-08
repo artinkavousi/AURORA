@@ -523,6 +523,10 @@ export class FlowApp {
         mid: audioData.smoothMid,
         treble: audioData.smoothTreble,
         beatIntensity: audioData.beatIntensity,
+        containment: audioData.modulators.containment,
+        flow: audioData.modulators.flow,
+        shimmer: audioData.modulators.shimmer,
+        sway: audioData.modulators.sway,
       });
     } else {
       this.boundaries.update(elapsed);

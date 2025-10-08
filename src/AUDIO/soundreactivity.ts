@@ -28,12 +28,26 @@ export interface AudioHistorySnapshot {
 }
 
 export interface AudioModulationState {
-  pulse: number;   // Beat + onset energy
-  flow: number;    // Macro motion & envelopes
-  shimmer: number; // Treble + stereo sparkle
-  warp: number;    // Stereo balance driven warp
-  density: number; // Particle emission density
-  aura: number;    // Post/Bloom intensity
+  pulse: number;       // Beat + onset energy
+  flow: number;        // Macro motion & envelopes
+  shimmer: number;     // Treble + stereo sparkle
+  warp: number;        // Stereo balance driven warp
+  density: number;     // Particle emission density
+  aura: number;        // Post/Bloom intensity
+  containment: number; // Boundary expansion drive
+  sway: number;        // Normalized stereo sway (0-1)
+}
+
+export interface AudioDynamicsState {
+  momentum: number;     // [-1, 1] Energy slope
+  acceleration: number; // [-1, 1] Change of momentum
+  breath: number;       // 0-1 macro rhythmic stability
+}
+
+export interface AudioMotionState {
+  expansion: number; // 0-1 outward motion request
+  sway: number;      // [-1, 1] stereo driven sway
+  sparkle: number;   // 0-1 treble/harmonic sparkle
 }
 
 export interface AudioData {
@@ -62,6 +76,9 @@ export interface AudioData {
 
   tempoPhase: number;
   overallTrend: number;
+
+  dynamics: AudioDynamicsState;
+  motion: AudioMotionState;
 
   features: AudioFeatureSummary;
   history: AudioHistorySnapshot;
@@ -116,11 +133,18 @@ export class SoundReactivity {
     warp: 0,
     density: 0,
     aura: 0,
+    containment: 0,
+    sway: 0.5,
   };
+  private smoothedMotion: AudioMotionState = { expansion: 0, sway: 0, sparkle: 0 };
 
   private smoothedFlux = 0;
   private smoothedOnset = 0;
   private previousOverall = 0;
+  private energyMomentum = 0;
+  private energyAcceleration = 0;
+  private stereoDrift = 0;
+  private previousMomentum = 0;
 
   private loudnessHistory: Float32Array = new Float32Array(0);
   private fluxHistory: Float32Array = new Float32Array(0);
@@ -323,6 +347,10 @@ export class SoundReactivity {
     const stereo = this.computeStereoMetrics();
     const groove = this.computeGroove(bands, spectralFlux);
 
+    const momentum = this.computeEnergyMomentum(bands.overall, deltaTime);
+    const acceleration = this.computeEnergyAcceleration(momentum, deltaTime);
+    const stereoDrift = this.computeStereoDrift();
+
     const features: AudioFeatureSummary = {
       spectralFlux,
       harmonicEnergy: harmonicity.energy,
@@ -335,6 +363,13 @@ export class SoundReactivity {
       groove,
     };
 
+    const motion = this.computeMotionState(bands, spectralFlux, features, momentum, stereoDrift);
+    const dynamics: AudioDynamicsState = {
+      momentum,
+      acceleration,
+      breath: THREE.MathUtils.clamp(this.rhythmConfidence * 0.6 + groove * 0.4, 0, 1),
+    };
+
     const smoothingFactor = Math.exp(-deltaTime * THREE.MathUtils.lerp(2.5, 7.5, 1 - this.config.featureSmoothing));
     this.smoothedValues.bass = this.lerp(bands.bass, this.smoothedValues.bass, smoothingFactor);
     this.smoothedValues.mid = this.lerp(bands.mid, this.smoothedValues.mid, smoothingFactor);
@@ -344,7 +379,7 @@ export class SoundReactivity {
     const historyBeatValue = beatData.isBeat ? beatData.intensity : beatData.intensity * 0.5;
     this.pushHistory(bands.overall, spectralFlux, historyBeatValue);
 
-    const modulators = this.updateModulators(bands, features);
+    const modulators = this.updateModulators(bands, features, motion, dynamics);
 
     const overallTrend = THREE.MathUtils.clamp(bands.overall - this.previousOverall, -1, 1);
     this.previousOverall = bands.overall;
@@ -369,6 +404,8 @@ export class SoundReactivity {
       deltaTime,
       tempoPhase: this.tempoPhase,
       overallTrend,
+      dynamics,
+      motion,
       features,
       history: this.getHistorySnapshot(),
       modulators,
@@ -575,24 +612,128 @@ export class SoundReactivity {
     return THREE.MathUtils.clamp(blend * (0.5 + this.config.grooveSensitivity), 0, 1);
   }
 
+  private computeEnergyMomentum(overall: number, deltaTime: number): number {
+    const slope = (overall - this.previousOverall) / Math.max(deltaTime, 1e-3);
+    const normalized = THREE.MathUtils.clamp(slope * 4.0, -1, 1);
+    this.previousMomentum = this.energyMomentum;
+    const smoothing = THREE.MathUtils.clamp(this.config.dynamicsSmoothing ?? this.config.featureSmoothing, 0, 0.999);
+    this.energyMomentum = this.lerp(normalized, this.energyMomentum, smoothing);
+    return this.energyMomentum;
+  }
+
+  private computeEnergyAcceleration(momentum: number, deltaTime: number): number {
+    const slopeChange = (momentum - this.previousMomentum) / Math.max(deltaTime, 1e-3);
+    const normalized = THREE.MathUtils.clamp(slopeChange * 2.0, -1, 1);
+    const smoothing = THREE.MathUtils.clamp(this.config.dynamicsSmoothing ?? this.config.featureSmoothing, 0, 0.999);
+    this.energyAcceleration = this.lerp(normalized, this.energyAcceleration, smoothing);
+    return this.energyAcceleration;
+  }
+
+  private computeStereoDrift(): number {
+    if (!this.leftFrequencyData.length || !this.rightFrequencyData.length) {
+      return this.stereoDrift;
+    }
+
+    const leftEnergy = this.computeChannelEnergy(this.leftFrequencyData);
+    const rightEnergy = this.computeChannelEnergy(this.rightFrequencyData);
+    const total = leftEnergy + rightEnergy + 1e-5;
+    const drift = THREE.MathUtils.clamp((rightEnergy - leftEnergy) / total, -1, 1);
+    const smoothing = THREE.MathUtils.clamp(this.config.motionSmoothing ?? this.config.featureSmoothing, 0, 0.999);
+    this.stereoDrift = this.lerp(drift, this.stereoDrift, smoothing * 0.85);
+    return this.stereoDrift;
+  }
+
+  private computeChannelEnergy(data: Uint8Array): number {
+    if (!data.length) return 0;
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      sum += data[i];
+    }
+    return sum / (data.length * 255);
+  }
+
+  private computeMotionState(
+    bands: { bass: number; mid: number; treble: number; overall: number },
+    spectralFlux: number,
+    features: AudioFeatureSummary,
+    momentum: number,
+    stereoDrift: number
+  ): AudioMotionState {
+    const expansion = THREE.MathUtils.clamp(
+      bands.overall * 0.45 +
+        Math.max(0, momentum) * 0.35 +
+        features.groove * 0.25,
+      0,
+      1
+    );
+
+    const sparkle = THREE.MathUtils.clamp(
+      bands.treble * 0.35 +
+        spectralFlux * 0.25 +
+        features.harmonicEnergy * 0.2 +
+        features.harmonicRatio * 0.2,
+      0,
+      1
+    );
+
+    const sway = THREE.MathUtils.clamp(stereoDrift, -1, 1);
+    const smoothing = THREE.MathUtils.clamp(this.config.motionSmoothing ?? this.config.featureSmoothing, 0, 0.999);
+
+    this.smoothedMotion.expansion = this.lerp(expansion, this.smoothedMotion.expansion, smoothing);
+    this.smoothedMotion.sparkle = this.lerp(sparkle, this.smoothedMotion.sparkle, smoothing);
+    this.smoothedMotion.sway = this.lerp(sway, this.smoothedMotion.sway, smoothing);
+
+    return { ...this.smoothedMotion };
+  }
+
   private updateModulators(
     bands: { bass: number; mid: number; treble: number; overall: number },
-    features: AudioFeatureSummary
+    features: AudioFeatureSummary,
+    motion: AudioMotionState,
+    dynamics: AudioDynamicsState
   ): AudioModulationState {
     const balanceNormalized = (features.stereoBalance + 1) * 0.5;
 
     const targets: AudioModulationState = {
-      pulse: THREE.MathUtils.clamp(features.onsetEnergy * 0.6 + features.spectralFlux * 0.4, 0, 1),
-      flow: THREE.MathUtils.clamp(this.smoothedValues.overall * 0.5 + features.rhythmConfidence * 0.5, 0, 1),
-      shimmer: THREE.MathUtils.clamp(bands.treble * 0.6 + features.stereoWidth * 0.4, 0, 1),
-      warp: THREE.MathUtils.clamp(balanceNormalized * 0.8 + features.stereoWidth * 0.2, 0, 1),
-      density: THREE.MathUtils.clamp(bands.bass * 0.4 + bands.mid * 0.35 + features.groove * 0.25, 0, 1),
-      aura: THREE.MathUtils.clamp(this.smoothedValues.overall * 0.6 + features.stereoWidth * 0.2 + features.harmonicRatio * 0.2, 0, 1),
+      pulse: THREE.MathUtils.clamp(
+        features.onsetEnergy * 0.5 +
+          features.spectralFlux * 0.25 +
+          Math.max(0, dynamics.acceleration) * 0.25,
+        0,
+        1
+      ),
+      flow: THREE.MathUtils.clamp(
+        this.smoothedValues.overall * 0.35 +
+          features.rhythmConfidence * 0.35 +
+          dynamics.breath * 0.2 +
+          Math.max(0, dynamics.momentum) * 0.1,
+        0,
+        1
+      ),
+      shimmer: THREE.MathUtils.clamp(motion.sparkle * 0.7 + features.stereoWidth * 0.3, 0, 1),
+      warp: THREE.MathUtils.clamp(balanceNormalized * 0.7 + motion.sway * 0.15 + features.stereoWidth * 0.15, 0, 1),
+      density: THREE.MathUtils.clamp(
+        bands.bass * 0.35 + bands.mid * 0.3 + motion.expansion * 0.2 + features.groove * 0.15,
+        0,
+        1
+      ),
+      aura: THREE.MathUtils.clamp(
+        this.smoothedValues.overall * 0.4 +
+          motion.sparkle * 0.35 +
+          features.harmonicRatio * 0.15 +
+          features.stereoWidth * 0.1,
+        0,
+        1
+      ),
+      containment: THREE.MathUtils.clamp(motion.expansion * 0.6 + dynamics.momentum * 0.25 + features.rhythmConfidence * 0.15, 0, 1),
+      sway: THREE.MathUtils.clamp((motion.sway + 1) * 0.5, 0, 1),
     };
+
+    const smoothing = THREE.MathUtils.clamp(this.config.modulationSmoothing ?? this.config.featureSmoothing, 0, 0.999);
 
     for (const key of Object.keys(targets) as (keyof AudioModulationState)[]) {
       const target = targets[key];
-      this.modulationState[key] = this.lerp(target, this.modulationState[key], this.config.featureSmoothing);
+      this.modulationState[key] = this.lerp(target, this.modulationState[key], smoothing);
     }
 
     return { ...this.modulationState };
@@ -667,6 +808,12 @@ export class SoundReactivity {
         stereoWidth: 0,
         groove: 0,
       },
+      dynamics: {
+        momentum: 0,
+        acceleration: 0,
+        breath: 0,
+      },
+      motion: { ...this.smoothedMotion },
       history,
       modulators: { ...this.modulationState },
     };
@@ -719,5 +866,6 @@ export class SoundReactivity {
     this.beatHistory = [];
     this.rhythmConfidence = 0;
     this.tempoEstimate = 120;
+    this.smoothedMotion = { expansion: 0, sway: 0, sparkle: 0 };
   }
 }

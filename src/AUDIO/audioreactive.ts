@@ -189,6 +189,16 @@ export class AudioReactiveBehavior {
     modWarp: uniform(0),
     modDensity: uniform(0),
     modAura: uniform(0),
+    modContainment: uniform(0),
+    modSway: uniform(0),
+
+    // Dynamics & motion metrics
+    dynamicMomentum: uniform(0),
+    dynamicAcceleration: uniform(0),
+    dynamicBreath: uniform(0),
+    motionExpansion: uniform(0),
+    motionSway: uniform(0),
+    motionSparkle: uniform(0),
   };
   
   // Beat-triggered vortex tracking
@@ -267,12 +277,20 @@ export class AudioReactiveBehavior {
     this.audioUniforms.stereoBalance.value = audioData.features.stereoBalance;
     this.audioUniforms.stereoWidth.value = audioData.features.stereoWidth;
     this.audioUniforms.groove.value = audioData.features.groove;
+    this.audioUniforms.dynamicMomentum.value = audioData.dynamics.momentum;
+    this.audioUniforms.dynamicAcceleration.value = audioData.dynamics.acceleration;
+    this.audioUniforms.dynamicBreath.value = audioData.dynamics.breath;
+    this.audioUniforms.motionExpansion.value = audioData.motion.expansion;
+    this.audioUniforms.motionSway.value = audioData.motion.sway;
+    this.audioUniforms.motionSparkle.value = audioData.motion.sparkle;
     this.audioUniforms.modPulse.value = audioData.modulators.pulse;
     this.audioUniforms.modFlow.value = audioData.modulators.flow;
     this.audioUniforms.modShimmer.value = audioData.modulators.shimmer;
     this.audioUniforms.modWarp.value = audioData.modulators.warp;
     this.audioUniforms.modDensity.value = audioData.modulators.density;
     this.audioUniforms.modAura.value = audioData.modulators.aura;
+    this.audioUniforms.modContainment.value = audioData.modulators.containment;
+    this.audioUniforms.modSway.value = audioData.modulators.sway;
   }
   
   /**
@@ -308,31 +326,34 @@ export class AudioReactiveBehavior {
       const flowLift = audioData.modulators.flow * this.config.modulationFlowTurbulence;
       const balance = THREE.MathUtils.clamp(audioData.features.stereoBalance, -1, 1);
       const heightPhase = THREE.MathUtils.lerp(0.2, 0.8, audioData.tempoPhase);
+      const containment = audioData.modulators.containment;
+      const sway = THREE.MathUtils.clamp(audioData.modulators.sway * 2 - 1, -1, 1);
+      const expansion = THREE.MathUtils.clamp(audioData.motion.expansion, 0, 1);
 
       if (this.config.forceFieldMode === AudioForceFieldMode.BEAT_VORTEX) {
         const posX = THREE.MathUtils.clamp(
-          gridSize.x * (0.5 + (Math.random() - 0.5) * 0.8 + balance * warpFactor * 0.25),
+          gridSize.x * (0.5 + (Math.random() - 0.5) * 0.8 + balance * warpFactor * 0.25 + sway * 0.15),
           0,
           gridSize.x
         );
         const posY = THREE.MathUtils.clamp(gridSize.y * heightPhase, gridSize.y * 0.15, gridSize.y * 0.9);
         const posZ = THREE.MathUtils.clamp(
-          gridSize.z * (0.5 + (Math.random() - 0.5) * densityFactor * 0.6),
+          gridSize.z * (0.5 + (Math.random() - 0.5) * densityFactor * 0.6 + (containment - 0.5) * 0.2),
           0,
           gridSize.z
         );
 
         const position = new THREE.Vector3(posX, posY, posZ);
         const axis = new THREE.Vector3(
-          (Math.random() - 0.5) * (0.2 + warpFactor * 0.3) + balance * 0.4,
-          0.4 + Math.random() * 0.6 + flowLift * 0.5,
-          (Math.random() - 0.5) * (0.2 + warpFactor * 0.3) - balance * 0.4
+          (Math.random() - 0.5) * (0.2 + warpFactor * 0.3) + balance * 0.4 + sway * 0.2,
+          0.4 + Math.random() * 0.6 + flowLift * 0.5 + expansion * 0.3,
+          (Math.random() - 0.5) * (0.2 + warpFactor * 0.3) - balance * 0.4 - sway * 0.2
         ).normalize();
 
         const strength = this.config.forceFieldStrength * beatStrength * pulseFactor;
         const bassRatio = audioData.bass / (audioData.overall + 0.001);
-        const lifetime = 0.8 + bassRatio * (1.5 + flowLift);
-        const radius = this.config.beatRadius * warpFactor;
+        const lifetime = 0.8 + bassRatio * (1.5 + flowLift + expansion * 0.6);
+        const radius = this.config.beatRadius * warpFactor * (0.9 + containment * 0.3);
 
         this.activeVortexes.push({
           position,
@@ -377,9 +398,11 @@ export class AudioReactiveBehavior {
     if (!this.config.materialModulation) {
       return { viscosity: 0.5, stiffness: 250 };
     }
-    
+
     const viscosityMix = THREE.MathUtils.clamp(
-      audioData.smoothBass * 0.5 + audioData.modulators.flow * this.config.modulationFlowTurbulence * 0.5,
+      audioData.smoothBass * 0.35 +
+        audioData.modulators.flow * this.config.modulationFlowTurbulence * 0.4 +
+        audioData.dynamics.breath * 0.25,
       0,
       1
     );
@@ -390,9 +413,11 @@ export class AudioReactiveBehavior {
     );
 
     const stiffnessMix = THREE.MathUtils.clamp(
-      audioData.overall * 0.4 +
+      audioData.overall * 0.35 +
         audioData.beatIntensity * 0.2 +
-        audioData.modulators.pulse * this.config.modulationPulseForce * 0.4,
+        audioData.modulators.pulse * this.config.modulationPulseForce * 0.35 +
+        Math.max(0, audioData.dynamics.momentum) * 0.2 +
+        audioData.modulators.containment * 0.15,
       0,
       1
     );

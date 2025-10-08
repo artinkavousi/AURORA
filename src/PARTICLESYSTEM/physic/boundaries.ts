@@ -101,6 +101,17 @@ export interface CollisionResult {
   penetrationDepth: number;
 }
 
+interface BoundaryAudioPayload {
+  bass: number;
+  mid: number;
+  treble: number;
+  beatIntensity: number;
+  containment?: number;
+  flow?: number;
+  shimmer?: number;
+  sway?: number;
+}
+
 /**
  * ParticleBoundaries - Comprehensive boundary management system
  * Handles collision detection, visual representation, and boundary constraints
@@ -125,6 +136,11 @@ export class ParticleBoundaries {
   private baseRadius: number = 0;  // Store base radius for pulsing
   private baseScale: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
   private viewportPulse: number = 0;  // Audio-driven viewport expansion when shape = NONE
+  private meshScaleScalar = 1;
+  private meshScaleVector: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
+  private meshGlow = 0.3;
+  private meshRotationOffset = 0;
+  private baseRotation: THREE.Euler = new THREE.Euler();
 
   // Boundary limits (in grid space)
   public readonly min: THREE.Vector3;
@@ -242,6 +258,21 @@ export class ParticleBoundaries {
     if (this.shape === BoundaryShape.BOX && this.boundaryMesh) {
       this.boundaryMesh.scale.set(this.baseScale.x, this.baseScale.y, this.baseScale.z);
     }
+
+    this.captureBaseVisualState();
+  }
+
+  private captureBaseVisualState(): void {
+    if (!this.boundaryMesh) return;
+    this.baseRotation.copy(this.boundaryMesh.rotation);
+    if (this.shape === BoundaryShape.BOX) {
+      this.meshScaleVector.copy(this.boundaryMesh.scale);
+    } else {
+      this.meshScaleVector.set(1, 1, 1);
+    }
+    this.meshScaleScalar = 1;
+    this.meshGlow = 0.3;
+    this.meshRotationOffset = 0;
   }
 
   private relaxVisualMeshState(): void {
@@ -250,16 +281,29 @@ export class ParticleBoundaries {
     switch (this.shape) {
       case BoundaryShape.BOX:
         this.boundaryMesh.scale.set(this.baseScale.x, this.baseScale.y, this.baseScale.z);
+        this.meshScaleVector.set(this.baseScale.x, this.baseScale.y, this.baseScale.z);
         break;
       case BoundaryShape.SPHERE:
       case BoundaryShape.DODECAHEDRON:
         this.boundaryMesh.scale.setScalar(1);
+        this.meshScaleVector.set(1, 1, 1);
         break;
       case BoundaryShape.TUBE:
         this.boundaryMesh.scale.set(1, 1, 1);
+        this.meshScaleVector.set(1, 1, 1);
         break;
       default:
         break;
+    }
+
+    this.meshScaleScalar = 1;
+    this.meshGlow = 0.3;
+    this.meshRotationOffset = 0;
+    this.boundaryMesh.rotation.copy(this.baseRotation);
+
+    if (this.boundaryMesh.material instanceof THREE.Material) {
+      const material = this.boundaryMesh.material as THREE.MeshPhysicalNodeMaterial;
+      material.opacity = 0.3;
     }
   }
   
@@ -799,15 +843,15 @@ export class ParticleBoundaries {
       );
       velocity.addScaledVector(tangent, -this.friction);
     }
-    
-    // Clamp position to boundary
+
     position.clamp(this.min, this.max);
   }
+
   
   /**
    * Update boundary with audio data (for audio-reactive animations)
    */
-  public update(elapsed: number, audioData?: { bass: number; mid: number; treble: number; beatIntensity: number }): void {
+  public update(elapsed: number, audioData?: BoundaryAudioPayload): void {
     if (!this.audioReactive) {
       this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, 0, 0.15);
       this.relaxVisualMeshState();
@@ -820,68 +864,90 @@ export class ParticleBoundaries {
       return;
     }
 
+    const beat = THREE.MathUtils.clamp(audioData.beatIntensity ?? 0, 0, 1);
+    const containment = THREE.MathUtils.clamp(
+      audioData.containment ?? audioData.bass * 0.5 + audioData.mid * 0.35 + audioData.treble * 0.15,
+      0,
+      1
+    );
+    const shimmer = THREE.MathUtils.clamp(audioData.shimmer ?? audioData.treble, 0, 1);
+    const flow = THREE.MathUtils.clamp(audioData.flow ?? audioData.mid, 0, 1);
+    const sway = THREE.MathUtils.clamp((audioData.sway ?? 0.5) * 2 - 1, -1, 1);
+
     if (this.shape === BoundaryShape.NONE) {
-      // In viewport mode we do not have a mesh to animate. Instead we feed an
-      // audio-driven pulse back into the physics uniforms so the invisible
-      // viewport boundary expands and contracts with the beat. This prevents
-      // particles from drifting out of view when sound reactivity is enabled.
       const combinedEnergy =
-        audioData.bass * 0.6 +
-        audioData.mid * 0.3 +
-        audioData.treble * 0.1 +
-        audioData.beatIntensity * 0.5;
-      const targetPulse = THREE.MathUtils.clamp(combinedEnergy * this.audioPulseStrength, 0, 1);
+        audioData.bass * 0.45 +
+        audioData.mid * 0.35 +
+        audioData.treble * 0.2 +
+        beat * 0.6 +
+        containment * 0.5;
+      const targetPulse = THREE.MathUtils.clamp(combinedEnergy * this.audioPulseStrength * 1.2, 0, 0.4);
       this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, targetPulse, 0.25);
       this.relaxVisualMeshState();
       return;
     }
 
-    // For visible meshes we keep the viewport pulse relaxed to avoid bleeding
-    // into the viewport uniform logic.
     this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, 0, 0.2);
 
-    if (!this.boundaryMesh) return;
+    if (!this.boundaryMesh) {
+      return;
+    }
 
-    // Audio-reactive pulsing for glass containers
+    const baseOpacity = 0.25 + containment * 0.1;
+
     if (this.shape === BoundaryShape.SPHERE || this.shape === BoundaryShape.DODECAHEDRON) {
-      // Pulse scale based on bass
-      const pulseScale = 1.0 + audioData.bass * this.audioPulseStrength;
-      this.boundaryMesh.scale.setScalar(pulseScale);
+      const pulseStrength = audioData.bass * 0.6 + containment * 0.4;
+      const targetScale = 1 + pulseStrength * this.audioPulseStrength * 1.3 + beat * 0.1;
+      this.meshScaleScalar = THREE.MathUtils.lerp(this.meshScaleScalar, targetScale, 0.18);
+      this.boundaryMesh.scale.setScalar(this.meshScaleScalar);
 
-      // Beat flash (opacity pulse)
+      this.meshGlow = THREE.MathUtils.lerp(this.meshGlow, baseOpacity + shimmer * 0.35 + beat * 0.25, 0.25);
+      this.meshRotationOffset = THREE.MathUtils.lerp(this.meshRotationOffset, sway * 0.35, 0.12);
+      this.boundaryMesh.rotation.y = this.baseRotation.y + this.meshRotationOffset;
+
       if (this.boundaryMesh.material instanceof THREE.Material) {
         const material = this.boundaryMesh.material as THREE.MeshPhysicalNodeMaterial;
-        const baseOpacity = 0.3;
-        const beatFlash = audioData.beatIntensity * 0.2;
-        material.opacity = baseOpacity + beatFlash;
+        material.opacity = THREE.MathUtils.clamp(this.meshGlow, 0.1, 0.85);
       }
     } else if (this.shape === BoundaryShape.TUBE) {
-      // Tube: radial pulse + height modulation
-      const radialPulse = 1.0 + audioData.mid * this.audioPulseStrength;
-      const heightPulse = 1.0 + audioData.bass * this.audioPulseStrength * 0.5;
-      this.boundaryMesh.scale.set(radialPulse, heightPulse, radialPulse);
+      const targetRadial = 1 + (flow * 0.45 + containment * 0.35 + beat * 0.15) * this.audioPulseStrength;
+      const targetHeight = 1 + (audioData.bass * 0.35 + containment * 0.4) * this.audioPulseStrength;
+      this.meshScaleVector.set(
+        THREE.MathUtils.lerp(this.meshScaleVector.x, targetRadial, 0.18),
+        THREE.MathUtils.lerp(this.meshScaleVector.y, targetHeight, 0.18),
+        THREE.MathUtils.lerp(this.meshScaleVector.z, targetRadial, 0.18)
+      );
+      this.boundaryMesh.scale.copy(this.meshScaleVector);
 
-      // Beat flash
+      this.meshGlow = THREE.MathUtils.lerp(this.meshGlow, baseOpacity + shimmer * 0.3 + beat * 0.2, 0.2);
+      this.meshRotationOffset = THREE.MathUtils.lerp(this.meshRotationOffset, sway * 0.25, 0.1);
+      this.boundaryMesh.rotation.y = this.baseRotation.y + this.meshRotationOffset;
+
       if (this.boundaryMesh.material instanceof THREE.Material) {
         const material = this.boundaryMesh.material as THREE.MeshPhysicalNodeMaterial;
-        material.opacity = 0.3 + audioData.beatIntensity * 0.2;
+        material.opacity = THREE.MathUtils.clamp(this.meshGlow, 0.1, 0.75);
       }
     } else if (this.shape === BoundaryShape.BOX) {
-      // Box: subtle pulse + rotation on beat
-      const pulseScale = 1.0 + (audioData.bass + audioData.mid + audioData.treble) / 3 * this.audioPulseStrength * 0.3;
-      this.boundaryMesh.scale.set(
-        this.baseScale.x * pulseScale,
-        this.baseScale.y * pulseScale,
-        this.baseScale.z * pulseScale
-      );
+      const energy = (audioData.bass + audioData.mid + audioData.treble) / 3;
+      const targetScalar = 1 + (energy * 0.25 + containment * 0.3) * this.audioPulseStrength + beat * 0.08;
+      const targetHeight = this.baseScale.y * (1 + flow * this.audioPulseStrength * 0.25);
 
-      // Subtle rotation on strong beats
-      if (audioData.beatIntensity > 0.7) {
-        this.boundaryMesh.rotation.y += audioData.beatIntensity * 0.01;
+      this.meshScaleVector.set(
+        THREE.MathUtils.lerp(this.meshScaleVector.x, this.baseScale.x * targetScalar, 0.16),
+        THREE.MathUtils.lerp(this.meshScaleVector.y, targetHeight, 0.16),
+        THREE.MathUtils.lerp(this.meshScaleVector.z, this.baseScale.z * targetScalar, 0.16)
+      );
+      this.boundaryMesh.scale.copy(this.meshScaleVector);
+
+      this.meshRotationOffset = THREE.MathUtils.lerp(this.meshRotationOffset, sway * 0.25 + beat * 0.05, 0.1);
+      this.boundaryMesh.rotation.y = this.baseRotation.y + this.meshRotationOffset;
+
+      if (this.boundaryMesh.material instanceof THREE.Material) {
+        const material = this.boundaryMesh.material as THREE.MeshStandardNodeMaterial;
+        material.opacity = THREE.MathUtils.clamp(baseOpacity + beat * 0.2, 0.2, 0.9);
       }
     }
   }
-  
   /**
    * Set visibility
    */

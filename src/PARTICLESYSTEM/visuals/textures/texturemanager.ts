@@ -1,5 +1,5 @@
 /**
- * PARTICLESYSTEM/textures/texturemanager.ts - Texture management system
+ * PARTICLESYSTEM/visuals/textures/texturemanager.ts - Texture management system
  * Single responsibility: Texture loading, atlas generation, and caching
  */
 

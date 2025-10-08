@@ -122,6 +122,15 @@ function createRoundedBox(width: number, height: number, depth: number, radius: 
 export interface MeshRendererConfig {
   metalness?: number;
   roughness?: number;
+  emissive?: number;
+  emissiveIntensity?: number;
+  transmission?: number;
+  thickness?: number;
+  ior?: number;
+  iridescence?: number;
+  iridescenceIOR?: number;
+  clearcoat?: number;
+  clearcoatRoughness?: number;
 }
 
 /**
@@ -147,6 +156,15 @@ export class MeshRenderer {
     const {
       metalness = 0.900,
       roughness = 0.50,
+      emissive = 0.0,
+      emissiveIntensity = 1.0,
+      transmission = 0.0,
+      thickness = 0.5,
+      ior = 1.5,
+      iridescence = 0.0,
+      iridescenceIOR = 1.3,
+      clearcoat = 0.0,
+      clearcoatRoughness = 0.0,
     } = config;
     
     // Store base values
@@ -167,13 +185,39 @@ export class MeshRenderer {
     const mergedGeometry = BufferGeometryUtils.mergeGeometries([roundedBoxGeometry, boxGeometry])!;
     this.geometry = new THREE.InstancedBufferGeometry().copy(mergedGeometry as any);
     this.geometry.setDrawRange(0, this.defaultIndexCount);
-    this.geometry.instanceCount = this.simulator.numParticles;
+    
+    // Validate particle count to prevent WebGPU errors
+    const initialCount = Number.isFinite(this.simulator.numParticles) && this.simulator.numParticles > 0
+      ? Math.floor(this.simulator.numParticles)
+      : 1;
+    this.geometry.instanceCount = initialCount;
 
-    // Create material
+    // Create enhanced material with advanced properties
     this.material = new THREE.MeshStandardNodeMaterial({
       metalness,
       roughness,
+      emissive: emissive > 0 ? new THREE.Color(emissive, emissive, emissive) : undefined,
+      emissiveIntensity,
     });
+    
+    // Apply advanced material properties if supported
+    // Note: These properties are available in MeshPhysicalMaterial but not yet exposed in MeshStandardNodeMaterial
+    // They can be accessed via the material's internal properties once the API is updated
+    if (transmission > 0) {
+      (this.material as any).transmission = transmission;
+      (this.material as any).thickness = thickness;
+      (this.material as any).ior = ior;
+    }
+    
+    if (iridescence > 0) {
+      (this.material as any).iridescence = iridescence;
+      (this.material as any).iridescenceIOR = iridescenceIOR;
+    }
+    
+    if (clearcoat > 0) {
+      (this.material as any).clearcoat = clearcoat;
+      (this.material as any).clearcoatRoughness = clearcoatRoughness;
+    }
 
     this.sizeUniform = uniform(1);
     const vAo = varying(0, "vAo");
@@ -227,8 +271,14 @@ export class MeshRenderer {
    * Update renderer (particle count, size)
    */
   public update(particleCount: number, size: number): void {
-    this.geometry.instanceCount = particleCount;
-    this.sizeUniform.value = size;
+    // Validate to prevent WebGPU errors
+    const validCount = Number.isFinite(particleCount) && particleCount > 0 
+      ? Math.floor(particleCount) 
+      : 1;
+    const validSize = Number.isFinite(size) && size > 0 ? size : 1.0;
+    
+    this.geometry.instanceCount = validCount;
+    this.sizeUniform.value = validSize;
   }
 
   /**

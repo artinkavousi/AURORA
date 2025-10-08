@@ -1177,6 +1177,15 @@ export class MlsMpmSimulator {
   public getBoundaries(): ParticleBoundaries | null {
     return this.boundaries;
   }
+
+  /**
+   * Set kinetic uniforms for audio-reactive motion
+   * Called by APP.ts after initializing kinetic systems
+   */
+  public setKineticUniforms(uniforms: KineticUniforms): void {
+    this.kineticUniforms = uniforms;
+  }
+
   
   /**
    * Update boundary uniforms from boundaries module

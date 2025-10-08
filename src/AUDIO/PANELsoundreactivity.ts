@@ -1,15 +1,31 @@
 /**
- * AUDIO/PANELsoundreactivity.ts - Clean & simple audio reactivity panel
- * Streamlined UI with essential controls and presets
+ * AUDIO/PANELsoundreactivity.ts - Unified Audio Reactivity Panel
+ * 
+ * Modern, comprehensive control panel integrating:
+ * - Legacy audio reactivity (frequency bands, modulation, presets)
+ * - Groove Intelligence Engine (swing, timing, patterns)
+ * - Musical Structure Analyzer (section detection, energy)
+ * - Predictive Timing System (beat/downbeat prediction)
+ * - Kinetic Gesture System (expressive motion primitives)
+ * - Ensemble Choreography (particle roles, formations)
+ * - Spatial Staging (depth layers, camera-aware dynamics)
  */
 
 import type { Pane } from 'tweakpane';
 import type { AudioConfig, AudioReactiveConfig } from '../config';
 import type { FlowConfig } from '../config';
-import type { Dashboard } from '../PANEL/dashboard';
 import { AudioVisualizationMode } from './audioreactive';
 import { VISUALIZATION_MODE_NAMES } from './audiovisual';
 import type { AudioData } from './soundreactivity';
+import type { EnhancedAudioData } from './core/enhanced-audio-analyzer';
+import type { GestureSelection } from './kinetic/gesture-interpreter';
+import type { EnsembleState } from './kinetic/ensemble-choreographer';
+import type { SpatialState } from './kinetic/spatial-composer';
+import { GestureFactory } from './kinetic/gesture-primitives';
+import { PersonalityType, getAllPersonalityProfiles } from './kinetic/personality-profiles';
+import type { PersonalityBlendState } from './kinetic/personality-engine';
+import { MacroType, MACRO_PRESETS, type MacroState } from './kinetic/macro-control';
+import type { PlaybackState, RecorderState } from './kinetic/sequence-recorder';
 
 export interface AudioPanelCallbacks {
   onAudioConfigChange?: (config: Partial<AudioConfig>) => void;
@@ -18,6 +34,24 @@ export interface AudioPanelCallbacks {
   onFileLoad?: (url: string) => void;
   onTogglePlayback?: () => void;
   onVolumeChange?: (volume: number) => void;
+  
+  // New system callbacks
+  onEnableChange?: (enabled: boolean) => void;
+  onMasterIntensityChange?: (intensity: number) => void;
+  onManualGestureTrigger?: (gestureName: string) => void;
+  onFormationOverride?: (formation: string | null) => void;
+  onTempoOverride?: (bpm: number) => void;
+  onBeatAlign?: () => void;
+  onPersonalityChange?: (personality: PersonalityType) => void;
+  onPersonalityAutoAdapt?: (enabled: boolean) => void;
+  
+  // Macro & sequence callbacks
+  onMacroChange?: (macro: MacroType, value: number) => void;
+  onMacroPresetApply?: (presetName: string) => void;
+  onSequenceRecord?: () => void;
+  onSequenceStop?: () => void;
+  onSequencePlay?: (sequenceId: string) => void;
+  onSequencePause?: () => void;
 }
 
 /**
@@ -113,6 +147,38 @@ export class AudioPanel {
     volume: 1.0,
     preset: PRESETS[0].name,
     masterIntensity: 1.0,
+    
+    // Quick toggles
+    groove: true,
+    gestures: true,
+    ensemble: true,
+    spatial: true,
+    
+    // Manual overrides
+    manualTempo: 120,
+    formationOverride: 'Auto',
+    personalityOverride: 'Auto' as 'Auto' | PersonalityType,
+    personalityAutoAdapt: true,
+    
+    // Macro controls
+    macroPreset: 'Zen Garden',
+    macroIntensity: 0.5,
+    macroChaos: 0.5,
+    macroSmoothness: 0.5,
+    macroResponsiveness: 0.5,
+    macroDensity: 0.5,
+    macroEnergy: 0.5,
+    macroCoherence: 0.5,
+    macroComplexity: 0.5,
+    
+    // Sequence controls
+    isRecording: false,
+    isPlaying: false,
+    sequenceLoop: false,
+    
+    // Performance
+    showMetrics: true,
+    showAdvanced: false,
   };
   
   // Base values (for scaling)
@@ -130,6 +196,66 @@ export class AudioPanel {
     treble: 0,
     beat: 0,
     tempoPhase: 0,
+  };
+  
+  // Enhanced metrics
+  private grooveMetrics = {
+    swingRatio: 0,
+    grooveIntensity: 0,
+    pocketTightness: 0,
+    syncopation: 0,
+    confidence: 0,
+  };
+  
+  private structureMetrics = {
+    section: 'Unknown',
+    sectionProgress: 0,
+    energy: 0,
+    tension: 0,
+    anticipation: 0,
+  };
+  
+  private timingMetrics = {
+    tempo: 120,
+    beatPhase: 0,
+    nextBeatIn: 0,
+    nextDownbeatIn: 0,
+    tempoStable: false,
+  };
+  
+  private gestureMetrics = {
+    primaryGesture: 'None',
+    gesturePhase: 0,
+    activeCount: 0,
+    blendMode: 'replace',
+  };
+  
+  private ensembleMetrics = {
+    leadCount: 0,
+    supportCount: 0,
+    ambientCount: 0,
+    formation: 'Scattered',
+    formationProgress: 0,
+  };
+  
+  private spatialMetrics = {
+    foregroundCount: 0,
+    midgroundCount: 0,
+    backgroundCount: 0,
+  };
+  
+  private personalityMetrics = {
+    globalPersonality: 'Calm',
+    transitionProgress: 1.0,
+    assignmentCount: 0,
+    calmCount: 0,
+    energeticCount: 0,
+    flowingCount: 0,
+    aggressiveCount: 0,
+    gentleCount: 0,
+    chaoticCount: 0,
+    rhythmicCount: 0,
+    etherealCount: 0,
   };
 
   private featureMetrics = {
@@ -166,22 +292,14 @@ export class AudioPanel {
   private sparklineBindings: any[] = [];
   
   constructor(
-    dashboard: Dashboard,
+    pane: Pane,
     config: FlowConfig,
     callbacks: AudioPanelCallbacks = {}
   ) {
     this.config = config;
     this.callbacks = callbacks;
     
-    // Create standalone draggable panel
-    const { pane } = dashboard.createPanel('audio', {
-      title: '🎵 Audio Reactivity',
-      position: { x: window.innerWidth - 340, y: 520 },
-      expanded: true,
-      draggable: true,
-      collapsible: true,
-    });
-    
+    // Use provided pane from unified panel system
     this.pane = pane;
     this.buildPanel();
   }
@@ -189,9 +307,39 @@ export class AudioPanel {
   private buildPanel(): void {
     // ==================== MAIN CONTROLS ====================
     this.buildMainControls();
+    
+    // ==================== QUICK TOGGLES ====================
+    this.buildQuickToggles();
 
     // ==================== LIVE OVERVIEW ====================
     this.buildOverview();
+    
+    // ==================== GROOVE INTELLIGENCE ====================
+    this.buildGrooveSection();
+    
+    // ==================== MUSICAL STRUCTURE ====================
+    this.buildStructureSection();
+    
+    // ==================== PREDICTIVE TIMING ====================
+    this.buildTimingSection();
+    
+    // ==================== GESTURES ====================
+    this.buildGesturesSection();
+    
+    // ==================== ENSEMBLE CHOREOGRAPHY ====================
+    this.buildEnsembleSection();
+    
+    // ==================== SPATIAL STAGING ====================
+    this.buildSpatialSection();
+    
+    // ==================== PERSONALITY SYSTEM ====================
+    this.buildPersonalitySection();
+    
+    // ==================== MACRO CONTROLS ====================
+    this.buildMacroSection();
+    
+    // ==================== SEQUENCE RECORDER ====================
+    this.buildSequenceSection();
 
     // ==================== FEATURE INSIGHTS ====================
     this.buildFeatureInsights();
@@ -208,6 +356,9 @@ export class AudioPanel {
     // ==================== PRESETS ====================
     this.buildPresets();
     
+    // ==================== MANUAL CONTROLS ====================
+    this.buildManualControls();
+    
     // ==================== ADVANCED (Collapsed) ====================
     this.buildAdvanced();
   }
@@ -218,7 +369,7 @@ export class AudioPanel {
   
   private buildMainControls(): void {
     const folder = this.pane.addFolder({
-      title: '🎛️ Main Controls',
+      title: '🎛️ Master',
       expanded: true,
     });
     
@@ -228,6 +379,7 @@ export class AudioPanel {
     }).on('change', (ev: any) => {
       this.config.audioReactive.enabled = ev.value;
       this.callbacks.onAudioReactiveConfigChange?.({ enabled: ev.value });
+      this.callbacks.onEnableChange?.(ev.value);
     });
     
     folder.addBlade({ view: 'separator' });
@@ -249,6 +401,34 @@ export class AudioPanel {
       
       Object.assign(this.config.audioReactive, scaledConfig);
       this.callbacks.onAudioReactiveConfigChange?.(scaledConfig);
+      this.callbacks.onMasterIntensityChange?.(ev.value);
+    });
+  }
+  
+  // ========================================
+  // QUICK TOGGLES
+  // ========================================
+  
+  private buildQuickToggles(): void {
+    const folder = this.pane.addFolder({
+      title: '⚡ Quick Toggles',
+      expanded: true,
+    });
+    
+    folder.addBinding(this.state, 'groove', {
+      label: '🎵 Groove Intelligence',
+    });
+    
+    folder.addBinding(this.state, 'gestures', {
+      label: '🎭 Gesture System',
+    });
+    
+    folder.addBinding(this.state, 'ensemble', {
+      label: '🎪 Ensemble Choreography',
+    });
+    
+    folder.addBinding(this.state, 'spatial', {
+      label: '📐 Spatial Staging',
     });
   }
   
@@ -319,6 +499,576 @@ export class AudioPanel {
       max: 1,
       view: 'graph',
     }));
+  }
+  
+  // ========================================
+  // GROOVE INTELLIGENCE
+  // ========================================
+  
+  private buildGrooveSection(): void {
+    const folder = this.pane.addFolder({
+      title: '🎵 Groove Intelligence',
+      expanded: false,
+    });
+    
+    this.metricBindings.push(folder.addBinding(this.grooveMetrics, 'swingRatio', {
+      label: 'Swing Ratio',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => {
+        if (v < 0.05) return 'Straight';
+        if (v < 0.2) return `Light (${v.toFixed(2)})`;
+        if (v < 0.4) return `Swing (${v.toFixed(2)})`;
+        return `Heavy (${v.toFixed(2)})`;
+      },
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.grooveMetrics, 'grooveIntensity', {
+      label: 'Groove Intensity',
+      readonly: true,
+      min: 0,
+      max: 1,
+      view: 'graph',
+      rows: 2,
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.grooveMetrics, 'pocketTightness', {
+      label: 'Pocket Tightness',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(2),
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.grooveMetrics, 'syncopation', {
+      label: 'Syncopation',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(2),
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.grooveMetrics, 'confidence', {
+      label: 'Analysis Confidence',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => `${(v * 100).toFixed(0)}%`,
+    }));
+  }
+  
+  // ========================================
+  // MUSICAL STRUCTURE
+  // ========================================
+  
+  private buildStructureSection(): void {
+    const folder = this.pane.addFolder({
+      title: '🎼 Musical Structure',
+      expanded: false,
+    });
+    
+    this.metricBindings.push(folder.addBinding(this.structureMetrics, 'section', {
+      label: 'Current Section',
+      readonly: true,
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.structureMetrics, 'sectionProgress', {
+      label: 'Section Progress',
+      readonly: true,
+      min: 0,
+      max: 1,
+      view: 'graph',
+      rows: 2,
+    }));
+    
+    folder.addBlade({ view: 'separator' });
+    
+    this.metricBindings.push(folder.addBinding(this.structureMetrics, 'energy', {
+      label: 'Energy',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(2),
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.structureMetrics, 'tension', {
+      label: 'Tension',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(2),
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.structureMetrics, 'anticipation', {
+      label: 'Anticipation',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(2),
+    }));
+  }
+  
+  // ========================================
+  // PREDICTIVE TIMING
+  // ========================================
+  
+  private buildTimingSection(): void {
+    const folder = this.pane.addFolder({
+      title: '⏱️ Predictive Timing',
+      expanded: false,
+    });
+    
+    this.metricBindings.push(folder.addBinding(this.timingMetrics, 'tempo', {
+      label: 'Detected Tempo',
+      readonly: true,
+      min: 60,
+      max: 180,
+      format: (v: number) => `${v.toFixed(1)} BPM`,
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.timingMetrics, 'beatPhase', {
+      label: 'Beat Phase',
+      readonly: true,
+      min: 0,
+      max: 1,
+      view: 'graph',
+      rows: 2,
+    }));
+    
+    folder.addBlade({ view: 'separator' });
+    
+    this.metricBindings.push(folder.addBinding(this.timingMetrics, 'nextBeatIn', {
+      label: 'Next Beat In',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => `${(v * 1000).toFixed(0)}ms`,
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.timingMetrics, 'nextDownbeatIn', {
+      label: 'Next Downbeat In',
+      readonly: true,
+      min: 0,
+      max: 2,
+      format: (v: number) => `${v.toFixed(2)}s`,
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.timingMetrics, 'tempoStable', {
+      label: 'Tempo Stable',
+      readonly: true,
+    }));
+  }
+  
+  // ========================================
+  // GESTURES
+  // ========================================
+  
+  private buildGesturesSection(): void {
+    const folder = this.pane.addFolder({
+      title: '🎭 Gesture System',
+      expanded: false,
+    });
+    
+    this.metricBindings.push(folder.addBinding(this.gestureMetrics, 'primaryGesture', {
+      label: 'Active Gesture',
+      readonly: true,
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.gestureMetrics, 'gesturePhase', {
+      label: 'Gesture Phase',
+      readonly: true,
+      min: 0,
+      max: 1,
+      view: 'graph',
+      rows: 2,
+    }));
+    
+    folder.addBlade({ view: 'separator' });
+    
+    this.metricBindings.push(folder.addBinding(this.gestureMetrics, 'activeCount', {
+      label: 'Active Gestures',
+      readonly: true,
+      min: 0,
+      max: 3,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.gestureMetrics, 'blendMode', {
+      label: 'Blend Mode',
+      readonly: true,
+    }));
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Manual gesture triggers
+    const triggerFolder = folder.addFolder({
+      title: 'Manual Triggers',
+      expanded: false,
+    });
+    
+    const gestures = GestureFactory.getGestureNames();
+    
+    triggerFolder.addBlade({
+      view: 'buttongrid',
+      size: [2, 3],
+      cells: (x: number, y: number) => {
+        const index = y * 2 + x;
+        if (index < gestures.length) {
+          return { title: gestures[index] };
+        }
+        return { title: '' };
+      },
+      label: 'Trigger',
+    }).on('click', (ev: any) => {
+      const index = ev.index[1] * 2 + ev.index[0];
+      if (index < gestures.length) {
+        this.callbacks.onManualGestureTrigger?.(gestures[index]);
+      }
+    });
+  }
+  
+  // ========================================
+  // ENSEMBLE CHOREOGRAPHY
+  // ========================================
+  
+  private buildEnsembleSection(): void {
+    const folder = this.pane.addFolder({
+      title: '🎪 Ensemble Choreography',
+      expanded: false,
+    });
+    
+    // Role distribution
+    const rolesFolder = folder.addFolder({
+      title: 'Role Distribution',
+      expanded: true,
+    });
+    
+    this.metricBindings.push(rolesFolder.addBinding(this.ensembleMetrics, 'leadCount', {
+      label: '⭐ Lead',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(rolesFolder.addBinding(this.ensembleMetrics, 'supportCount', {
+      label: '🎸 Support',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(rolesFolder.addBinding(this.ensembleMetrics, 'ambientCount', {
+      label: '🌫️ Ambient',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Formation
+    this.metricBindings.push(folder.addBinding(this.ensembleMetrics, 'formation', {
+      label: 'Current Formation',
+      readonly: true,
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.ensembleMetrics, 'formationProgress', {
+      label: 'Formation Transition',
+      readonly: true,
+      min: 0,
+      max: 1,
+      view: 'graph',
+      rows: 2,
+    }));
+  }
+  
+  // ========================================
+  // SPATIAL STAGING
+  // ========================================
+  
+  private buildSpatialSection(): void {
+    const folder = this.pane.addFolder({
+      title: '📐 Spatial Staging',
+      expanded: false,
+    });
+    
+    this.metricBindings.push(folder.addBinding(this.spatialMetrics, 'foregroundCount', {
+      label: '▶️ Foreground',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.spatialMetrics, 'midgroundCount', {
+      label: '⏸️ Midground',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.spatialMetrics, 'backgroundCount', {
+      label: '⏹️ Background',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+  }
+  
+  // ========================================
+  // PERSONALITY SYSTEM
+  // ========================================
+  
+  // ========================================
+  // MACRO CONTROLS
+  // ========================================
+  
+  private buildMacroSection(): void {
+    const folder = this.pane.addFolder({
+      title: '🎹 Macro Controls',
+      expanded: false,
+    });
+    
+    // Preset selector
+    const presetOptions: Record<string, string> = {};
+    MACRO_PRESETS.forEach(preset => {
+      presetOptions[preset.icon + ' ' + preset.name] = preset.name;
+    });
+    
+    folder.addBinding(this.state, 'macroPreset', {
+      label: 'Preset',
+      options: presetOptions,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroPresetApply?.(ev.value);
+    });
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Macro sliders
+    folder.addBinding(this.state, 'macroIntensity', {
+      label: '⚡ Intensity',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroChange?.(MacroType.INTENSITY, ev.value);
+    });
+    
+    folder.addBinding(this.state, 'macroChaos', {
+      label: '🌀 Chaos',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroChange?.(MacroType.CHAOS, ev.value);
+    });
+    
+    folder.addBinding(this.state, 'macroSmoothness', {
+      label: '🌊 Smoothness',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroChange?.(MacroType.SMOOTHNESS, ev.value);
+    });
+    
+    folder.addBinding(this.state, 'macroResponsiveness', {
+      label: '⚡ Responsiveness',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroChange?.(MacroType.RESPONSIVENESS, ev.value);
+    });
+    
+    folder.addBinding(this.state, 'macroDensity', {
+      label: '🔲 Density',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroChange?.(MacroType.DENSITY, ev.value);
+    });
+    
+    folder.addBinding(this.state, 'macroEnergy', {
+      label: '🔥 Energy',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroChange?.(MacroType.ENERGY, ev.value);
+    });
+    
+    folder.addBinding(this.state, 'macroCoherence', {
+      label: '🔗 Coherence',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroChange?.(MacroType.COHERENCE, ev.value);
+    });
+    
+    folder.addBinding(this.state, 'macroComplexity', {
+      label: '🧩 Complexity',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onMacroChange?.(MacroType.COMPLEXITY, ev.value);
+    });
+  }
+  
+  // ========================================
+  // SEQUENCE RECORDER
+  // ========================================
+  
+  private buildSequenceSection(): void {
+    const folder = this.pane.addFolder({
+      title: '🎬 Sequence Recorder',
+      expanded: false,
+    });
+    
+    // Recording controls
+    const recordFolder = folder.addFolder({
+      title: 'Recording',
+      expanded: true,
+    });
+    
+    recordFolder.addButton({
+      title: '🔴 Record',
+    }).on('click', () => {
+      this.callbacks.onSequenceRecord?.();
+    });
+    
+    recordFolder.addButton({
+      title: '⏹️ Stop',
+    }).on('click', () => {
+      this.callbacks.onSequenceStop?.();
+    });
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Playback controls
+    const playbackFolder = folder.addFolder({
+      title: 'Playback',
+      expanded: true,
+    });
+    
+    playbackFolder.addButton({
+      title: '▶️ Play',
+    }).on('click', () => {
+      // Would show sequence selector in a real implementation
+      console.log('🎬 Play sequence (not yet implemented)');
+    });
+    
+    playbackFolder.addButton({
+      title: '⏸️ Pause',
+    }).on('click', () => {
+      this.callbacks.onSequencePause?.();
+    });
+    
+    playbackFolder.addBinding(this.state, 'sequenceLoop', {
+      label: 'Loop',
+    });
+  }
+  
+  private buildPersonalitySection(): void {
+    const folder = this.pane.addFolder({
+      title: '🎭 Personality System',
+      expanded: false,
+    });
+    
+    this.metricBindings.push(folder.addBinding(this.personalityMetrics, 'globalPersonality', {
+      label: 'Global Personality',
+      readonly: true,
+    }));
+    
+    this.metricBindings.push(folder.addBinding(this.personalityMetrics, 'transitionProgress', {
+      label: 'Transition',
+      readonly: true,
+      min: 0,
+      max: 1,
+      view: 'graph',
+      rows: 2,
+    }));
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Distribution chart
+    const distributionFolder = folder.addFolder({
+      title: 'Personality Distribution',
+      expanded: true,
+    });
+    
+    this.metricBindings.push(distributionFolder.addBinding(this.personalityMetrics, 'calmCount', {
+      label: '😌 Calm',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(distributionFolder.addBinding(this.personalityMetrics, 'energeticCount', {
+      label: '⚡ Energetic',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(distributionFolder.addBinding(this.personalityMetrics, 'flowingCount', {
+      label: '🌊 Flowing',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(distributionFolder.addBinding(this.personalityMetrics, 'aggressiveCount', {
+      label: '🔥 Aggressive',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(distributionFolder.addBinding(this.personalityMetrics, 'gentleCount', {
+      label: '🌸 Gentle',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(distributionFolder.addBinding(this.personalityMetrics, 'chaoticCount', {
+      label: '🌀 Chaotic',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(distributionFolder.addBinding(this.personalityMetrics, 'rhythmicCount', {
+      label: '🥁 Rhythmic',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    this.metricBindings.push(distributionFolder.addBinding(this.personalityMetrics, 'etherealCount', {
+      label: '✨ Ethereal',
+      readonly: true,
+      format: (v: number) => v.toString(),
+    }));
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Personality selector
+    const profiles = getAllPersonalityProfiles();
+    const personalityOptions: Record<string, 'Auto' | PersonalityType> = { 'Auto': 'Auto' };
+    profiles.forEach(profile => {
+      personalityOptions[profile.name] = profile.type;
+    });
+    
+    folder.addBinding(this.state, 'personalityOverride', {
+      label: 'Force Personality',
+      options: personalityOptions,
+    }).on('change', (ev: any) => {
+      if (ev.value === 'Auto') {
+        this.state.personalityAutoAdapt = true;
+        this.callbacks.onPersonalityAutoAdapt?.(true);
+      } else {
+        this.state.personalityAutoAdapt = false;
+        this.callbacks.onPersonalityChange?.(ev.value);
+      }
+    });
+    
+    folder.addBinding(this.state, 'personalityAutoAdapt', {
+      label: 'Auto-Adapt',
+    }).on('change', (ev: any) => {
+      this.callbacks.onPersonalityAutoAdapt?.(ev.value);
+    });
   }
 
   private buildFeatureInsights(): void {
@@ -419,7 +1169,12 @@ export class AudioPanel {
       expanded: true,
     });
 
-    (['pulse', 'flow', 'shimmer', 'warp', 'density', 'aura'] as const).forEach((key) => {
+    // Add modulator readouts
+    const modulatorKeys: Array<keyof typeof this.modulationReadouts> = [
+      'pulse', 'flow', 'shimmer', 'warp', 'density', 'aura'
+    ];
+    
+    for (const key of modulatorKeys) {
       this.modulatorBindings.push(readoutFolder.addBinding(this.modulationReadouts, key, {
         label: key.charAt(0).toUpperCase() + key.slice(1),
         readonly: true,
@@ -427,7 +1182,7 @@ export class AudioPanel {
         max: 1,
         format: (v: number) => v.toFixed(3),
       }));
-    });
+    }
 
     folder.addBlade({ view: 'separator' });
 
@@ -647,6 +1402,53 @@ export class AudioPanel {
   }
   
   // ========================================
+  // MANUAL CONTROLS
+  // ========================================
+  
+  private buildManualControls(): void {
+    const folder = this.pane.addFolder({
+      title: '🎚️ Manual Override',
+      expanded: false,
+    });
+    
+    // Tempo override
+    folder.addBinding(this.state, 'manualTempo', {
+      label: 'Manual Tempo',
+      min: 60,
+      max: 200,
+      step: 1,
+    }).on('change', (ev: any) => {
+      this.callbacks.onTempoOverride?.(ev.value);
+    });
+    
+    folder.addButton({
+      title: '🎯 Align to Beat',
+    }).on('click', () => {
+      this.callbacks.onBeatAlign?.();
+    });
+    
+    folder.addBlade({ view: 'separator' });
+    
+    // Formation override
+    folder.addBinding(this.state, 'formationOverride', {
+      label: 'Force Formation',
+      options: {
+        'Auto': 'Auto',
+        'Scattered': 'scattered',
+        'Clustered': 'clustered',
+        'Orbiting': 'orbiting',
+        'Flowing': 'flowing',
+        'Layered': 'layered',
+        'Radial': 'radial',
+        'Grid': 'grid',
+        'Spiral': 'spiral',
+      },
+    }).on('change', (ev: any) => {
+      this.callbacks.onFormationOverride?.(ev.value === 'Auto' ? null : ev.value);
+    });
+  }
+  
+  // ========================================
   // ADVANCED SETTINGS
   // ========================================
   
@@ -776,6 +1578,121 @@ export class AudioPanel {
   }
   
   /**
+   * Update enhanced metrics from new audio systems
+   */
+  updateEnhancedMetrics(
+    audioData: EnhancedAudioData,
+    gestureSelection: GestureSelection | null = null,
+    ensembleState: EnsembleState | null = null,
+    spatialState: SpatialState | null = null,
+    personalityState: PersonalityBlendState | null = null
+  ): void {
+    if (!audioData) return;
+    
+    // Update standard metrics first
+    this.updateMetrics(audioData);
+    
+    // Groove metrics
+    if (audioData.groove) {
+      this.grooveMetrics.swingRatio = audioData.groove.swingRatio;
+      this.grooveMetrics.grooveIntensity = audioData.groove.grooveIntensity;
+      this.grooveMetrics.pocketTightness = audioData.groove.pocketTightness;
+      this.grooveMetrics.syncopation = audioData.groove.syncopationLevel;
+      this.grooveMetrics.confidence = audioData.groove.analysisConfidence;
+    }
+    
+    // Structure metrics
+    if (audioData.structure) {
+      this.structureMetrics.section = this.formatSectionName(audioData.structure.currentSection.type);
+      this.structureMetrics.sectionProgress = audioData.structure.sectionProgress;
+      this.structureMetrics.energy = audioData.structure.energy.current;
+      this.structureMetrics.tension = audioData.structure.tension.tension;
+      this.structureMetrics.anticipation = audioData.structure.tension.anticipation;
+    }
+    
+    // Timing metrics
+    if (audioData.timing) {
+      this.timingMetrics.tempo = audioData.timing.tempo;
+      this.timingMetrics.beatPhase = audioData.timing.beatPhase;
+      this.timingMetrics.nextBeatIn = audioData.timing.nextBeat?.timeUntil || 0;
+      this.timingMetrics.nextDownbeatIn = audioData.timing.nextDownbeat?.timeUntil || 0;
+      this.timingMetrics.tempoStable = audioData.timing.tempoStable;
+    }
+    
+    // Gesture metrics
+    if (gestureSelection) {
+      this.gestureMetrics.primaryGesture = gestureSelection.primary?.gesture.name || 'None';
+      this.gestureMetrics.gesturePhase = gestureSelection.primary?.params.phase || 0;
+      this.gestureMetrics.activeCount = 
+        (gestureSelection.primary ? 1 : 0) + gestureSelection.secondary.length;
+      this.gestureMetrics.blendMode = gestureSelection.blendMode;
+    }
+    
+    // Ensemble metrics
+    if (ensembleState) {
+      this.ensembleMetrics.leadCount = ensembleState.leadCount;
+      this.ensembleMetrics.supportCount = ensembleState.supportCount;
+      this.ensembleMetrics.ambientCount = ensembleState.ambientCount;
+      this.ensembleMetrics.formation = this.formatFormationName(ensembleState.formation.type);
+      this.ensembleMetrics.formationProgress = ensembleState.transitionPhase;
+    }
+    
+    // Spatial metrics
+    if (spatialState) {
+      this.spatialMetrics.foregroundCount = spatialState.foregroundCount;
+      this.spatialMetrics.midgroundCount = spatialState.midgroundCount;
+      this.spatialMetrics.backgroundCount = spatialState.backgroundCount;
+    }
+    
+    // Personality metrics
+    if (personalityState) {
+      this.personalityMetrics.globalPersonality = this.formatPersonalityName(personalityState.globalPersonality);
+      this.personalityMetrics.transitionProgress = personalityState.transitionProgress;
+      this.personalityMetrics.assignmentCount = personalityState.assignmentCount;
+      
+      // Reset counts
+      this.personalityMetrics.calmCount = 0;
+      this.personalityMetrics.energeticCount = 0;
+      this.personalityMetrics.flowingCount = 0;
+      this.personalityMetrics.aggressiveCount = 0;
+      this.personalityMetrics.gentleCount = 0;
+      this.personalityMetrics.chaoticCount = 0;
+      this.personalityMetrics.rhythmicCount = 0;
+      this.personalityMetrics.etherealCount = 0;
+      
+      // Count would be populated by app (particle-level data)
+      // For now, just display the assignmentCount
+    }
+    
+    // Refresh all bindings
+    this.metricBindings.forEach(binding => binding?.refresh());
+  }
+  
+  /**
+   * Format personality name for display
+   */
+  private formatPersonalityName(personality: PersonalityType): string {
+    return personality.charAt(0).toUpperCase() + personality.slice(1);
+  }
+  
+  /**
+   * Format section name for display
+   */
+  private formatSectionName(section: string): string {
+    return section
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+  
+  /**
+   * Format formation name for display
+   */
+  private formatFormationName(formation: string): string {
+    return formation.charAt(0).toUpperCase() + formation.slice(1);
+  }
+  
+  /**
    * Update real-time metrics display
    */
   private renderSparkline(data: Float32Array, segments = 28): string {
@@ -802,6 +1719,12 @@ export class AudioPanel {
   }
 
   updateMetrics(audio: AudioData): void {
+    // Safety check: ensure audio data has required properties
+    if (!audio || !audio.features || !audio.modulators || !audio.history) {
+      console.warn('AudioPanel: Invalid audio data received');
+      return;
+    }
+
     this.overviewMetrics.bass = audio.smoothBass;
     this.overviewMetrics.mid = audio.smoothMid;
     this.overviewMetrics.treble = audio.smoothTreble;
@@ -831,10 +1754,11 @@ export class AudioPanel {
     this.sparklineState.flux = this.renderSparkline(audio.history.flux);
     this.sparklineState.beat = this.renderSparkline(audio.history.beat);
 
-    this.metricBindings.forEach((binding) => binding.refresh());
-    this.featureBindings.forEach((binding) => binding.refresh());
-    this.modulatorBindings.forEach((binding) => binding.refresh());
-    this.sparklineBindings.forEach((binding) => binding.refresh());
+    // Safety check: ensure binding arrays exist before calling forEach
+    this.metricBindings?.forEach((binding) => binding?.refresh());
+    this.featureBindings?.forEach((binding) => binding?.refresh());
+    this.modulatorBindings?.forEach((binding) => binding?.refresh());
+    this.sparklineBindings?.forEach((binding) => binding?.refresh());
   }
   
   /**

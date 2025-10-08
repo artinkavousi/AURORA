@@ -52,7 +52,11 @@ export class PointRenderer {
    * Update renderer (particle count)
    */
   public update(particleCount: number): void {
-    this.geometry.instanceCount = particleCount;
+    // Validate to prevent WebGPU errors
+    const validCount = Number.isFinite(particleCount) && particleCount > 0 
+      ? Math.floor(particleCount) 
+      : 1;
+    this.geometry.instanceCount = validCount;
   }
 
   /**

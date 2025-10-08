@@ -7,7 +7,7 @@ import * as THREE from "three/webgpu";
 import type { MlsMpmSimulator } from '../physic/mls-mpm';
 import { MeshRenderer, type MeshRendererConfig } from './meshrenderer';
 import { PointRenderer } from './pointrenderer';
-import { SpriteRenderer, type SpriteRendererConfig } from './spriterenderer';
+import { SpriteRenderer, type SpriteRendererConfig, BillboardMode, BlendMode } from './spriterenderer';
 import { TrailRenderer, type TrailRendererConfig } from './trailrenderer';
 
 /**
@@ -170,7 +170,18 @@ export class RendererManager {
         return new MeshRenderer(this.simulator, this.config.meshConfig);
       
       case ParticleRenderMode.SPRITE:
-        return new SpriteRenderer(this.simulator, this.config.spriteConfig);
+        // Convert string config to enum values
+        const spriteConfig: SpriteRendererConfig | undefined = this.config.spriteConfig ? {
+          billboardMode: this.config.spriteConfig.billboardMode === 'camera' ? BillboardMode.CAMERA :
+                        this.config.spriteConfig.billboardMode === 'velocity' ? BillboardMode.VELOCITY :
+                        BillboardMode.AXIS,
+          blendMode: this.config.spriteConfig.blendMode === 'additive' ? BlendMode.ADDITIVE :
+                    this.config.spriteConfig.blendMode === 'multiply' ? BlendMode.MULTIPLY :
+                    BlendMode.ALPHA,
+          softParticles: this.config.spriteConfig.softParticles,
+          atlasSize: this.config.spriteConfig.atlasSize,
+        } : undefined;
+        return new SpriteRenderer(this.simulator, spriteConfig);
       
       case ParticleRenderMode.TRAIL:
         return new TrailRenderer(this.simulator, this.config.trailConfig);
@@ -206,7 +217,13 @@ export class RendererManager {
    */
   public update(particleCount: number, size: number = 1.0): void {
     if (this.currentRenderer) {
-      this.currentRenderer.update(particleCount, size);
+      // Validate particleCount to prevent WebGPU drawIndexed errors
+      const validCount = Number.isFinite(particleCount) && particleCount > 0 
+        ? Math.floor(particleCount) 
+        : 1; // Default to 1 to prevent WebGPU errors
+      const validSize = Number.isFinite(size) && size > 0 ? size : 1.0;
+      
+      this.currentRenderer.update(validCount, validSize);
     }
   }
   

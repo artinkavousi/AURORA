@@ -2,13 +2,16 @@
  * POSTFX/PANELpostfx.ts - Refined Post-Effects Control Panel
  */
 
+import type { Pane } from 'tweakpane';
 import type { FlowConfig } from '../config';
-import type { Dashboard } from '../PANEL/dashboard';
 
 export interface PostFXPanelCallbacks {
   onBloomChange?: (config: FlowConfig['bloom']) => void;
   onRadialFocusChange?: (config: FlowConfig['radialFocus']) => void;
   onRadialCAChange?: (config: FlowConfig['radialCA']) => void;
+  onVignetteChange?: (config: any) => void;
+  onFilmGrainChange?: (config: any) => void;
+  onColorGradingChange?: (config: any) => void;
 }
 
 export class PostFXPanel {
@@ -17,26 +20,54 @@ export class PostFXPanel {
   private callbacks: PostFXPanelCallbacks;
 
   constructor(
-    dashboard: Dashboard,
+    pane: Pane,
     config: FlowConfig,
     callbacks: PostFXPanelCallbacks = {}
   ) {
     this.config = config;
     this.callbacks = callbacks;
+    
+    // Initialize default configs if not present
+    if (!this.config.vignette) {
+      this.config.vignette = {
+        enabled: false,
+        intensity: 0.5,
+        smoothness: 0.5,
+        roundness: 1.0
+      };
+    }
+    if (!this.config.filmGrain) {
+      this.config.filmGrain = {
+        enabled: false,
+        intensity: 0.05,
+        size: 1.5,
+        speed: 1.0
+      };
+    }
+    if (!this.config.colorGrading) {
+      this.config.colorGrading = {
+        enabled: false,
+        exposure: 1.0,
+        contrast: 1.0,
+        saturation: 1.0,
+        brightness: 0.0,
+        temperature: 0.0,
+        tint: 0.0,
+      shadows: new THREE.Vector3(1, 1, 1),
+      midtones: new THREE.Vector3(1, 1, 1),
+      highlights: new THREE.Vector3(1, 1, 1)
+      };
+    }
 
-    const { pane } = dashboard.createPanel('postfx', {
-      title: '✨ Post Effects',
-      position: { x: window.innerWidth - 360, y: 16 },
-      expanded: true,
-      draggable: true,
-      collapsible: true,
-    });
-
+    // Use provided pane from unified panel system
     this.pane = pane;
 
     this.setupBloomControls();
     this.setupRadialFocusControls();
     this.setupRadialCAControls();
+    this.setupVignetteControls();
+    this.setupFilmGrainControls();
+    this.setupColorGradingControls();
   }
 
   // ========================================
@@ -217,5 +248,200 @@ export class PostFXPanel {
         step: 0.1,
       })
       .on('change', () => this.callbacks.onRadialCAChange?.(this.config.radialCA));
+  }
+  
+  // ========================================
+  // VIGNETTE (radial darkening)
+  // ========================================
+  
+  private setupVignetteControls(): void {
+    const folder = this.pane.addFolder({
+      title: "🌑 Vignette",
+      expanded: false,
+    });
+
+    folder
+      .addBinding(this.config.vignette, "enabled", { label: "Enable" })
+      .on('change', () => this.callbacks.onVignetteChange?.(this.config.vignette));
+
+    folder.addBlade({ view: 'separator' });
+
+    folder
+      .addBinding(this.config.vignette, "intensity", { 
+        label: "Intensity",
+        min: 0.0, 
+        max: 1.0, 
+        step: 0.01 
+      })
+      .on('change', () => this.callbacks.onVignetteChange?.(this.config.vignette));
+
+    folder
+      .addBinding(this.config.vignette, "smoothness", { 
+        label: "Smoothness",
+        min: 0.0, 
+        max: 1.0, 
+        step: 0.01 
+      })
+      .on('change', () => this.callbacks.onVignetteChange?.(this.config.vignette));
+
+    folder
+      .addBinding(this.config.vignette, "roundness", {
+        label: "Roundness",
+        min: 0.5,
+        max: 2.0,
+        step: 0.1,
+      })
+      .on('change', () => this.callbacks.onVignetteChange?.(this.config.vignette));
+  }
+  
+  // ========================================
+  // FILM GRAIN (temporal noise)
+  // ========================================
+  
+  private setupFilmGrainControls(): void {
+    const folder = this.pane.addFolder({
+      title: "🎞️ Film Grain",
+      expanded: false,
+    });
+
+    folder
+      .addBinding(this.config.filmGrain, "enabled", { label: "Enable" })
+      .on('change', () => this.callbacks.onFilmGrainChange?.(this.config.filmGrain));
+
+    folder.addBlade({ view: 'separator' });
+
+    folder
+      .addBinding(this.config.filmGrain, "intensity", { 
+        label: "Intensity",
+        min: 0.0, 
+        max: 0.2, 
+        step: 0.001 
+      })
+      .on('change', () => this.callbacks.onFilmGrainChange?.(this.config.filmGrain));
+
+    folder
+      .addBinding(this.config.filmGrain, "size", { 
+        label: "Grain Size",
+        min: 0.5, 
+        max: 5.0, 
+        step: 0.1 
+      })
+      .on('change', () => this.callbacks.onFilmGrainChange?.(this.config.filmGrain));
+  }
+  
+  // ========================================
+  // COLOR GRADING (professional color correction)
+  // ========================================
+  
+  private setupColorGradingControls(): void {
+    const folder = this.pane.addFolder({
+      title: "🎨 Color Grading",
+      expanded: false,
+    });
+
+    folder
+      .addBinding(this.config.colorGrading, "enabled", { label: "Enable" })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+
+    folder.addBlade({ view: 'separator' });
+    
+    // Basic controls
+    const basicFolder = folder.addFolder({
+      title: "Basic",
+      expanded: true,
+    });
+
+    basicFolder
+      .addBinding(this.config.colorGrading, "exposure", { 
+        label: "Exposure",
+        min: 0.1, 
+        max: 3.0, 
+        step: 0.01 
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+
+    basicFolder
+      .addBinding(this.config.colorGrading, "contrast", { 
+        label: "Contrast",
+        min: 0.0, 
+        max: 2.0, 
+        step: 0.01 
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+
+    basicFolder
+      .addBinding(this.config.colorGrading, "saturation", { 
+        label: "Saturation",
+        min: 0.0, 
+        max: 2.0, 
+        step: 0.01 
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+
+    basicFolder
+      .addBinding(this.config.colorGrading, "brightness", {
+        label: "Brightness",
+        min: -1.0,
+        max: 1.0,
+        step: 0.01,
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+    
+    // Temperature & Tint
+    const tempFolder = folder.addFolder({
+      title: "Temperature & Tint",
+      expanded: false,
+    });
+
+    tempFolder
+      .addBinding(this.config.colorGrading, "temperature", {
+        label: "Temperature",
+        min: -1.0,
+        max: 1.0,
+        step: 0.01,
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+
+    tempFolder
+      .addBinding(this.config.colorGrading, "tint", {
+        label: "Tint",
+        min: -1.0,
+        max: 1.0,
+        step: 0.01,
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+    
+    // Advanced lift-gamma-gain controls
+    const advancedFolder = folder.addFolder({
+      title: "Advanced (LGG)",
+      expanded: false,
+    });
+
+    advancedFolder
+      .addBinding(this.config.colorGrading, "shadows", {
+        label: "Lift (Shadows)",
+        x: { min: 0.5, max: 1.5, step: 0.01 },
+        y: { min: 0.5, max: 1.5, step: 0.01 },
+        z: { min: 0.5, max: 1.5, step: 0.01 },
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+
+    advancedFolder
+      .addBinding(this.config.colorGrading, "midtones", {
+        label: "Gamma (Midtones)",
+        x: { min: 0.5, max: 1.5, step: 0.01 },
+        y: { min: 0.5, max: 1.5, step: 0.01 },
+        z: { min: 0.5, max: 1.5, step: 0.01 },
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
+
+    advancedFolder
+      .addBinding(this.config.colorGrading, "highlights", {
+        label: "Gain (Highlights)",
+        x: { min: 0.5, max: 1.5, step: 0.01 },
+        y: { min: 0.5, max: 1.5, step: 0.01 },
+        z: { min: 0.5, max: 1.5, step: 0.01 },
+      })
+      .on('change', () => this.callbacks.onColorGradingChange?.(this.config.colorGrading));
   }
 }

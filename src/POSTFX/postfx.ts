@@ -1,14 +1,24 @@
 /**
- * POSTFX/postfx.ts - Refined Post-Processing Pipeline
+ * POSTFX/postfx.ts - Enhanced Post-Processing Pipeline
  * 
- * Effects:
- * 1. Bloom (built-in BloomNode) - HDR-aware glow
- * 2. Radial Focus/Blur (built-in GaussianBlur) - sharp center, blurred edges
- * 3. Radial Chromatic Aberration (built-in RGBShift) - color fringing at edges
+ * Production-Quality Effects:
+ * 1. Bloom (HDR-aware with threshold knee)
+ * 2. Radial Focus/Blur (DOF-style)
+ * 3. Radial Chromatic Aberration
+ * 4. Vignette (radial darkening)
+ * 5. Film Grain (temporal noise)
+ * 6. Color Grading (exposure, contrast, saturation, temperature)
+ * 7. Tone Mapping (ACES, Reinhard, etc.)
  */
 
 import * as THREE from "three/webgpu";
-import { Fn, pass, uniform, uv, vec2, vec3, vec4, float, mix, length, pow, smoothstep, step, min as tslMin } from "three/tsl";
+import { 
+  Fn, pass, uniform, uv, vec2, vec3, vec4, float, 
+  mix, length, pow, smoothstep, step, 
+  min as tslMin, max as tslMax, clamp,
+  dot, fract, sin, cos, mul, add, sub,
+  abs, floor, mod
+} from "three/tsl";
 import type { AudioData } from '../AUDIO/soundreactivity';
 // @ts-ignore
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
@@ -41,10 +51,40 @@ export interface RadialCAConfig {
   falloffPower: number;
 }
 
+export interface VignetteConfig {
+  enabled: boolean;
+  intensity: number;
+  smoothness: number;
+  roundness: number;
+}
+
+export interface FilmGrainConfig {
+  enabled: boolean;
+  intensity: number;
+  size: number;
+  speed: number;
+}
+
+export interface ColorGradingConfig {
+  enabled: boolean;
+  exposure: number;
+  contrast: number;
+  saturation: number;
+  brightness: number;
+  temperature: number; // -1 to 1 (cool to warm)
+  tint: number; // -1 to 1 (green to magenta)
+  shadows: THREE.Vector3; // RGB lift for shadows
+  midtones: THREE.Vector3; // RGB gamma for midtones
+  highlights: THREE.Vector3; // RGB gain for highlights
+}
+
 export interface PostFXOptions {
   bloom?: Partial<BloomConfig>;
   radialFocus?: Partial<RadialFocusConfig>;
   radialCA?: Partial<RadialCAConfig>;
+  vignette?: Partial<VignetteConfig>;
+  filmGrain?: Partial<FilmGrainConfig>;
+  colorGrading?: Partial<ColorGradingConfig>;
 }
 
 /**
@@ -79,6 +119,30 @@ export class PostFX {
     caEdgeIntensity: uniform(1.5),
     caFalloffPower: uniform(2.5),
     caBlendStrength: uniform(1.0),
+    
+    // Vignette
+    vignetteEnabled: uniform(0.0),
+    vignetteIntensity: uniform(0.5),
+    vignetteSmoothness: uniform(0.5),
+    vignetteRoundness: uniform(1.0),
+    
+    // Film Grain
+    filmGrainEnabled: uniform(0.0),
+    filmGrainIntensity: uniform(0.05),
+    filmGrainSize: uniform(1.5),
+    filmGrainTime: uniform(0.0), // Updated each frame for animation
+    
+    // Color Grading
+    colorGradingEnabled: uniform(0.0),
+    cgExposure: uniform(1.0),
+    cgContrast: uniform(1.0),
+    cgSaturation: uniform(1.0),
+    cgBrightness: uniform(0.0),
+    cgTemperature: uniform(0.0),
+    cgTint: uniform(0.0),
+    cgShadows: uniform(new THREE.Vector3(1, 1, 1)),
+    cgMidtones: uniform(new THREE.Vector3(1, 1, 1)),
+    cgHighlights: uniform(new THREE.Vector3(1, 1, 1)),
   };
 
   // Store config for rebuild
@@ -147,6 +211,63 @@ export class PostFX {
     if (options.radialCA?.falloffPower !== undefined) {
       this.uniforms.caFalloffPower.value = options.radialCA.falloffPower;
     }
+    
+    // Vignette
+    if (options.vignette?.enabled !== undefined) {
+      this.uniforms.vignetteEnabled.value = options.vignette.enabled ? 1.0 : 0.0;
+    }
+    if (options.vignette?.intensity !== undefined) {
+      this.uniforms.vignetteIntensity.value = options.vignette.intensity;
+    }
+    if (options.vignette?.smoothness !== undefined) {
+      this.uniforms.vignetteSmoothness.value = options.vignette.smoothness;
+    }
+    if (options.vignette?.roundness !== undefined) {
+      this.uniforms.vignetteRoundness.value = options.vignette.roundness;
+    }
+    
+    // Film Grain
+    if (options.filmGrain?.enabled !== undefined) {
+      this.uniforms.filmGrainEnabled.value = options.filmGrain.enabled ? 1.0 : 0.0;
+    }
+    if (options.filmGrain?.intensity !== undefined) {
+      this.uniforms.filmGrainIntensity.value = options.filmGrain.intensity;
+    }
+    if (options.filmGrain?.size !== undefined) {
+      this.uniforms.filmGrainSize.value = options.filmGrain.size;
+    }
+    
+    // Color Grading
+    if (options.colorGrading?.enabled !== undefined) {
+      this.uniforms.colorGradingEnabled.value = options.colorGrading.enabled ? 1.0 : 0.0;
+    }
+    if (options.colorGrading?.exposure !== undefined) {
+      this.uniforms.cgExposure.value = options.colorGrading.exposure;
+    }
+    if (options.colorGrading?.contrast !== undefined) {
+      this.uniforms.cgContrast.value = options.colorGrading.contrast;
+    }
+    if (options.colorGrading?.saturation !== undefined) {
+      this.uniforms.cgSaturation.value = options.colorGrading.saturation;
+    }
+    if (options.colorGrading?.brightness !== undefined) {
+      this.uniforms.cgBrightness.value = options.colorGrading.brightness;
+    }
+    if (options.colorGrading?.temperature !== undefined) {
+      this.uniforms.cgTemperature.value = options.colorGrading.temperature;
+    }
+    if (options.colorGrading?.tint !== undefined) {
+      this.uniforms.cgTint.value = options.colorGrading.tint;
+    }
+    if (options.colorGrading?.shadows) {
+      this.uniforms.cgShadows.value.copy(options.colorGrading.shadows);
+    }
+    if (options.colorGrading?.midtones) {
+      this.uniforms.cgMidtones.value.copy(options.colorGrading.midtones);
+    }
+    if (options.colorGrading?.highlights) {
+      this.uniforms.cgHighlights.value.copy(options.colorGrading.highlights);
+    }
   }
 
   private initializeAudioDynamicsState(): void {
@@ -211,7 +332,7 @@ export class PostFX {
       options.radialCA?.angle ?? 0.0
     );
 
-    // Final composition shader
+    // Final composition shader with enhanced effects
     const finalOutput = Fn(() => {
       const uvCoord = uv();
       
@@ -299,6 +420,131 @@ export class PostFX {
         mix(finalColor, rgbShiftedScene, caMix)
       );
       
+      // ========================================
+      // 4. COLOR GRADING (Lift-Gamma-Gain + Temperature/Tint)
+      // ========================================
+      const colorGraded = Fn(() => {
+        let color = finalColor.toVar();
+        
+        // Exposure
+        color.assign(color.mul(this.uniforms.cgExposure));
+        
+        // Brightness (additive)
+        color.assign(color.add(this.uniforms.cgBrightness));
+        
+        // Contrast (around mid-gray 0.5)
+        color.assign(
+          mix(
+            vec3(0.5),
+            color,
+            this.uniforms.cgContrast
+          )
+        );
+        
+        // Saturation
+        const luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        color.assign(
+          mix(vec3(luminance), color, this.uniforms.cgSaturation)
+        );
+        
+        // Temperature (cool to warm)
+        const tempShift = this.uniforms.cgTemperature;
+        const warmth = vec3(
+          float(1.0).add(tempShift.mul(0.15)),
+          float(1.0).add(tempShift.mul(0.05)),
+          float(1.0).sub(tempShift.mul(0.15))
+        );
+        color.assign(color.mul(warmth));
+        
+        // Tint (green to magenta)
+        const tintShift = this.uniforms.cgTint;
+        const tintColor = vec3(
+          float(1.0).add(tintShift.mul(0.1)),
+          float(1.0).sub(abs(tintShift).mul(0.05)),
+          float(1.0).add(tintShift.mul(0.1))
+        );
+        color.assign(color.mul(tintColor));
+        
+        // Lift-Gamma-Gain (shadows, midtones, highlights)
+        // Lift (shadows)
+        color.assign(color.add(this.uniforms.cgShadows.sub(1.0).mul(0.2)));
+        
+        // Gamma (midtones) - power curve
+        const gammaPower = float(1.0).div(this.uniforms.cgMidtones);
+        color.assign(pow(clamp(color, 0.0, 1.0), gammaPower));
+        
+        // Gain (highlights)
+        color.assign(color.mul(this.uniforms.cgHighlights));
+        
+        return color;
+      })();
+      
+      finalColor.assign(
+        mix(finalColor, colorGraded, this.uniforms.colorGradingEnabled)
+      );
+      
+      // ========================================
+      // 5. VIGNETTE (radial darkening)
+      // ========================================
+      const vignette = Fn(() => {
+        // Distance from center with roundness control
+        const vignetteUV = uvCoord.sub(0.5).mul(2.0);
+        const vignetteDist = pow(
+          pow(abs(vignetteUV.x), this.uniforms.vignetteRoundness)
+          .add(pow(abs(vignetteUV.y), this.uniforms.vignetteRoundness)),
+          float(1.0).div(this.uniforms.vignetteRoundness)
+        );
+        
+        // Smooth falloff
+        const vignetteMask = smoothstep(
+          float(1.0).sub(this.uniforms.vignetteIntensity),
+          float(1.0).sub(this.uniforms.vignetteIntensity).add(this.uniforms.vignetteSmoothness),
+          vignetteDist
+        ).oneMinus();
+        
+        return vignetteMask;
+      })();
+      
+      finalColor.assign(
+        mix(
+          finalColor,
+          finalColor.mul(vignette),
+          this.uniforms.vignetteEnabled
+        )
+      );
+      
+      // ========================================
+      // 6. FILM GRAIN (temporal noise)
+      // ========================================
+      const filmGrain = Fn(() => {
+        // High-frequency temporal noise
+        const grainCoord = uvCoord.mul(this.uniforms.filmGrainSize).mul(800.0);
+        const grainTime = this.uniforms.filmGrainTime;
+        
+        // Hash-based noise (pseudo-random)
+        const grainHash = fract(
+          sin(
+            dot(
+              grainCoord.add(grainTime.mul(0.1)),
+              vec2(12.9898, 78.233)
+            )
+          ).mul(43758.5453)
+        );
+        
+        // Centered around 0.5 for symmetric noise
+        const grainNoise = grainHash.sub(0.5).mul(this.uniforms.filmGrainIntensity);
+        
+        return grainNoise;
+      })();
+      
+      finalColor.assign(
+        mix(
+          finalColor,
+          finalColor.add(filmGrain),
+          this.uniforms.filmGrainEnabled
+        )
+      );
+      
       return vec4(finalColor, 1.0);
     });
 
@@ -359,6 +605,66 @@ export class PostFX {
       this.uniforms.caFalloffPower.value = config.falloffPower;
     }
     // Note: strength and angle require restart
+  }
+  
+  updateVignette(config: Partial<VignetteConfig>): void {
+    if (config.enabled !== undefined) {
+      this.uniforms.vignetteEnabled.value = config.enabled ? 1.0 : 0.0;
+    }
+    if (config.intensity !== undefined) {
+      this.uniforms.vignetteIntensity.value = config.intensity;
+    }
+    if (config.smoothness !== undefined) {
+      this.uniforms.vignetteSmoothness.value = config.smoothness;
+    }
+    if (config.roundness !== undefined) {
+      this.uniforms.vignetteRoundness.value = config.roundness;
+    }
+  }
+  
+  updateFilmGrain(config: Partial<FilmGrainConfig>): void {
+    if (config.enabled !== undefined) {
+      this.uniforms.filmGrainEnabled.value = config.enabled ? 1.0 : 0.0;
+    }
+    if (config.intensity !== undefined) {
+      this.uniforms.filmGrainIntensity.value = config.intensity;
+    }
+    if (config.size !== undefined) {
+      this.uniforms.filmGrainSize.value = config.size;
+    }
+  }
+  
+  updateColorGrading(config: Partial<ColorGradingConfig>): void {
+    if (config.enabled !== undefined) {
+      this.uniforms.colorGradingEnabled.value = config.enabled ? 1.0 : 0.0;
+    }
+    if (config.exposure !== undefined) {
+      this.uniforms.cgExposure.value = config.exposure;
+    }
+    if (config.contrast !== undefined) {
+      this.uniforms.cgContrast.value = config.contrast;
+    }
+    if (config.saturation !== undefined) {
+      this.uniforms.cgSaturation.value = config.saturation;
+    }
+    if (config.brightness !== undefined) {
+      this.uniforms.cgBrightness.value = config.brightness;
+    }
+    if (config.temperature !== undefined) {
+      this.uniforms.cgTemperature.value = config.temperature;
+    }
+    if (config.tint !== undefined) {
+      this.uniforms.cgTint.value = config.tint;
+    }
+    if (config.shadows) {
+      this.uniforms.cgShadows.value.copy(config.shadows);
+    }
+    if (config.midtones) {
+      this.uniforms.cgMidtones.value.copy(config.midtones);
+    }
+    if (config.highlights) {
+      this.uniforms.cgHighlights.value.copy(config.highlights);
+    }
   }
 
   private smoothTowards(current: number, target: number, deltaTime: number, attackRate = 10, releaseRate = 4): number {
@@ -442,6 +748,8 @@ export class PostFX {
   }
 
   async render(): Promise<void> {
+      // Update film grain time for temporal animation
+      this.uniforms.filmGrainTime.value = performance.now() * 0.001;
       await this.postProcessing.renderAsync();
   }
 

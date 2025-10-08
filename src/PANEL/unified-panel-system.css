@@ -1,0 +1,684 @@
+/**
+ * PANEL/unified-panel-system.css - Complete styling for unified panel system
+ * Includes glassmorphism, animations, and responsive design
+ */
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎨 MAIN CONTAINER */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-system {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(50px) saturate(200%) brightness(1.2) contrast(1.15);
+  -webkit-backdrop-filter: blur(50px) saturate(200%) brightness(1.2) contrast(1.15);
+  background: linear-gradient(
+    135deg,
+    rgba(35, 46, 92, 0.85) 0%,
+    rgba(25, 35, 75, 0.75) 50%,
+    rgba(30, 40, 82, 0.80) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 20px;
+  box-shadow: 
+    0 16px 48px 0 rgba(0, 0, 0, 0.5),
+    0 4px 24px 0 rgba(80, 120, 180, 0.35),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    inset 0 0 100px 0 rgba(80, 120, 180, 0.08);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  z-index: 10000;
+  animation: panelSystemFadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes panelSystemFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* Dragging state */
+.unified-panel-system.dragging {
+  cursor: grabbing;
+  box-shadow: 
+    0 24px 64px 0 rgba(0, 0, 0, 0.6),
+    0 8px 32px 0 rgba(80, 120, 180, 0.5),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+  filter: drop-shadow(0 16px 48px rgba(80, 120, 180, 0.6));
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎯 TAB BAR */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-tabs {
+  display: flex;
+  position: relative;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px;
+  gap: 4px;
+}
+
+/* Vertical orientation (left/right dock) */
+.unified-panel-tabs-vertical {
+  flex-direction: column;
+  border-bottom: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 56px;
+}
+
+/* Horizontal orientation (bottom dock) */
+.unified-panel-tabs-horizontal {
+  flex-direction: row;
+  border-right: none;
+  min-height: 56px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 📍 TAB BUTTONS */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.unified-panel-tab:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(80, 120, 180, 0.15) 0%,
+    rgba(100, 140, 200, 0.10) 100%
+  );
+  border-color: rgba(80, 120, 180, 0.3);
+  color: rgba(255, 255, 255, 0.95);
+  transform: scale(1.05);
+}
+
+.unified-panel-tab:active {
+  transform: scale(0.98);
+}
+
+/* Active tab state */
+.unified-panel-tab.active {
+  background: linear-gradient(
+    135deg,
+    rgba(80, 120, 180, 0.3) 0%,
+    rgba(100, 140, 200, 0.2) 100%
+  );
+  border-left: 3px solid #5078b4;
+  color: rgba(255, 255, 255, 1);
+  box-shadow: 
+    0 0 20px rgba(80, 120, 180, 0.5),
+    inset 0 0 15px rgba(80, 120, 180, 0.2);
+}
+
+/* Glow animation for active tab */
+@keyframes tabGlow {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(80, 120, 180, 0.5),
+                inset 0 0 15px rgba(80, 120, 180, 0.2); 
+  }
+  50% { 
+    box-shadow: 0 0 30px rgba(80, 120, 180, 0.7),
+                inset 0 0 20px rgba(80, 120, 180, 0.3); 
+  }
+}
+
+/* Disabled tab */
+.unified-panel-tab.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.unified-panel-tab.disabled:hover {
+  transform: none;
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Tab icon */
+.unified-panel-tab-icon {
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+/* Tab label */
+.unified-panel-tab-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 700;
+  transition: opacity 0.2s ease;
+}
+
+/* Hide labels in horizontal mode (show on hover) */
+.unified-panel-tabs-horizontal .unified-panel-tab-label {
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.unified-panel-tabs-horizontal .unified-panel-tab:hover .unified-panel-tab-label {
+  opacity: 1;
+  max-width: 200px;
+  margin-left: 8px;
+}
+
+/* Tab badge (notification count) */
+.unified-panel-tab-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 9px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.5);
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 📌 TAB INDICATOR */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-tab-indicator {
+  position: absolute;
+  background: linear-gradient(
+    135deg,
+    rgba(80, 120, 180, 0.4) 0%,
+    rgba(100, 140, 200, 0.3) 100%
+  );
+  border-radius: 12px;
+  border: 2px solid rgba(80, 120, 180, 0.6);
+  box-shadow: 0 0 15px rgba(80, 120, 180, 0.4);
+  pointer-events: none;
+  z-index: 0;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-panel-tabs-vertical .unified-panel-tab-indicator {
+  left: 8px;
+}
+
+.unified-panel-tabs-horizontal .unified-panel-tab-indicator {
+  top: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 📦 PANEL CONTENT CONTAINER */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  position: relative;
+}
+
+/* Custom scrollbar */
+.unified-panel-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.unified-panel-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  margin: 4px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.unified-panel-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    #5078b4 0%,
+    #5a80b8 50%,
+    #648cc8 100%
+  );
+  border-radius: 12px;
+  border: 2px solid rgba(15, 23, 42, 0.5);
+  box-shadow: 
+    0 2px 8px rgba(80, 120, 180, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.unified-panel-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    #a78bfa 0%,
+    #5078b4 50%,
+    #5a80b8 100%
+  );
+  box-shadow: 
+    0 4px 16px rgba(80, 120, 180, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border-color: rgba(15, 23, 42, 0.3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎛️ DRAG HANDLE */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-drag-handle {
+  position: absolute;
+  top: 8px;
+  right: 48px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  z-index: 100;
+}
+
+.unified-panel-drag-handle:hover {
+  background: rgba(80, 120, 180, 0.2);
+  border-color: rgba(80, 120, 180, 0.4);
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 12px rgba(80, 120, 180, 0.3);
+}
+
+.unified-panel-drag-handle:active {
+  cursor: grabbing;
+  transform: scale(0.95);
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🔘 COLLAPSE TOGGLE BUTTON */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-collapse-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: linear-gradient(
+    135deg,
+    rgba(80, 120, 180, 0.3) 0%,
+    rgba(100, 140, 200, 0.2) 100%
+  );
+  border: 1px solid rgba(80, 120, 180, 0.4);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 16px;
+  transition: all 0.3s ease;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(80, 120, 180, 0.3);
+}
+
+.unified-panel-collapse-toggle:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(80, 120, 180, 0.5) 0%,
+    rgba(100, 140, 200, 0.4) 100%
+  );
+  border-color: rgba(80, 120, 180, 0.6);
+  transform: scale(1.1);
+  box-shadow: 0 4px 16px rgba(80, 120, 180, 0.5);
+}
+
+.unified-panel-collapse-toggle:active {
+  transform: scale(0.95);
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 📍 SNAP ZONE INDICATORS */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-snap-zone {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0;
+  border: 3px dashed rgba(80, 120, 180, 0.5);
+  background: rgba(80, 120, 180, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: opacity 0.3s ease;
+  z-index: 9999;
+  animation: snapZonePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes snapZonePulse {
+  0%, 100% { 
+    opacity: 0.3;
+    border-color: rgba(80, 120, 180, 0.5);
+  }
+  50% { 
+    opacity: 0.7;
+    border-color: rgba(80, 120, 180, 0.8);
+  }
+}
+
+/* Active snap zone (when hovering) */
+.unified-panel-snap-zone.active {
+  opacity: 0.7 !important;
+  background: rgba(80, 120, 180, 0.2);
+  border-color: rgba(80, 120, 180, 0.8);
+  border-width: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎬 ANIMATIONS & TRANSITIONS */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* Panel slide in/out */
+@keyframes panelSlideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes panelSlideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+/* Fade transitions */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 📱 RESPONSIVE DESIGN */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* Mobile (< 768px) */
+@media (max-width: 768px) {
+  .unified-panel-system {
+    max-width: calc(100vw - 16px) !important;
+    border-radius: 16px;
+  }
+
+  .unified-panel-tabs {
+    padding: 4px;
+    gap: 2px;
+  }
+
+  .unified-panel-tab {
+    padding: 8px;
+    font-size: 11px;
+  }
+
+  .unified-panel-tab-icon {
+    font-size: 18px;
+  }
+
+  .unified-panel-content {
+    padding: 8px;
+  }
+
+  .unified-panel-drag-handle,
+  .unified-panel-collapse-toggle {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+
+  /* Force bottom dock on mobile */
+  .unified-panel-system {
+    bottom: 0 !important;
+    left: 0 !important;
+    right: auto !important;
+    top: auto !important;
+    width: 100% !important;
+  }
+
+  .unified-panel-tabs {
+    flex-direction: row !important;
+  }
+}
+
+/* Tablet (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .unified-panel-system {
+    max-width: 320px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🌙 DARK MODE ENHANCEMENTS */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+@media (prefers-color-scheme: dark) {
+  .unified-panel-system {
+    background: linear-gradient(
+      135deg,
+      rgba(10, 15, 30, 0.92) 0%,
+      rgba(10, 15, 30, 0.85) 50%,
+      rgba(15, 20, 35, 0.88) 100%
+    );
+  }
+
+  .unified-panel-tabs {
+    background: rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* ♿ ACCESSIBILITY */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .unified-panel-system {
+    border: 2px solid rgba(255, 255, 255, 0.6);
+  }
+
+  .unified-panel-tab {
+    border: 1px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .unified-panel-tab.active {
+    border: 2px solid #5078b4;
+  }
+
+  .unified-panel-tab-label {
+    color: rgba(255, 255, 255, 1);
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .unified-panel-system,
+  .unified-panel-tab,
+  .unified-panel-content,
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus visible for keyboard navigation */
+.unified-panel-tab:focus-visible {
+  outline: 3px solid rgba(80, 120, 180, 0.8);
+  outline-offset: 2px;
+}
+
+.unified-panel-collapse-toggle:focus-visible,
+.unified-panel-drag-handle:focus-visible {
+  outline: 2px solid rgba(80, 120, 180, 0.8);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎨 TOUCH DEVICE OPTIMIZATIONS */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+@media (hover: none) and (pointer: coarse) {
+  .unified-panel-tab:active {
+    transform: scale(0.95);
+    background: rgba(80, 120, 180, 0.25);
+  }
+
+  .unified-panel-drag-handle:active,
+  .unified-panel-collapse-toggle:active {
+    transform: scale(0.9);
+  }
+
+  /* Larger touch targets */
+  .unified-panel-tab {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🔮 SPECIAL EFFECTS */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* Subtle inner glow on container */
+.unified-panel-system::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3) 30%,
+    rgba(200, 220, 255, 0.3) 70%,
+    transparent
+  );
+  opacity: 0.5;
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+/* Panel content fade mask at edges */
+.unified-panel-content::after {
+  content: '';
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(30, 40, 82, 0.5) 100%
+  );
+  pointer-events: none;
+}
+
+/* Glass reflection effect */
+.unified-panel-tab::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 100%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.unified-panel-tab:hover::before {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎯 UTILITY CLASSES */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-hidden {
+  display: none !important;
+}
+
+.unified-panel-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.unified-panel-fade-out {
+  animation: fadeOut 0.3s ease-in-out;
+}
+
+.unified-panel-slide-in {
+  animation: panelSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-panel-slide-out {
+  animation: panelSlideOut 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+
+

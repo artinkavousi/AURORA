@@ -1,5 +1,5 @@
 /**
- * PANEL/dashboard.ts - Glassmorphism-styled draggable panel system
+ * PANEL/dashboard.ts - Unified panel system with glassmorphism styling
  * Single responsibility: UI framework with beautiful, modular control panels
  */
 
@@ -7,11 +7,14 @@ import { Pane } from 'tweakpane';
 import * as EssentialsPlugin from '@tweakpane/plugin-essentials';
 import * as InfodumpPlugin from 'tweakpane-plugin-infodump';
 import type { FpsGraphBladeApi } from '@tweakpane/plugin-essentials/dist/types/fps-graph/api/fps-graph';
+import { UnifiedPanelSystem, type PanelDefinition } from './unified-panel-system';
 
 export interface DashboardOptions {
   showInfo?: boolean;
   showFPS?: boolean;
   enableGlassmorphism?: boolean;
+  useUnifiedPanels?: boolean; // Toggle between old and new system
+  defaultDock?: 'left' | 'right' | 'bottom';
 }
 
 export interface PanelConfig {
@@ -24,7 +27,7 @@ export interface PanelConfig {
 
 /**
  * Dashboard - Advanced UI controller with glassmorphism styling
- * Manages multiple draggable, collapsible control panels
+ * Now integrates UnifiedPanelSystem for tabbed interface
  */
 export class Dashboard {
   private panels: Map<string, { pane: Pane; container: HTMLDivElement }> = new Map();
@@ -32,24 +35,64 @@ export class Dashboard {
   private infoPane: Pane | null = null;
   private styleSheet: HTMLStyleElement;
   private enableGlassmorphism: boolean;
+  private unifiedPanelSystem: UnifiedPanelSystem | null = null;
+  private useUnifiedPanels: boolean;
 
   constructor(options: DashboardOptions = {}) {
-    const { showInfo = true, showFPS = true, enableGlassmorphism = true } = options;
+    const { showInfo = true, showFPS = true, enableGlassmorphism = true, useUnifiedPanels = true, defaultDock = 'right' } = options;
     this.enableGlassmorphism = enableGlassmorphism;
+    this.useUnifiedPanels = useUnifiedPanels;
 
     // Inject glassmorphism styles IMMEDIATELY
     this.styleSheet = this.injectStyles();
+    
+    // Inject unified panel system styles if enabled
+    if (this.useUnifiedPanels) {
+      this.injectUnifiedPanelStyles();
+    }
+    
     console.log('✨ Glassmorphism styles injected!', this.styleSheet.id);
 
-    // Create FPS monitor panel (top-left, compact)
-    if (showFPS) {
+    // Initialize unified panel system if enabled
+    if (this.useUnifiedPanels) {
+      this.unifiedPanelSystem = new UnifiedPanelSystem({
+        defaultDock,
+        defaultExpanded: true,
+        width: 360,
+        height: 400,
+        enableDragging: true,
+        enableDocking: true,
+        enablePersistence: true,
+      });
+      console.log('✅ Unified Panel System initialized');
+    }
+
+    // Create FPS monitor panel (top-left, compact) - legacy
+    if (showFPS && !this.useUnifiedPanels) {
       this.createFPSPanel();
     }
 
-    // Create info panel (bottom-left)
-    if (showInfo) {
+    // Create info panel (bottom-left) - legacy
+    if (showInfo && !this.useUnifiedPanels) {
       this.createInfoPanel();
     }
+  }
+
+  /**
+   * Inject unified panel system CSS
+   */
+  private injectUnifiedPanelStyles(): void {
+    const existing = document.getElementById('unified-panel-system-styles');
+    if (existing) return;
+
+    // Load themed CSS file (uses CSS custom properties from theme system)
+    const link = document.createElement('link');
+    link.id = 'unified-panel-system-styles';
+    link.rel = 'stylesheet';
+    link.href = '/src/PANEL/unified-panel-system-themed.css';
+    document.head.appendChild(link);
+    
+    console.log('🎨 Loaded themed unified panel styles');
   }
 
   /**
@@ -801,8 +844,63 @@ export class Dashboard {
 
   /**
    * Create a new draggable, collapsible panel
+   * Now supports unified panel system integration
    */
   public createPanel(id: string, config: PanelConfig): { pane: any; container: HTMLDivElement } {
+    // If using unified system, create panel within the unified container
+    if (this.useUnifiedPanels && this.unifiedPanelSystem) {
+      return this.createUnifiedPanel(id, config);
+    }
+
+    // Legacy panel creation (original behavior)
+    return this.createLegacyPanel(id, config);
+  }
+
+  /**
+   * Create panel in unified system
+   */
+  private createUnifiedPanel(id: string, config: PanelConfig): { pane: any; container: HTMLDivElement } {
+    // Create container (will be placed inside unified panel system)
+    const container = document.createElement('div');
+    container.className = 'unified-panel-content-pane';
+    container.style.width = '100%';
+    container.style.height = '100%';
+
+    // Create pane
+    const pane: any = new Pane({
+      container,
+      title: config.title,
+      expanded: config.expanded ?? true,
+    });
+
+    pane.registerPlugin(EssentialsPlugin);
+
+    // Extract icon from title (e.g., "🌊 Physics" → "🌊")
+    const iconMatch = config.title.match(/^([\u{1F300}-\u{1F9FF}])/u);
+    const icon = iconMatch ? iconMatch[1] : '📋';
+    const label = config.title.replace(/^[\u{1F300}-\u{1F9FF}]\s*/u, '');
+
+    // Register with unified panel system
+    const panelDef: PanelDefinition = {
+      id,
+      icon,
+      label,
+      pane,
+      container,
+    };
+    
+    this.unifiedPanelSystem!.registerPanel(panelDef);
+
+    // Store reference
+    this.panels.set(id, { pane, container });
+
+    return { pane, container };
+  }
+
+  /**
+   * Create legacy draggable panel (original system)
+   */
+  private createLegacyPanel(id: string, config: PanelConfig): { pane: any; container: HTMLDivElement } {
     // Create container
     const container = document.createElement('div');
     container.className = 'panel-container';
@@ -941,17 +1039,44 @@ export class Dashboard {
   }
 
   /**
+   * Get unified panel system (if enabled)
+   */
+  public getUnifiedPanelSystem(): UnifiedPanelSystem | null {
+    return this.unifiedPanelSystem;
+  }
+
+  /**
+   * Check if using unified panel system
+   */
+  public isUsingUnifiedPanels(): boolean {
+    return this.useUnifiedPanels;
+  }
+
+  /**
    * Dispose of all UI resources
    */
   public dispose(): void {
+    // Dispose unified panel system if active
+    if (this.unifiedPanelSystem) {
+      this.unifiedPanelSystem.dispose();
+    }
+
     // Dispose all panels
     this.panels.forEach(({ pane, container }) => {
       pane.dispose();
-      container.remove();
+      if (!this.useUnifiedPanels) {
+        // Only remove if legacy panel (unified panels are managed by system)
+        container.remove();
+      }
     });
     this.panels.clear();
 
     // Remove styles
     this.styleSheet.remove();
+    
+    const unifiedStyles = document.getElementById('unified-panel-system-styles');
+    if (unifiedStyles) {
+      unifiedStyles.remove();
+    }
   }
 }

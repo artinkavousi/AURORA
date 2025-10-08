@@ -433,19 +433,19 @@ export class AudioReactiveBehavior {
       
       // RADIAL mode: Concentric spheres from center
       .ElseIf(this.audioUniforms.spatialMode.equal(int(SpatialMode.RADIAL)), () => {
-        const center = vec3(0.5).toConst('center');
-        const distFromCenter = length(normalizedPos.sub(center)).toConst('distFromCenter');
+        const centerRadial = vec3(0.5).toConst('centerRadial');
+        const distRadial = length(normalizedPos.sub(centerRadial)).toConst('distRadial');
         
         // Bass = outer shell
-        const bassShell = smoothstep(0.7, 1.0, distFromCenter);
+        const bassShell = smoothstep(0.7, 1.0, distRadial);
         influence.x.assign(bassShell);
         
         // Mid = middle shell
-        const midShell = smoothstep(0.3, 0.5, distFromCenter).mul(smoothstep(0.7, 0.5, distFromCenter));
+        const midShell = smoothstep(0.3, 0.5, distRadial).mul(smoothstep(0.7, 0.5, distRadial));
         influence.y.assign(midShell);
         
         // Treble = inner core
-        const trebleCore = smoothstep(0.3, 0.0, distFromCenter);
+        const trebleCore = smoothstep(0.3, 0.0, distRadial);
         influence.z.assign(trebleCore);
       })
       

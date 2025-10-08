@@ -1,0 +1,626 @@
+/**
+ * PANEL/glassmorphism-advanced.css - Advanced Glassmorphism & Frost Effects
+ * Beautiful, next-generation glass UI with dynamic theming support
+ */
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎨 UNIFIED PANEL SYSTEM - Advanced Glassmorphism Core */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-system {
+  /* Multi-layer advanced glass effect */
+  backdrop-filter:
+    blur(var(--theme-glass-blur, 60px))
+    saturate(var(--theme-glass-saturation, 220%))
+    brightness(var(--theme-glass-brightness, 1.25))
+    contrast(var(--theme-glass-contrast, 1.2))
+    hue-rotate(2deg);
+  -webkit-backdrop-filter:
+    blur(var(--theme-glass-blur, 60px))
+    saturate(var(--theme-glass-saturation, 220%))
+    brightness(var(--theme-glass-brightness, 1.25))
+    contrast(var(--theme-glass-contrast, 1.2))
+    hue-rotate(2deg);
+
+  /* Layered glass backgrounds */
+  background: 
+    linear-gradient(135deg, 
+      var(--theme-bg-glass, rgba(35, 46, 92, 0.75)) 0%,
+      var(--theme-bg-overlay, rgba(30, 41, 82, 0.85)) 50%,
+      var(--theme-bg-base, rgba(15, 23, 42, 0.95)) 100%
+    ),
+    radial-gradient(circle at top right,
+      var(--theme-shadow-glow, rgba(80, 120, 180, 0.15)) 0%,
+      transparent 60%
+    );
+
+  /* Multi-layered borders with gradient */
+  border: 1px solid var(--theme-border-light, rgba(255, 255, 255, 0.15));
+  box-shadow:
+    /* Ambient shadow */
+    0 20px 60px var(--theme-shadow-ambient, rgba(0, 0, 0, 0.5)),
+    /* Glow effect */
+    0 8px 32px var(--theme-shadow-glow, rgba(80, 120, 180, 0.5)),
+    /* Inner highlight */
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    /* Inner glow */
+    inset 0 0 80px var(--theme-shadow-inner, rgba(80, 120, 180, 0.1));
+
+  /* Smooth curves */
+  border-radius: var(--theme-border-radius, 20px);
+  
+  /* Position & layout */
+  position: fixed;
+  z-index: 10000;
+  overflow: hidden;
+  
+  /* Smooth transitions */
+  transition: all var(--theme-animation-duration, 400ms) var(--theme-animation-easing, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* Edge lighting effect */
+.unified-panel-system::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--theme-accent, #a78bfa) 30%,
+    var(--theme-primary, #5078b4) 50%,
+    var(--theme-accent, #a78bfa) 70%,
+    transparent 100%
+  );
+  opacity: 0.6;
+  filter: blur(2px);
+  animation: edgeShimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes edgeShimmer {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* Frost gradient overlay */
+.unified-panel-system::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.03) 100%
+  );
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 📑 TAB BAR - Vertical & Horizontal Glassmorphism */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-tabs {
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  background: linear-gradient(
+    var(--tab-gradient-direction, to right),
+    var(--theme-bg-glass, rgba(35, 46, 92, 0.75)) 0%,
+    var(--theme-bg-overlay, rgba(30, 41, 82, 0.85)) 100%
+  );
+  border-inline-end: 1px solid var(--theme-border-light, rgba(255, 255, 255, 0.15));
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  transition: all 0.3s ease;
+}
+
+/* Vertical tab bar */
+.unified-panel-tabs-vertical {
+  --tab-gradient-direction: to bottom;
+  flex-direction: column;
+  width: 56px;
+  padding: 8px 0;
+  gap: 4px;
+}
+
+/* Horizontal tab bar */
+.unified-panel-tabs-horizontal {
+  --tab-gradient-direction: to right;
+  flex-direction: row;
+  height: 56px;
+  padding: 0 8px;
+  gap: 4px;
+}
+
+/* Frost gradient overlay on tab bar */
+.unified-panel-tabs::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    var(--tab-gradient-direction, to right),
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎯 TAB BUTTONS - Interactive Glassmorphism */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  min-height: 48px;
+  background: transparent;
+  border: none;
+  border-radius: var(--theme-border-radius-sm, 12px);
+  color: var(--theme-text-secondary, rgba(255, 255, 255, 0.75));
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  font-size: var(--theme-font-sm, 11px);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Tab icon */
+.unified-panel-tab-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+/* Tab label */
+.unified-panel-tab-label {
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+/* Show label in expanded state or horizontal mode */
+.unified-panel-system:not(.collapsed) .unified-panel-tabs-vertical .unified-panel-tab-label,
+.unified-panel-tabs-horizontal .unified-panel-tab-label {
+  opacity: 1;
+}
+
+/* Tab hover effect */
+.unified-panel-tab:hover {
+  background: linear-gradient(135deg,
+    var(--theme-primary-alpha-15, rgba(80, 120, 180, 0.15)) 0%,
+    var(--theme-primary-alpha-08, rgba(80, 120, 180, 0.08)) 100%
+  );
+  color: var(--theme-text-primary, rgba(255, 255, 255, 0.95));
+  transform: scale(1.05);
+}
+
+.unified-panel-tab:hover .unified-panel-tab-icon {
+  transform: scale(1.1);
+}
+
+/* Active tab - Advanced glow effect */
+.unified-panel-tab.active {
+  background: linear-gradient(135deg,
+    var(--theme-primary-alpha-30, rgba(80, 120, 180, 0.3)) 0%,
+    var(--theme-primary-alpha-15, rgba(80, 120, 180, 0.15)) 100%
+  );
+  border-inline-start: 3px solid var(--theme-primary, #5078b4);
+  color: var(--theme-text-primary, rgba(255, 255, 255, 0.95));
+  box-shadow:
+    0 0 20px var(--theme-shadow-glow, rgba(80, 120, 180, 0.5)),
+    inset 0 0 20px var(--theme-shadow-inner, rgba(80, 120, 180, 0.1));
+  
+  /* Animated glow pulse */
+  animation: tabGlowPulse 2s ease-in-out infinite;
+}
+
+.unified-panel-tab.active .unified-panel-tab-icon {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 8px var(--theme-primary, #5078b4));
+}
+
+@keyframes tabGlowPulse {
+  0%, 100% { 
+    box-shadow:
+      0 0 20px var(--theme-shadow-glow, rgba(80, 120, 180, 0.5)),
+      inset 0 0 20px var(--theme-shadow-inner, rgba(80, 120, 180, 0.1));
+  }
+  50% { 
+    box-shadow:
+      0 0 35px var(--theme-shadow-glow, rgba(80, 120, 180, 0.7)),
+      inset 0 0 30px var(--theme-shadow-inner, rgba(80, 120, 180, 0.15));
+  }
+}
+
+/* Tab indicator (animated bar) */
+.unified-panel-tab-indicator {
+  position: absolute;
+  background: var(--theme-gradient-primary, linear-gradient(135deg, #5078b4 0%, #648cc8 50%, #a78bfa 100%));
+  border-radius: 3px;
+  transition: all 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Vertical indicator */
+.unified-panel-tabs-vertical .unified-panel-tab-indicator {
+  width: 3px;
+  left: 0;
+}
+
+/* Horizontal indicator */
+.unified-panel-tabs-horizontal .unified-panel-tab-indicator {
+  height: 3px;
+  bottom: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 📦 PANEL CONTENT - Glassmorphism Container */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+  position: relative;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Content fade-in animation */
+.unified-panel-content-pane {
+  animation: contentFadeIn 0.4s ease-out;
+}
+
+@keyframes contentFadeIn {
+  from { 
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Premium scrollbar */
+.unified-panel-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.unified-panel-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  margin: 8px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.unified-panel-content::-webkit-scrollbar-thumb {
+  background: var(--theme-gradient-accent, linear-gradient(180deg, #a78bfa 0%, #5078b4 50%, #5a80b8 100%));
+  border-radius: 12px;
+  border: 2px solid var(--theme-bg-overlay, rgba(30, 41, 82, 0.5));
+  box-shadow: 
+    0 2px 8px var(--theme-shadow-glow, rgba(80, 120, 180, 0.4)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.unified-panel-content::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-gradient-primary, linear-gradient(180deg, #5078b4 0%, #648cc8 50%, #a78bfa 100%));
+  box-shadow: 
+    0 4px 16px var(--theme-shadow-glow, rgba(80, 120, 180, 0.6)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border-color: var(--theme-bg-base, rgba(15, 23, 42, 0.3));
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎮 DRAG HANDLE - Interactive */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-drag-handle {
+  position: absolute;
+  top: 50%;
+  left: -12px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+    var(--theme-bg-glass, rgba(35, 46, 92, 0.85)) 0%,
+    var(--theme-bg-overlay, rgba(30, 41, 82, 0.95)) 100%
+  );
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid var(--theme-border-light, rgba(255, 255, 255, 0.15));
+  border-radius: var(--theme-border-radius-sm, 12px) 0 0 var(--theme-border-radius-sm, 12px);
+  box-shadow:
+    -4px 0 16px var(--theme-shadow-ambient, rgba(0, 0, 0, 0.3)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  cursor: grab;
+  transition: all 0.3s ease;
+  z-index: 1;
+  color: var(--theme-text-muted, rgba(255, 255, 255, 0.5));
+  font-size: 12px;
+}
+
+.unified-panel-drag-handle:hover {
+  background: linear-gradient(135deg,
+    var(--theme-primary-alpha-30, rgba(80, 120, 180, 0.3)) 0%,
+    var(--theme-primary-alpha-20, rgba(80, 120, 180, 0.2)) 100%
+  );
+  color: var(--theme-text-primary, rgba(255, 255, 255, 0.95));
+  box-shadow:
+    -4px 0 24px var(--theme-shadow-glow, rgba(80, 120, 180, 0.4)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transform: translateY(-50%) translateX(-2px);
+}
+
+.unified-panel-drag-handle:active {
+  cursor: grabbing;
+  transform: translateY(-50%) scale(1.05);
+}
+
+/* Dragging state */
+.unified-panel-system.dragging {
+  opacity: 0.9;
+  box-shadow:
+    0 30px 80px var(--theme-shadow-ambient, rgba(0, 0, 0, 0.6)),
+    0 12px 48px var(--theme-shadow-glow, rgba(80, 120, 180, 0.6));
+  transform: scale(1.02);
+}
+
+.unified-panel-system.dragging .unified-panel-drag-handle {
+  cursor: grabbing;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🎯 SNAP ZONES - Docking Indicators */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-snap-zone {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0;
+  border: 3px dashed var(--theme-primary, #5078b4);
+  background: var(--theme-primary-alpha-10, rgba(80, 120, 180, 0.1));
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  transition: opacity 0.3s ease;
+  z-index: 9999;
+  animation: snapZonePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes snapZonePulse {
+  0%, 100% { 
+    opacity: 0;
+    box-shadow: 0 0 20px var(--theme-shadow-glow, rgba(80, 120, 180, 0.3));
+  }
+  50% { 
+    opacity: 0.7;
+    box-shadow: 0 0 40px var(--theme-shadow-glow, rgba(80, 120, 180, 0.5));
+  }
+}
+
+.unified-panel-snap-zone.active {
+  opacity: 0.7 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 🔄 COLLAPSE/EXPAND TOGGLE */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+.unified-panel-collapse-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+    var(--theme-bg-glass, rgba(35, 46, 92, 0.85)) 0%,
+    var(--theme-bg-overlay, rgba(30, 41, 82, 0.95)) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--theme-border-light, rgba(255, 255, 255, 0.15));
+  border-radius: 50%;
+  color: var(--theme-text-secondary, rgba(255, 255, 255, 0.75));
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 2;
+  font-size: 14px;
+  box-shadow:
+    0 4px 12px var(--theme-shadow-ambient, rgba(0, 0, 0, 0.3)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.unified-panel-collapse-toggle:hover {
+  background: linear-gradient(135deg,
+    var(--theme-primary-alpha-30, rgba(80, 120, 180, 0.3)) 0%,
+    var(--theme-primary-alpha-20, rgba(80, 120, 180, 0.2)) 100%
+  );
+  color: var(--theme-text-primary, rgba(255, 255, 255, 0.95));
+  box-shadow:
+    0 6px 20px var(--theme-shadow-glow, rgba(80, 120, 180, 0.4)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+}
+
+.unified-panel-collapse-toggle:active {
+  transform: scale(0.95);
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* 📐 RESPONSIVE ADAPTATIONS */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* Bottom dock specific styles */
+.unified-panel-system[data-dock="bottom"] {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100vw !important;
+}
+
+.unified-panel-system[data-dock="bottom"] .unified-panel-drag-handle {
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 24px;
+  border-radius: var(--theme-border-radius-sm, 12px) var(--theme-border-radius-sm, 12px) 0 0;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .unified-panel-system {
+    max-width: calc(100vw - 24px) !important;
+  }
+  
+  .unified-panel-tabs-vertical {
+    width: 48px;
+  }
+  
+  .unified-panel-tab {
+    padding: 10px;
+    min-height: 44px;
+    font-size: 10px;
+  }
+  
+  .unified-panel-tab-icon {
+    font-size: 18px;
+  }
+  
+  .unified-panel-drag-handle {
+    width: 32px;
+    height: 60px;
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .unified-panel-tab:active {
+    transform: scale(0.95);
+  }
+  
+  .unified-panel-drag-handle {
+    width: 40px;
+    height: 60px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .unified-panel-system,
+  .unified-panel-tab,
+  .unified-panel-content-pane,
+  .unified-panel-drag-handle,
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .unified-panel-system {
+    border: 2px solid rgba(255, 255, 255, 0.5);
+  }
+  
+  .unified-panel-tab {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .unified-panel-tab.active {
+    border: 2px solid var(--theme-primary, #5078b4);
+  }
+}
+
+/* Dark mode enhancements */
+@media (prefers-color-scheme: dark) {
+  .unified-panel-system {
+    --theme-bg-base: rgba(5, 10, 20, 0.98);
+    --theme-bg-overlay: rgba(10, 15, 30, 0.95);
+    --theme-bg-glass: rgba(15, 20, 35, 0.90);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* ✨ SPECIAL EFFECTS & ANIMATIONS */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* Panel entrance animation */
+@keyframes panelEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+}
+
+.unified-panel-system {
+  animation: panelEnter 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Tab switch animation */
+@keyframes tabSwitchOut {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-20px); }
+}
+
+@keyframes tabSwitchIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Dock change animation */
+@keyframes dockTransition {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; transform: scale(0.98); }
+  100% { opacity: 1; }
+}
+
+/* Glow pulse effect for focus/attention */
+@keyframes glowPulse {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 10px var(--theme-primary, #5078b4)); }
+  50% { filter: brightness(1.2) drop-shadow(0 0 20px var(--theme-accent, #a78bfa)); }
+}
+
+/* Shimmer effect for loading */
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+

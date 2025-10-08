@@ -6,7 +6,6 @@
 import type { Pane } from 'tweakpane';
 import type { FlowConfig } from '../config';
 import { updateParticleParams } from '../config';
-import type { Dashboard } from '../PANEL/dashboard';
 import * as THREE from "three/webgpu";
 import { 
   MaterialType, 
@@ -32,25 +31,16 @@ import {
   CollisionMode,
   type ParticleBoundaries
 } from './physic/boundaries';
+import { ColorMode } from './visuals/colormodes';
 
 export interface PhysicPanelCallbacks {
   onParticleCountChange?: (count: number) => void;
-  onSizeChange?: (size: number) => void;
   onSimulationChange?: (config: FlowConfig['simulation']) => void;
   onGravityChange?: (gravityType: number) => void;
   onMaterialChange?: () => void;
   onForceFieldsChange?: () => void;
   onEmittersChange?: () => void;
   onBoundariesChange?: () => void;
-}
-
-export enum ColorMode {
-  VELOCITY = 0,
-  DENSITY = 1,
-  PRESSURE = 2,
-  MATERIAL = 3,
-  FORCE_MAGNITUDE = 4,
-  CUSTOM_HSV = 5,
 }
 
 /**
@@ -70,15 +60,6 @@ export class PhysicPanel {
   public boundaries: ParticleBoundaries | null = null;
   
   private selectedMaterialType: MaterialType = MaterialType.FLUID;
-  public colorMode: ColorMode = ColorMode.VELOCITY;
-  
-  public debugVisualization = {
-    showGrid: false,
-    showForceFields: true,
-    showEmitters: true,
-    showBoundaries: true,
-    showVelocityVectors: false,
-  };
   
   public metrics = {
     activeParticles: 0,
@@ -87,7 +68,7 @@ export class PhysicPanel {
   };
   
   constructor(
-    dashboard: Dashboard,
+    pane: Pane,
     config: FlowConfig,
     callbacks: PhysicPanelCallbacks = {}
   ) {
@@ -98,15 +79,7 @@ export class PhysicPanel {
     this.forceFieldManager = new ForceFieldManager(8);
     this.emitterManager = new ParticleEmitterManager(8);
     
-    // Create standalone draggable panel (now with integrated FPS monitor)
-    const { pane } = dashboard.createPanel('physics', {
-      title: '🌊 Particle Physics & Performance',
-      position: { x: 16, y: 16 },
-      expanded: true,
-      draggable: true,
-      collapsible: true,
-    });
-    
+    // Use provided pane from unified panel system
     this.pane = pane;
     this.setupUI();
   }
@@ -320,19 +293,8 @@ export class PhysicPanel {
       this.callbacks.onParticleCountChange?.(this.config.particles.count);
     });
     
-    folder.addBinding(this.config.particles, "size", {
-      label: "Size", 
-      min: 0.1, 
-      max: 3.0, 
-      step: 0.1,
-    }).on('change', () => {
-      updateParticleParams(this.config);
-      this.callbacks.onSizeChange?.(this.config.particles.actualSize);
-    });
-    
-    folder.addBinding(this.config.rendering, "points", { 
-      label: "Point Mode" 
-    });
+    // NOTE: Size and rendering mode moved to Visuals Panel
+    // Physics panel focuses on particle count and physics properties only
   }
   
   // ========================================
@@ -664,42 +626,10 @@ export class PhysicPanel {
   // ========================================
   
   private setupVisualSettings(): void {
-    const folder = this.pane.addFolder({ 
-      title: "🎨 Visuals", 
-      expanded: false 
-    });
-    
-    folder.addBlade({
-      view: 'list', 
-      label: 'Color Mode', 
-      value: this.colorMode,
-      options: [
-        { text: 'Velocity', value: ColorMode.VELOCITY },
-        { text: 'Density', value: ColorMode.DENSITY },
-        { text: 'Material', value: ColorMode.MATERIAL },
-      ],
-    }).on('change', (ev: any) => { 
-      this.colorMode = ev.value; 
-    });
-    
-    folder.addBinding(this.config.rendering, "bloom", { 
-      label: "✨ Bloom" 
-    });
-
-    folder.addBlade({ view: 'separator' });
-    
-    const debugFolder = folder.addFolder({ 
-      title: "Debug Visualization", 
-      expanded: false 
-    });
-    
-    debugFolder.addBinding(this.debugVisualization, "showForceFields", { 
-      label: "Force Fields" 
-    });
-    
-    debugFolder.addBinding(this.debugVisualization, "showEmitters", { 
-      label: "Emitters" 
-    });
+    // NOTE: All visual controls (color mode, bloom, debug visualization) 
+    // have been moved to the Visuals Panel as part of the consolidation.
+    // Physics panel now focuses purely on physics parameters.
+    // This method kept for backward compatibility but does nothing.
   }
   
   // ========================================

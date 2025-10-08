@@ -1,20 +1,20 @@
 /**
- * PARTICLESYSTEM/PANEL/PANELvisuals.ts - Visual controls panel
+ * PARTICLESYSTEM/visuals/PANELvisuals.ts - Visual controls panel
  * Single responsibility: UI controls for particle rendering and appearance
  */
 
 import type { Dashboard } from '../../PANEL/dashboard';
 import { ParticleRenderMode, RendererManager, type RendererConfig } from '../RENDERER/renderercore';
-import { ColorMode } from '../visuals/colormodes';
-import { COLOR_GRADIENTS, getGradientNames } from '../visuals/colorpalette';
+import { ColorMode } from './colormodes';
+import { COLOR_GRADIENTS, getGradientNames } from './colorpalette';
 import { 
   VISUAL_MATERIAL_PRESETS, 
   getVisualPresetNames,
   getCategories,
   getPresetsByCategory,
   type VisualMaterialProperties 
-} from '../visuals/materialvisuals';
-import { TextureManager } from '../textures/texturemanager';
+} from './materialvisuals';
+import { TextureManager } from './textures/texturemanager';
 
 /**
  * Visual panel callbacks
@@ -56,7 +56,7 @@ export class VisualsPanel {
     iridescence: 0.0,
     
     // Color
-    colorMode: ColorMode.VELOCITY,
+    colorMode: 0, // ColorMode.VELOCITY as number for Tweakpane compatibility
     colorGradient: 'RAINBOW',
     colorCycleSpeed: 0.05,
     brightness: 1.0,
@@ -226,14 +226,14 @@ export class VisualsPanel {
     const colorFolder = this.pane.addFolder({ title: '🌈 Color', expanded: true });
     
     const colorModeOptions = {
-      'Velocity (HSV)': ColorMode.VELOCITY,
-      'Density': ColorMode.DENSITY,
-      'Material Type': ColorMode.MATERIAL,
-      'Custom Gradient': ColorMode.GRADIENT,
-      'Gradient (Velocity)': ColorMode.GRADIENT_VELOCITY,
-      'Gradient (Density)': ColorMode.GRADIENT_DENSITY,
-      'Temperature': ColorMode.TEMPERATURE,
-      'Height': ColorMode.HEIGHT,
+      'Velocity (HSV)': 0,
+      'Density': 1,
+      'Material Type': 3,
+      'Custom Gradient': 4,
+      'Gradient (Velocity)': 5,
+      'Gradient (Density)': 6,
+      'Temperature': 8,
+      'Height': 10,
     };
     
     colorFolder.addBinding(this.settings, 'colorMode', {
@@ -530,7 +530,7 @@ export class VisualsPanel {
       transmission: 0.0,
       ior: 1.5,
       iridescence: 0.0,
-      colorMode: ColorMode.VELOCITY,
+      colorMode: 0, // ColorMode.VELOCITY
       colorGradient: 'RAINBOW',
       colorCycleSpeed: 0.05,
       brightness: 1.0,

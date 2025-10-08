@@ -2,6 +2,13 @@
  * PARTICLESYSTEM/PHYSIC/boundaries.ts - Particle container boundaries system
  * Single responsibility: Manage particle container shape, walls, collision detection and visual representation
  * 
+ * ✨ NEW: SELF-DEPENDENT & VIEWPORT-AWARE
+ * - Automatically tracks viewport dimensions and UI exclusion zones
+ * - NONE mode: Particles float freely in center of safe viewport area (no hard boundaries)
+ * - Shape modes: Automatically scale and position to fit viewport while avoiding UI
+ * - Robust collision system with proper coordinate space handling
+ * - No external dependencies on APP.ts resize handlers
+ * 
  * NOTE: This module's material/rendering is ISOLATED and does NOT affect main scene rendering
  * - Boundary visualization is DISABLED by default (visualize: false)
  * - Uses proper TSL node-based materials (no plain objects)
@@ -13,6 +20,7 @@ import * as THREE from "three/webgpu";
 import { Fn, texture, uv, positionWorld, If, vec3, int, float } from "three/tsl";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { ViewportTracker, type ViewportBounds } from './viewport-tracker';
 
 import boxObjUrl from '../../assets/boxSlightlySmooth.obj?url';
 import normalMapFile from '../../assets/concrete_0016_normal_opengl_1k.png';
@@ -99,17 +107,20 @@ export interface CollisionResult {
 
 /**
  * ParticleBoundaries - Comprehensive boundary management system
- * Handles collision detection, visual representation, and boundary constraints
+ * ✨ NEW: SELF-DEPENDENT & VIEWPORT-AWARE
+ * - Automatically tracks viewport and adapts boundaries
+ * - NONE mode: Soft floating boundaries in center of safe viewport
+ * - Shape modes: Auto-scales and positions to avoid UI clipping
+ * - Robust collision detection with proper coordinate handling
  */
 export class ParticleBoundaries {
   public readonly object: THREE.Object3D;
-  public readonly gridSize: THREE.Vector3;
+  public readonly shape: BoundaryShape;
   public readonly wallThickness: number;
   public readonly wallStiffness: number;
   public readonly collisionMode: CollisionMode;
   public readonly restitution: number;
   public readonly friction: number;
-  public readonly shape: BoundaryShape;
   
   private boundaryMesh: THREE.Mesh | null = null;
   private customMesh: THREE.Mesh | null = null;
@@ -122,9 +133,18 @@ export class ParticleBoundaries {
   private baseScale: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
   private viewportPulse: number = 0;  // Audio-driven viewport expansion when shape = NONE
   
-  // Boundary limits (in grid space)
-  public readonly min: THREE.Vector3;
-  public readonly max: THREE.Vector3;
+  // ✨ NEW: Self-dependent viewport tracking
+  private viewportTracker: ViewportTracker;
+  private currentBounds: ViewportBounds;
+  
+  // Dynamic boundary limits (updated from viewport tracker)
+  public min: THREE.Vector3 = new THREE.Vector3();
+  public max: THREE.Vector3 = new THREE.Vector3();
+  public gridSize: THREE.Vector3 = new THREE.Vector3();
+  public gridCenter: THREE.Vector3 = new THREE.Vector3();
+  
+  // Boundary enabled state (NONE mode = disabled/viewport mode, others = enabled)
+  private enabled: boolean = false;
   
   constructor(config: BoundaryConfig = {}) {
     const {
@@ -143,7 +163,6 @@ export class ParticleBoundaries {
     
     this.object = new THREE.Object3D();
     this.shape = shape;
-    this.gridSize = gridSize.clone();
     this.wallThickness = wallThickness;
     this.wallStiffness = wallStiffness;
     this.collisionMode = collisionMode;
@@ -154,12 +173,87 @@ export class ParticleBoundaries {
     this.audioReactive = audioReactive;
     this.audioPulseStrength = audioPulseStrength;
     
-    // Calculate boundary limits
-    this.min = new THREE.Vector3(wallThickness, wallThickness, wallThickness);
-    this.max = this.gridSize.clone().subScalar(wallThickness);
+    // ✨ NEW: Initialize viewport tracker with base grid size
+    this.viewportTracker = new ViewportTracker({
+      baseGridSize: gridSize,
+      minGridMargin: wallThickness,
+      uiMargin: 16,
+    });
     
-    // Store base radius for audio reactivity
-    this.baseRadius = Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - wallThickness;
+    // Get initial bounds
+    this.currentBounds = this.viewportTracker.getBounds();
+    this.updateBoundaryLimits();
+    
+    // Subscribe to viewport updates
+    this.viewportTracker.onUpdate((bounds) => {
+      this.currentBounds = bounds;
+      this.updateBoundaryLimits();
+      this.updateMeshTransform();
+    });
+    
+    // Set enabled state based on shape
+    this.enabled = shape !== BoundaryShape.NONE;
+  }
+  
+  /**
+   * ✨ NEW: Update boundary limits from viewport tracker
+   * Called automatically when viewport changes
+   */
+  private updateBoundaryLimits(): void {
+    const { grid, safe } = this.currentBounds;
+    
+    // Update grid size
+    this.gridSize.set(grid.width, grid.height, grid.depth);
+    this.gridCenter.copy(grid.center);
+    
+    // Calculate boundary limits (with wall thickness margin)
+    this.min.set(
+      this.wallThickness,
+      this.wallThickness,
+      this.wallThickness
+    );
+    this.max.set(
+      this.gridSize.x - this.wallThickness,
+      this.gridSize.y - this.wallThickness,
+      this.gridSize.z - this.wallThickness
+    );
+    
+    // ✨ FIX: Calculate radius based on SAFE ZONE (viewport minus UI panels)
+    // This prevents sphere from clipping with UI elements
+    const safeWidthGrid = (safe.width / window.innerWidth) * this.gridSize.x;
+    const safeHeightGrid = (safe.height / window.innerHeight) * this.gridSize.y;
+    
+    // Use smallest dimension of safe zone, with extra margin for UI panels
+    const safeDimension = Math.min(safeWidthGrid, safeHeightGrid, this.gridSize.z);
+    this.baseRadius = (safeDimension / 2) - this.wallThickness - 5;  // Extra 5-unit margin for safety
+  }
+  
+  /**
+   * ✨ NEW: Update mesh transform to match current viewport
+   * Called automatically when viewport changes
+   */
+  private updateMeshTransform(): void {
+    if (!this.boundaryMesh) return;
+    
+    const { grid, safe, screen } = this.currentBounds;
+    
+    // ✨ FIX: Position sphere in center of SAFE ZONE (not grid center)
+    // This ensures sphere is centered in available space (viewport minus UI)
+    const safeCenterX = ((safe.centerX / screen.width) * grid.width);
+    const safeCenterY = ((safe.centerY / screen.height) * grid.height);
+    const safeCenterGrid = new THREE.Vector3(safeCenterX, safeCenterY, grid.center.z);
+    
+    const worldCenter = this.viewportTracker.gridToWorld(safeCenterGrid);
+    this.boundaryMesh.position.copy(worldCenter);
+    
+    // For procedural shapes (sphere, tube, dodecahedron), scale to fit safe zone
+    if (this.shape === BoundaryShape.SPHERE || 
+        this.shape === BoundaryShape.TUBE || 
+        this.shape === BoundaryShape.DODECAHEDRON) {
+      const radius = this.baseRadius / 64;  // Convert grid units to world units
+      const scaleFactor = radius / this.baseScale.x;  // Maintain original proportions
+      this.boundaryMesh.scale.setScalar(scaleFactor);
+    }
   }
   
   /**
@@ -191,6 +285,14 @@ export class ParticleBoundaries {
         }
         break;
     }
+  }
+  
+  /**
+   * ✨ NEW: Manually refresh viewport tracking
+   * Call this after UI panels are created/modified
+   */
+  public refreshViewport(): void {
+    this.viewportTracker.recalculateBounds();
   }
   
   /**
@@ -287,24 +389,21 @@ export class ParticleBoundaries {
   
   /**
    * Create sphere boundary mesh with glass material
+   * ✨ NEW: Uses normalized radius (1.0) and scales via transform
+   * ✨ FIX: Positioned and sized for safe zone (viewport minus UI)
    */
   private async createSphereBoundary(): Promise<void> {
-    // Sphere radius in world space (grid units scaled to world)
-    const gridCenter = this.gridSize.clone().multiplyScalar(0.5);
-    const radius = (Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness) / 64;
-    
-    const geometry = new THREE.SphereGeometry(radius, 64, 64);
+    // Create unit sphere (radius = 1.0)
+    const geometry = new THREE.SphereGeometry(1.0, 64, 64);
     const material = this.createGlassMaterial();
     
     this.boundaryMesh = new THREE.Mesh(geometry, material);
     
-    // Position at grid center in world space
-    const s = 1 / 64;
-    this.boundaryMesh.position.set(
-      (gridCenter.x - 32) * s,
-      gridCenter.y * s,
-      gridCenter.z * s * 0.4
-    );
+    // Store base scale (will be adjusted by updateMeshTransform)
+    this.baseScale.setScalar(1.0);
+    
+    // Initial position and scale (updateMeshTransform will position it correctly)
+    this.updateMeshTransform();  // Use safe zone positioning
     
     this.boundaryMesh.castShadow = false;
     this.boundaryMesh.receiveShadow = true;
@@ -314,25 +413,22 @@ export class ParticleBoundaries {
   
   /**
    * Create tube (cylinder) boundary mesh with glass material
+   * ✨ NEW: Uses normalized dimensions and scales via transform
+   * ✨ FIX: Positioned and sized for safe zone
    */
   private async createTubeBoundary(): Promise<void> {
-    const gridCenter = this.gridSize.clone().multiplyScalar(0.5);
-    const radiusX = (Math.min(this.gridSize.x, this.gridSize.y) / 2 - this.wallThickness) / 64;
-    const height = (this.gridSize.z - this.wallThickness * 2) / 64 * 0.4;  // Z compression
-    
-    const geometry = new THREE.CylinderGeometry(radiusX, radiusX, height, 64, 1, false);
+    // Create unit cylinder (radius = 1.0, height = 1.0)
+    const geometry = new THREE.CylinderGeometry(1.0, 1.0, 1.0, 64, 1, false);
     const material = this.createGlassMaterial();
     
     this.boundaryMesh = new THREE.Mesh(geometry, material);
     this.boundaryMesh.rotation.set(0, 0, 0);
     
-    // Position at grid center in world space
-    const s = 1 / 64;
-    this.boundaryMesh.position.set(
-      (gridCenter.x - 32) * s,
-      gridCenter.y * s,
-      gridCenter.z * s * 0.4
-    );
+    // Store base scale
+    this.baseScale.setScalar(1.0);
+    
+    // Initial position and scale (updateMeshTransform will position it correctly)
+    this.updateMeshTransform();  // Use safe zone positioning
     
     this.boundaryMesh.castShadow = false;
     this.boundaryMesh.receiveShadow = true;
@@ -342,23 +438,21 @@ export class ParticleBoundaries {
   
   /**
    * Create dodecahedron boundary mesh with glass material
+   * ✨ NEW: Uses normalized radius and scales via transform
+   * ✨ FIX: Positioned and sized for safe zone
    */
   private async createDodecahedronBoundary(): Promise<void> {
-    const gridCenter = this.gridSize.clone().multiplyScalar(0.5);
-    const radius = (Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness) / 64;
-    
-    const geometry = new THREE.DodecahedronGeometry(radius, 0);
+    // Create unit dodecahedron (radius = 1.0)
+    const geometry = new THREE.DodecahedronGeometry(1.0, 0);
     const material = this.createGlassMaterial();
     
     this.boundaryMesh = new THREE.Mesh(geometry, material);
     
-    // Position at grid center in world space
-    const s = 1 / 64;
-    this.boundaryMesh.position.set(
-      (gridCenter.x - 32) * s,
-      gridCenter.y * s,
-      gridCenter.z * s * 0.4
-    );
+    // Store base scale
+    this.baseScale.setScalar(1.0);
+    
+    // Initial position and scale (updateMeshTransform will position it correctly)
+    this.updateMeshTransform();  // Use safe zone positioning
     
     this.boundaryMesh.castShadow = false;
     this.boundaryMesh.receiveShadow = true;
@@ -407,24 +501,18 @@ export class ParticleBoundaries {
    * This is the COMPLETE collision logic for all boundary shapes
    * Call this inside the particle update kernel
    * 
+   * ✨ NEW: IMPROVED COLLISION SYSTEM
+   * - NONE mode: Soft radial containment - particles float near viewport center
+   * - Shape modes: Proper collision with adaptive scaling
+   * - Better coordinate space handling
+   * - Smooth, natural physics
+   * 
    * SHAPE MODES:
-   * - NONE (shape = -1): Viewport mode - adaptive page boundaries, no container
+   * - NONE (boundaryEnabled = 0): Soft radial containment in viewport center
    * - BOX (shape = 0): Box container with loaded model
    * - SPHERE (shape = 1): Spherical glass container
    * - TUBE (shape = 2): Cylindrical glass tube container
    * - DODECAHEDRON (shape = 3): Dodecahedron glass container (approximated as sphere)
-   * 
-   * When DISABLED (boundaryEnabled = 0) or NONE:
-   * - Uses page/viewport dimensions as soft boundaries
-   * - Particles float in center of page
-   * - Adapts automatically to window resize
-   * - Softer collision (0.2 stiffness) for natural feel
-   * 
-   * When ENABLED (boundaryEnabled = 1):
-   * - Uses configured container shape
-   * - Stronger collision based on wallStiffness
-   * - Visual mesh shown
-   * - Custom boundary physics
    */
   public generateCollisionTSL(
     particlePosition: any,
@@ -444,39 +532,39 @@ export class ParticleBoundaries {
   ): void {
     const xN = particlePosition.add(particleVelocity.mul(uniforms.dt).mul(3.0));
 
-    // === VIEWPORT MODE (NONE or disabled) ===
-    // Particles use gridSize (viewport space) as boundaries
-    // This keeps particles visible on page and adapts to page size
+    // === VIEWPORT MODE (NONE / disabled) ===
+    // ✨ NEW: Soft radial containment - particles float near center
+    // No hard boundaries, just gentle forces that keep particles visible
+    // Adapts to viewport size automatically
     If(uniforms.boundaryEnabled.equal(int(0)), () => {
+      const center = uniforms.boundaryCenter;
+      const offset = xN.sub(center);
+      const dist = offset.length();
+      
+      // Soft radial boundary (very gentle, increases with distance from center)
       const pulse = uniforms.viewportPulse.clamp(0, 1);
-      const expansionAmount = pulse.mul(6.0);
-      const expansion = vec3(expansionAmount, expansionAmount, expansionAmount);
-      const viewportMin = vec3(1, 1, 1).sub(expansion);
-      const viewportMax = uniforms.gridSize.sub(1).add(expansion);
-      const softStiffness = float(0.08).add(pulse.mul(0.12));  // Gentle base + audio boost
-
-      // Soft viewport boundaries (keeps particles visible)
-      If(xN.x.lessThan(viewportMin.x), () => {
-        particleVelocity.x.addAssign(viewportMin.x.sub(xN.x).mul(softStiffness));
-      });
-      If(xN.x.greaterThan(viewportMax.x), () => { 
-        particleVelocity.x.addAssign(viewportMax.x.sub(xN.x).mul(softStiffness)); 
-      });
-      If(xN.y.lessThan(viewportMin.y), () => { 
-        particleVelocity.y.addAssign(viewportMin.y.sub(xN.y).mul(softStiffness)); 
-      });
-      If(xN.y.greaterThan(viewportMax.y), () => { 
-        particleVelocity.y.addAssign(viewportMax.y.sub(xN.y).mul(softStiffness)); 
-      });
-      If(xN.z.lessThan(viewportMin.z), () => { 
-        particleVelocity.z.addAssign(viewportMin.z.sub(xN.z).mul(softStiffness)); 
-      });
-      If(xN.z.greaterThan(viewportMax.z), () => { 
-        particleVelocity.z.addAssign(viewportMax.z.sub(xN.z).mul(softStiffness)); 
+      const safeRadius = uniforms.boundaryRadius.mul(float(0.95)).add(pulse.mul(uniforms.boundaryRadius.mul(0.15)));
+      const softZone = uniforms.boundaryRadius.mul(0.7);  // Start soft containment at 70% of radius
+      
+      // Gentle radial force that increases smoothly with distance
+      If(dist.greaterThan(softZone), () => {
+        const overshoot = dist.sub(softZone);
+        const maxOvershoot = safeRadius.sub(softZone);
+        const forceFactor = overshoot.div(maxOvershoot).clamp(0, 1);
+        const softStiffness = float(0.04).add(pulse.mul(0.08)).add(forceFactor.mul(0.12));  // Very gentle base, increases with distance
+        
+        const pushDir = offset.normalize();
+        const pushForce = pushDir.mul(overshoot).mul(softStiffness);
+        particleVelocity.subAssign(pushForce);
       });
       
-      // Clamp position to viewport
-      particlePosition.assign(particlePosition.clamp(viewportMin, viewportMax));
+      // Very soft clamp (only at extreme edges, prevents particles from completely leaving)
+      const hardEdge = safeRadius.mul(1.05);
+      const currentOffset = particlePosition.sub(center);
+      const currentDist = currentOffset.length();
+      If(currentDist.greaterThan(hardEdge), () => {
+        particlePosition.assign(center.add(currentOffset.normalize().mul(hardEdge)));
+      });
     });
     
     // === CUSTOM CONTAINER MODE (enabled) ===
@@ -843,8 +931,6 @@ export class ParticleBoundaries {
    * - Uses configured boundary shape (Box/Sphere/Cylinder)
    * - Visual mesh shown
    */
-  private enabled: boolean = false;  // Default to disabled (viewport mode)
-  
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
     this.setVisible(enabled);
@@ -912,15 +998,26 @@ export class ParticleBoundaries {
   
   /**
    * Update boundary dimensions
+   * ✨ NEW: No longer needed - viewport tracker handles this automatically
+   * Kept for backward compatibility but does nothing
+   * @deprecated Use viewport tracker automatic updates instead
    */
   public setGridSize(gridSize: THREE.Vector3): void {
-    this.gridSize.copy(gridSize);
-    this.min.set(this.wallThickness, this.wallThickness, this.wallThickness);
-    this.max.copy(this.gridSize).subScalar(this.wallThickness);
+    // No-op: viewport tracker handles grid size automatically
+    // This method is kept for backward compatibility with existing code
+    console.warn('⚠️ setGridSize() is deprecated and no longer needed. Boundaries update automatically via ViewportTracker.');
+  }
+  
+  /**
+   * ✨ NEW: Get current viewport bounds
+   */
+  public getViewportBounds(): ViewportBounds {
+    return this.currentBounds;
   }
   
   /**
    * Dispose resources
+   * ✨ NEW: Also disposes viewport tracker
    */
   public dispose(): void {
     if (this.boundaryMesh) {
@@ -931,6 +1028,9 @@ export class ParticleBoundaries {
       this.object.remove(this.boundaryMesh);
       this.boundaryMesh = null;
     }
+    
+    // Dispose viewport tracker
+    this.viewportTracker.dispose();
   }
 }
 

@@ -123,6 +123,33 @@ export interface ColorGradeConfig {
   tint: number;
 }
 
+export interface VignetteConfig {
+  enabled: boolean;
+  intensity: number;
+  smoothness: number;
+  roundness: number;
+}
+
+export interface FilmGrainConfig {
+  enabled: boolean;
+  intensity: number;
+  size: number;
+  speed: number;
+}
+
+export interface ColorGradingConfig {
+  enabled: boolean;
+  exposure: number;
+  contrast: number;
+  saturation: number;
+  brightness: number;
+  temperature: number;
+  tint: number;
+  shadows: THREE.Vector3;
+  midtones: THREE.Vector3;
+  highlights: THREE.Vector3;
+}
+
 export interface EnvironmentConfig {
   backgroundRotation: THREE.Euler;
   environmentRotation: THREE.Euler;
@@ -232,6 +259,9 @@ export interface FlowConfig {
   bloom: BloomConfig;
   radialFocus: RadialFocusConfig;
   radialCA: RadialCAConfig;
+  vignette: VignetteConfig;
+  filmGrain: FilmGrainConfig;
+  colorGrading: ColorGradingConfig;
   // Legacy
   chromaticAberration: ChromaticAberrationConfig;
   radialLensAberration: RadialLensAberrationConfig;
@@ -274,7 +304,7 @@ export const defaultConfig: FlowConfig = {
   simulation: {
     run: true,
     noise: 1.0,
-    speed: 1.0,
+    speed: 0.5,
     stiffness: 3.0,
     restDensity: 1.0,
     density: 1.0,
@@ -332,6 +362,30 @@ export const defaultConfig: FlowConfig = {
     angle: 0.0,
     edgeIntensity: 1.5,
     falloffPower: 2.5,
+  },
+  vignette: {
+    enabled: false,
+    intensity: 0.5,
+    smoothness: 0.5,
+    roundness: 1.0,
+  },
+  filmGrain: {
+    enabled: false,
+    intensity: 0.05,
+    size: 1.5,
+    speed: 1.0,
+  },
+  colorGrading: {
+    enabled: false,
+    exposure: 1.0,
+    contrast: 1.0,
+    saturation: 1.0,
+    brightness: 0.0,
+    temperature: 0.0,
+    tint: 0.0,
+    shadows: new THREE.Vector3(1, 1, 1),
+    midtones: new THREE.Vector3(1, 1, 1),
+    highlights: new THREE.Vector3(1, 1, 1),
   },
   // Legacy
   chromaticAberration: {
@@ -468,6 +522,11 @@ export function mergeConfig(base: FlowConfig, updates: Partial<FlowConfig>): Flo
     rendering: { ...base.rendering, ...updates.rendering },
     camera: { ...base.camera, ...updates.camera },
     bloom: { ...base.bloom, ...updates.bloom },
+    radialFocus: { ...base.radialFocus, ...updates.radialFocus },
+    radialCA: { ...base.radialCA, ...updates.radialCA },
+    vignette: { ...base.vignette, ...updates.vignette },
+    filmGrain: { ...base.filmGrain, ...updates.filmGrain },
+    colorGrading: { ...base.colorGrading, ...updates.colorGrading },
     chromaticAberration: { ...base.chromaticAberration, ...updates.chromaticAberration },
     radialLensAberration: { ...base.radialLensAberration, ...updates.radialLensAberration },
     depthOfField: { ...base.depthOfField, ...updates.depthOfField },

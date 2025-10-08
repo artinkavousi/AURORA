@@ -79,44 +79,44 @@ export class WaveFieldVisualizer extends AudioVisualizer {
       const force = vec3(0).toVar('waveForce');
 
       // Normalized position
-      const normPos = particlePos.div(gridSize).toConst('normPos');
-      const tempoWarp = audioUniforms.tempo.mul(0.015).add(0.35).toConst('tempoWarp');
-      const rhythmGain = audioUniforms.rhythmConfidence.mul(1.5).add(0.5).toConst('rhythmGain');
-      const shimmer = audioUniforms.modShimmer.add(0.1).toConst('shimmer');
-      const warp = audioUniforms.modWarp.sub(0.5).mul(2.0).toConst('warp');
-      const flow = audioUniforms.modFlow.add(0.2).toConst('flow');
+      const normPos = particlePos.div(gridSize).toConst('waveNormPos');
+      const tempoWarp = audioUniforms.tempo.mul(0.015).add(0.35).toConst('waveTempoWarp');
+      const rhythmGain = audioUniforms.rhythmConfidence.mul(1.5).add(0.5).toConst('waveRhythmGain');
+      const shimmer = audioUniforms.modShimmer.add(0.1).toConst('waveShimmer');
+      const warp = audioUniforms.modWarp.sub(0.5).mul(2.0).toConst('waveWarp');
+      const flow = audioUniforms.modFlow.add(0.2).toConst('waveFlow');
 
       const temporalPhase = time.mul(this.waveSpeed).mul(tempoWarp.mul(rhythmGain))
         .add(audioUniforms.tempoPhase.mul(float(Math.PI * 2)))
-        .toConst('temporalPhase');
+        .toConst('waveTemporalPhase');
 
       // Bass wave (large wavelength, slow)
       const bassWavelength = float(8.0);
       const bassPhase = temporalPhase.mul(0.3)
         .add(dot(normPos, vec3(1, 0, 0)).mul(bassWavelength))
         .add(audioUniforms.stereoBalance.mul(2.0))
-        .toConst('bassPhase');
-      const bassWave = sin(bassPhase).mul(audioUniforms.smoothBass).mul(this.waveScale).toConst('bassWave');
+        .toConst('waveBassPhase');
+      const bassWave = sin(bassPhase).mul(audioUniforms.smoothBass).mul(this.waveScale).toConst('waveBassWave');
       force.y.addAssign(bassWave);
 
       // Mid wave (medium wavelength, moderate speed)
       const midWavelength = float(4.0);
       const midPhase = temporalPhase.mul(0.6)
         .add(dot(normPos, vec3(0.7, 0, 0.7).normalize()).mul(midWavelength))
-        .toConst('midPhase');
+        .toConst('waveMidPhase');
       const midWave = sin(midPhase).mul(audioUniforms.smoothMid)
         .mul(this.waveScale.mul(0.7)).mul(flow)
-        .toConst('midWave');
+        .toConst('waveMidWave');
       force.xz.addAssign(vec3(cos(midPhase), 0, sin(midPhase)).xz.mul(midWave));
 
       // Treble wave (small wavelength, fast)
       const trebleWavelength = float(2.0);
       const treblePhase = temporalPhase.mul(1.2)
         .add(length(normPos.xz).mul(trebleWavelength))
-        .toConst('treblePhase');
+        .toConst('waveTreblePhase');
       const trebleWave = sin(treblePhase).mul(audioUniforms.smoothTreble)
         .mul(this.waveScale.mul(0.4)).mul(shimmer)
-        .toConst('trebleWave');
+        .toConst('waveTrebleWave');
       force.addAssign(vec3(cos(treblePhase), sin(treblePhase.mul(2)), sin(treblePhase)).mul(trebleWave));
 
       const warpMotion = vec3(
@@ -127,11 +127,11 @@ export class WaveFieldVisualizer extends AudioVisualizer {
       force.addAssign(warpMotion);
 
       // Beat pulse (radial wave)
-      const beatWave = audioUniforms.beatIntensity.mul(
+      const beatWavePulse = audioUniforms.beatIntensity.mul(
         sin(time.mul(10).sub(length(normPos.sub(vec3(0.5))).mul(20)))
-      ).mul(audioUniforms.beatImpulse.mul(0.05)).mul(audioUniforms.modPulse.add(0.2)).toConst('beatWave');
-      const beatDir = normalize(normPos.sub(vec3(0.5))).toConst('beatDir');
-      force.addAssign(beatDir.mul(beatWave));
+      ).mul(audioUniforms.beatImpulse.mul(0.05)).mul(audioUniforms.modPulse.add(0.2)).toConst('waveBeatPulse');
+      const beatDir = normalize(normPos.sub(vec3(0.5))).toConst('waveBeatDir');
+      force.addAssign(beatDir.mul(beatWavePulse));
 
       return force;
     }).setLayout({
@@ -159,34 +159,34 @@ export class FrequencyTowerVisualizer extends AudioVisualizer {
       const force = vec3(0).toVar('towerForce');
       
       // Divide space into frequency bands along X axis
-      const normX = particlePos.x.div(gridSize.x).toConst('normX');
-      const bandIndex = int(normX.mul(float(this.numBands))).toConst('bandIndex');
-      const bandCenter = float(bandIndex).add(0.5).div(float(this.numBands)).toConst('bandCenter');
+      const normX = particlePos.x.div(gridSize.x).toConst('towerNormX');
+      const bandIndex = int(normX.mul(float(this.numBands))).toConst('towerBandIndex');
+      const bandCenter = float(bandIndex).add(0.5).div(float(this.numBands)).toConst('towerBandCenter');
 
       // Distance from band center (for horizontal attraction)
-      const distFromCenter = normX.sub(bandCenter).abs().mul(float(this.numBands)).toConst('distFromCenter');
+      const distFromBandCenter = normX.sub(bandCenter).abs().mul(float(this.numBands)).toConst('towerDistFromCenter');
 
       // Frequency for this band (exponential distribution)
-      const bandFreqNorm = float(bandIndex).div(float(this.numBands)).toConst('bandFreqNorm');
-      const grooveBoost = audioUniforms.groove.add(0.2).toConst('grooveBoost');
-      const density = audioUniforms.modDensity.add(0.3).toConst('density');
-      const shimmer = audioUniforms.modShimmer.add(0.1).toConst('shimmer');
+      const bandFreqNorm = float(bandIndex).div(float(this.numBands)).toConst('towerBandFreqNorm');
+      const grooveBoost = audioUniforms.groove.add(0.2).toConst('towerGrooveBoost');
+      const density = audioUniforms.modDensity.add(0.3).toConst('towerDensity');
+      const shimmer = audioUniforms.modShimmer.add(0.1).toConst('towerShimmer');
       
       // Audio amplitude for this frequency range
       // Low bands = bass, mid bands = mid, high bands = treble
-      const bassContrib = smoothstep(0.5, 0.0, bandFreqNorm).mul(audioUniforms.smoothBass).toConst('bassContrib');
-      const midContrib = smoothstep(0.2, 0.5, bandFreqNorm).mul(smoothstep(0.8, 0.5, bandFreqNorm)).mul(audioUniforms.smoothMid).toConst('midContrib');
-      const trebleContrib = smoothstep(0.5, 1.0, bandFreqNorm).mul(audioUniforms.smoothTreble).toConst('trebleContrib');
-      const amplitude = bassContrib.add(midContrib).add(trebleContrib).toConst('amplitude');
+      const bassContrib = smoothstep(0.5, 0.0, bandFreqNorm).mul(audioUniforms.smoothBass).toConst('towerBassContrib');
+      const midContrib = smoothstep(0.2, 0.5, bandFreqNorm).mul(smoothstep(0.8, 0.5, bandFreqNorm)).mul(audioUniforms.smoothMid).toConst('towerMidContrib');
+      const trebleContrib = smoothstep(0.5, 1.0, bandFreqNorm).mul(audioUniforms.smoothTreble).toConst('towerTrebleContrib');
+      const amplitude = bassContrib.add(midContrib).add(trebleContrib).toConst('towerAmplitude');
       
       // Vertical force (tower height)
-      const targetHeight = amplitude.mul(gridSize.y).mul(0.8).toConst('targetHeight');
-      const verticalForce = targetHeight.sub(particlePos.y).mul(0.1).mul(grooveBoost).toConst('verticalForce');
+      const targetHeight = amplitude.mul(gridSize.y).mul(0.8).toConst('towerTargetHeight');
+      const verticalForce = targetHeight.sub(particlePos.y).mul(0.1).mul(grooveBoost).toConst('towerVerticalForce');
       force.y.assign(verticalForce);
       
       // Horizontal attraction to band center
-      const horizontalDir = bandCenter.mul(gridSize.x).sub(particlePos.x).toConst('horizontalDir');
-      force.x.assign(horizontalDir.mul(0.2).mul(smoothstep(1.0, 0.0, distFromCenter)));
+      const horizontalDir = bandCenter.mul(gridSize.x).sub(particlePos.x).toConst('towerHorizontalDir');
+      force.x.assign(horizontalDir.mul(0.2).mul(smoothstep(1.0, 0.0, distFromBandCenter)));
       force.z.addAssign(horizontalDir.mul(audioUniforms.stereoBalance).mul(0.05));
       
       // Beat pulse (all towers pulse together)
@@ -194,13 +194,13 @@ export class FrequencyTowerVisualizer extends AudioVisualizer {
         .mul(sin(time.mul(15).add(bandFreqNorm.mul(6)).add(audioUniforms.tempoPhase.mul(8))))
         .mul(this.towerStrength.mul(0.3))
         .mul(grooveBoost)
-        .toConst('beatPulse');
+        .toConst('towerBeatPulse');
       force.y.addAssign(beatPulse);
 
       const shimmerDrift = sin(time.mul(25).add(bandFreqNorm.mul(12)))
         .mul(shimmer)
         .mul(audioUniforms.spectralFlux.add(0.1))
-        .toConst('shimmerDrift');
+        .toConst('towerShimmerDrift');
       force.z.addAssign(shimmerDrift.mul(0.15));
 
       return force.mul(this.towerStrength.mul(0.1).mul(density));

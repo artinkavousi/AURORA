@@ -496,6 +496,35 @@ export class SoundReactivity {
     return this.smoothedOnset;
   }
 
+  private findPeakFrequency(): { frequency: number; intensity: number } {
+    if (!this.audioContext || !this.currentSpectrum.length) {
+      return { frequency: 0, intensity: 0 };
+    }
+
+    const sampleRate = this.audioContext.sampleRate;
+    const nyquist = sampleRate / 2;
+    const binWidth = nyquist / this.currentSpectrum.length;
+
+    // Find the bin with maximum intensity
+    let maxIntensity = 0;
+    let maxBin = 0;
+    
+    for (let i = 0; i < this.currentSpectrum.length; i++) {
+      if (this.currentSpectrum[i] > maxIntensity) {
+        maxIntensity = this.currentSpectrum[i];
+        maxBin = i;
+      }
+    }
+
+    // Calculate frequency from bin index
+    const frequency = maxBin * binWidth;
+    
+    return { 
+      frequency: frequency,
+      intensity: maxIntensity 
+    };
+  }
+
   private computeHarmonicity(peakFrequency: number): { energy: number; ratio: number } {
     if (!this.audioContext || !peakFrequency || !this.currentSpectrum.length) {
       return { energy: 0, ratio: 0 };

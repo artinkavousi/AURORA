@@ -3,18 +3,24 @@
  * Single responsibility: UI controls for particle rendering and appearance
  */
 
-import type { Dashboard } from '../../PANEL/dashboard';
-import { ParticleRenderMode, RendererManager, type RendererConfig } from '../RENDERER/renderercore';
-import { ColorMode } from '../visuals/colormodes';
-import { COLOR_GRADIENTS, getGradientNames } from '../visuals/colorpalette';
+import type { Pane } from 'tweakpane';
+import type { Dashboard } from '../dashboard';
+import { ParticleRenderMode, RendererManager, type RendererConfig } from '../../PARTICLESYSTEM/RENDERER/renderercore';
+import { ColorMode } from '../../PARTICLESYSTEM/visuals/colormodes';
+import { COLOR_GRADIENTS, getGradientNames } from '../../PARTICLESYSTEM/visuals/colorpalette';
 import { 
   VISUAL_MATERIAL_PRESETS, 
   getVisualPresetNames,
   getCategories,
   getPresetsByCategory,
   type VisualMaterialProperties 
-} from '../visuals/materialvisuals';
-import { TextureManager } from '../textures/texturemanager';
+} from '../../PARTICLESYSTEM/visuals/materialvisuals';
+import { TextureManager } from '../../PARTICLESYSTEM/textures/texturemanager';
+
+type PaneContainer = Pick<
+  Pane,
+  'addFolder' | 'addBinding' | 'addBlade' | 'addButton' | 'addInput' | 'addTab' | 'refresh'
+>;
 
 /**
  * Visual panel callbacks
@@ -32,7 +38,7 @@ export interface VisualPanelCallbacks {
  * VisualsPanel - Control panel for particle rendering and appearance
  */
 export class VisualsPanel {
-  private pane: any;
+  private pane: Pane;
   private callbacks: VisualPanelCallbacks;
   private rendererManager: RendererManager | null = null;
   private textureManager: TextureManager;
@@ -96,42 +102,64 @@ export class VisualsPanel {
     this.callbacks = callbacks;
     this.textureManager = new TextureManager();
     
-    // Create panel using Dashboard's createPanel method
-    const { pane } = dashboard.createPanel('visuals', {
+    this.pane = dashboard.registerPanel({
+      id: 'visuals',
       title: '🎨 Visuals',
-      position: { x: window.innerWidth - 316, y: 16 },
-      expanded: false,
-      draggable: true,
-      collapsible: true,
+      icon: '🎨',
+      description: 'Renderer, palette, particles, and effects styling',
     });
-    
-    this.pane = pane;
-    
+
     this.buildPanel();
   }
-  
+
   /**
    * Build the panel UI
    */
   private buildPanel(): void {
-    // === RENDERER SECTION ===
-    const rendererFolder = this.pane.addFolder({ title: '🖼️ Renderer', expanded: true });
-    
+    const tabs = this.pane.addTab({
+      pages: [
+        { title: 'Renderer' },
+        { title: 'Material' },
+        { title: 'Color' },
+        { title: 'Particles' },
+        { title: 'Effects' },
+        { title: 'Utility' },
+      ],
+    });
+
+    const rendererPage = tabs.pages[0] as unknown as PaneContainer;
+    const materialPage = tabs.pages[1] as unknown as PaneContainer;
+    const colorPage = tabs.pages[2] as unknown as PaneContainer;
+    const particlePage = tabs.pages[3] as unknown as PaneContainer;
+    const effectsPage = tabs.pages[4] as unknown as PaneContainer;
+    const utilityPage = tabs.pages[5] as unknown as PaneContainer;
+
+    this.buildRendererSection(rendererPage);
+    this.buildMaterialSection(materialPage);
+    this.buildColorSection(colorPage);
+    this.buildParticleSection(particlePage);
+    this.buildEffectsSection(effectsPage);
+    this.buildUtilitySection(utilityPage);
+  }
+
+  private buildRendererSection(container: PaneContainer): void {
+    const folder = container.addFolder({ title: '🖼️ Renderer', expanded: true });
+
     const renderModeOptions = {
       'Point': ParticleRenderMode.POINT,
       'Sprite': ParticleRenderMode.SPRITE,
       'Mesh': ParticleRenderMode.MESH,
       'Trail': ParticleRenderMode.TRAIL,
     };
-    
-    rendererFolder.addBinding(this.settings, 'renderMode', {
+
+    folder.addBinding(this.settings, 'renderMode', {
       label: 'Mode',
       options: renderModeOptions,
     }).on('change', (ev: any) => {
       this.callbacks.onRenderModeChange?.(ev.value);
     });
-    
-    rendererFolder.addBinding(this.settings, 'quality', {
+
+    folder.addBinding(this.settings, 'quality', {
       label: 'Quality',
       options: {
         'Low': 'low',
@@ -140,35 +168,34 @@ export class VisualsPanel {
         'Ultra': 'ultra',
       },
     });
-    
-    rendererFolder.addBinding(this.settings, 'lodEnabled', { label: 'LOD (Auto Quality)' });
-    rendererFolder.addBinding(this.settings, 'cullingEnabled', { label: 'GPU Culling' });
-    rendererFolder.addBinding(this.settings, 'sortingEnabled', { label: 'Depth Sorting' });
-    
-    // === MATERIAL SECTION ===
-    const materialFolder = this.pane.addFolder({ title: '🎭 Material', expanded: true });
-    
-    // Preset selector
-    const presetNames = getVisualPresetNames();
+
+    folder.addBinding(this.settings, 'lodEnabled', { label: 'LOD (Auto Quality)' });
+    folder.addBinding(this.settings, 'cullingEnabled', { label: 'GPU Culling' });
+    folder.addBinding(this.settings, 'sortingEnabled', { label: 'Depth Sorting' });
+  }
+
+  private buildMaterialSection(container: PaneContainer): void {
+    const folder = container.addFolder({ title: '🎭 Material', expanded: true });
+
     const presetOptions: Record<string, string> = {};
-    presetNames.forEach(name => {
+    getVisualPresetNames().forEach((name) => {
       presetOptions[name] = name;
     });
-    
-    materialFolder.addBinding(this.settings, 'materialPreset', {
+
+    folder.addBinding(this.settings, 'materialPreset', {
       label: 'Preset',
       options: presetOptions,
     }).on('change', (ev: any) => {
       this.applyMaterialPreset(ev.value);
     });
-    
-    materialFolder.addButton({ title: '📁 Browse Presets...' }).on('click', () => {
+
+    folder.addButton({ title: '📁 Browse Presets...' }).on('click', () => {
       this.openPresetBrowser();
     });
-    
-    materialFolder.addBlade({ view: 'separator' });
-    
-    materialFolder.addBinding(this.settings, 'metalness', {
+
+    folder.addBlade({ view: 'separator' });
+
+    folder.addBinding(this.settings, 'metalness', {
       label: 'Metalness',
       min: 0,
       max: 1,
@@ -176,8 +203,8 @@ export class VisualsPanel {
     }).on('change', (ev: any) => {
       this.callbacks.onMaterialPropertyChange?.('metalness', ev.value);
     });
-    
-    materialFolder.addBinding(this.settings, 'roughness', {
+
+    folder.addBinding(this.settings, 'roughness', {
       label: 'Roughness',
       min: 0,
       max: 1,
@@ -185,8 +212,8 @@ export class VisualsPanel {
     }).on('change', (ev: any) => {
       this.callbacks.onMaterialPropertyChange?.('roughness', ev.value);
     });
-    
-    materialFolder.addBinding(this.settings, 'emissive', {
+
+    folder.addBinding(this.settings, 'emissive', {
       label: 'Emissive',
       min: 0,
       max: 10,
@@ -194,8 +221,8 @@ export class VisualsPanel {
     }).on('change', (ev: any) => {
       this.callbacks.onMaterialPropertyChange?.('emissive', ev.value);
     });
-    
-    materialFolder.addBinding(this.settings, 'transmission', {
+
+    folder.addBinding(this.settings, 'transmission', {
       label: 'Transmission',
       min: 0,
       max: 1,
@@ -203,8 +230,8 @@ export class VisualsPanel {
     }).on('change', (ev: any) => {
       this.callbacks.onMaterialPropertyChange?.('transmission', ev.value);
     });
-    
-    materialFolder.addBinding(this.settings, 'ior', {
+
+    folder.addBinding(this.settings, 'ior', {
       label: 'IOR',
       min: 1.0,
       max: 3.0,
@@ -212,8 +239,8 @@ export class VisualsPanel {
     }).on('change', (ev: any) => {
       this.callbacks.onMaterialPropertyChange?.('ior', ev.value);
     });
-    
-    materialFolder.addBinding(this.settings, 'iridescence', {
+
+    folder.addBinding(this.settings, 'iridescence', {
       label: 'Iridescence',
       min: 0,
       max: 1,
@@ -221,10 +248,11 @@ export class VisualsPanel {
     }).on('change', (ev: any) => {
       this.callbacks.onMaterialPropertyChange?.('iridescence', ev.value);
     });
-    
-    // === COLOR SECTION ===
-    const colorFolder = this.pane.addFolder({ title: '🌈 Color', expanded: true });
-    
+  }
+
+  private buildColorSection(container: PaneContainer): void {
+    const folder = container.addFolder({ title: '🌈 Color', expanded: true });
+
     const colorModeOptions = {
       'Velocity (HSV)': ColorMode.VELOCITY,
       'Density': ColorMode.DENSITY,
@@ -235,66 +263,62 @@ export class VisualsPanel {
       'Temperature': ColorMode.TEMPERATURE,
       'Height': ColorMode.HEIGHT,
     };
-    
-    colorFolder.addBinding(this.settings, 'colorMode', {
+
+    folder.addBinding(this.settings, 'colorMode', {
       label: 'Mode',
       options: colorModeOptions,
     }).on('change', (ev: any) => {
       this.callbacks.onColorModeChange?.(ev.value);
     });
-    
-    // Gradient selector
-    const gradientNames = getGradientNames();
+
     const gradientOptions: Record<string, string> = {};
-    gradientNames.forEach(name => {
+    getGradientNames().forEach((name) => {
       gradientOptions[name] = name;
     });
-    
-    colorFolder.addBinding(this.settings, 'colorGradient', {
+
+    folder.addBinding(this.settings, 'colorGradient', {
       label: 'Gradient',
       options: gradientOptions,
     }).on('change', (ev: any) => {
       this.callbacks.onColorGradientChange?.(ev.value);
     });
-    
-    colorFolder.addButton({ title: '🎨 Edit Gradient...' }).on('click', () => {
+
+    folder.addButton({ title: '🎨 Edit Gradient...' }).on('click', () => {
       this.openGradientEditor();
     });
-    
-    colorFolder.addBlade({ view: 'separator' });
-    
-    colorFolder.addBinding(this.settings, 'colorCycleSpeed', {
+
+    folder.addBlade({ view: 'separator' });
+
+    folder.addBinding(this.settings, 'colorCycleSpeed', {
       label: 'Cycle Speed',
       min: 0,
       max: 1,
       step: 0.01,
     });
-    
-    colorFolder.addBinding(this.settings, 'brightness', {
+    folder.addBinding(this.settings, 'brightness', {
       label: 'Brightness',
       min: 0,
       max: 2,
       step: 0.01,
     });
-    
-    colorFolder.addBinding(this.settings, 'contrast', {
+    folder.addBinding(this.settings, 'contrast', {
       label: 'Contrast',
       min: 0,
       max: 2,
       step: 0.01,
     });
-    
-    colorFolder.addBinding(this.settings, 'saturation', {
+    folder.addBinding(this.settings, 'saturation', {
       label: 'Saturation',
       min: 0,
       max: 2,
       step: 0.01,
     });
-    
-    // === PARTICLE APPEARANCE ===
-    const particleFolder = this.pane.addFolder({ title: '✨ Particles', expanded: true });
-    
-    particleFolder.addBinding(this.settings, 'particleSize', {
+  }
+
+  private buildParticleSection(container: PaneContainer): void {
+    const folder = container.addFolder({ title: '✨ Particles', expanded: true });
+
+    folder.addBinding(this.settings, 'particleSize', {
       label: 'Size',
       min: 0.1,
       max: 5,
@@ -302,77 +326,71 @@ export class VisualsPanel {
     }).on('change', (ev: any) => {
       this.callbacks.onSizeChange?.(ev.value);
     });
-    
-    particleFolder.addBinding(this.settings, 'sizeVariation', {
+
+    folder.addBinding(this.settings, 'sizeVariation', {
       label: 'Size Variation',
       min: 0,
       max: 1,
       step: 0.01,
     });
-    
-    particleFolder.addBinding(this.settings, 'rotation', {
+
+    folder.addBinding(this.settings, 'rotation', {
       label: 'Rotation',
       min: 0,
       max: 360,
       step: 1,
     });
-    
-    particleFolder.addBinding(this.settings, 'rotationSpeed', {
+
+    folder.addBinding(this.settings, 'rotationSpeed', {
       label: 'Rotation Speed',
       min: 0,
       max: 10,
       step: 0.1,
     });
-    
-    particleFolder.addBinding(this.settings, 'opacity', {
+
+    folder.addBinding(this.settings, 'opacity', {
       label: 'Opacity',
       min: 0,
       max: 1,
       step: 0.01,
     });
-    
-    // === EFFECTS SECTION ===
-    const effectsFolder = this.pane.addFolder({ title: '💫 Effects', expanded: true });
-    
+  }
+
+  private buildEffectsSection(container: PaneContainer): void {
+    const effectsFolder = container.addFolder({ title: '💫 Effects', expanded: true });
+
     effectsFolder.addBinding(this.settings, 'trailsEnabled', { label: 'Trails' });
-    
     effectsFolder.addBinding(this.settings, 'trailLength', {
       label: 'Trail Length',
       min: 2,
       max: 64,
       step: 1,
     });
-    
     effectsFolder.addBinding(this.settings, 'trailWidthFalloff', {
       label: 'Trail Width Falloff',
       min: 0,
       max: 1,
       step: 0.01,
     });
-    
     effectsFolder.addBinding(this.settings, 'trailAlphaFalloff', {
       label: 'Trail Alpha Falloff',
       min: 0,
       max: 1,
       step: 0.01,
     });
-    
+
     effectsFolder.addBlade({ view: 'separator' });
-    
+
     effectsFolder.addBinding(this.settings, 'glowEnabled', { label: 'Glow' });
-    
     effectsFolder.addBinding(this.settings, 'glowIntensity', {
       label: 'Glow Intensity',
       min: 0,
       max: 5,
       step: 0.1,
     });
-    
     effectsFolder.addBinding(this.settings, 'softParticles', { label: 'Soft Particles' });
-    
-    // === SPRITE SETTINGS ===
-    const spriteFolder = this.pane.addFolder({ title: '🖼️ Sprite Settings', expanded: false });
-    
+
+    const spriteFolder = container.addFolder({ title: '🖼️ Sprite Settings', expanded: false });
     spriteFolder.addBinding(this.settings, 'billboardMode', {
       label: 'Billboard Mode',
       options: {
@@ -381,7 +399,6 @@ export class VisualsPanel {
         'Axis': 2,
       },
     });
-    
     spriteFolder.addBinding(this.settings, 'blendMode', {
       label: 'Blend Mode',
       options: {
@@ -390,7 +407,7 @@ export class VisualsPanel {
         'Multiply': 2,
       },
     });
-    
+
     const textureOptions: Record<string, string> = {
       'Circle': 'builtin_circle',
       'Square': 'builtin_square',
@@ -400,46 +417,38 @@ export class VisualsPanel {
       'Smoke': 'builtin_smoke',
       'Flare': 'builtin_flare',
     };
-    
+
     spriteFolder.addBinding(this.settings, 'spriteTexture', {
       label: 'Texture',
       options: textureOptions,
     });
-    
-    // === DEBUG SECTION ===
-    const debugFolder = this.pane.addFolder({ title: '🔍 Debug', expanded: false });
-    
+  }
+
+  private buildUtilitySection(container: PaneContainer): void {
+    const debugFolder = container.addFolder({ title: '🔍 Debug', expanded: true });
     debugFolder.addBinding(this.settings, 'showGrid', { label: 'Show Grid' });
     debugFolder.addBinding(this.settings, 'showForceFields', { label: 'Show Force Fields' });
     debugFolder.addBinding(this.settings, 'showBoundaries', { label: 'Show Boundaries' });
     debugFolder.addBinding(this.settings, 'showVelocity', { label: 'Show Velocity' });
     debugFolder.addBinding(this.settings, 'wireframe', { label: 'Wireframe' });
-    
-    // === QUICK ACTIONS ===
-    const actionsFolder = this.pane.addFolder({ title: '⚡ Quick Actions', expanded: false });
-    
+
+    const actionsFolder = container.addFolder({ title: '⚡ Quick Actions', expanded: false });
     actionsFolder.addButton({ title: '🎬 Performance Mode' }).on('click', () => {
       this.applyPerformanceMode();
     });
-    
     actionsFolder.addButton({ title: '💎 Quality Mode' }).on('click', () => {
       this.applyQualityMode();
     });
-    
     actionsFolder.addButton({ title: '🔥 Fire Preset' }).on('click', () => {
       this.applyMaterialPreset('FIREFLY');
     });
-    
     actionsFolder.addButton({ title: '💧 Water Preset' }).on('click', () => {
       this.applyMaterialPreset('WATER_DROPLET');
     });
-    
     actionsFolder.addButton({ title: '✨ Magic Preset' }).on('click', () => {
       this.applyMaterialPreset('MAGIC_SPARK');
     });
-    
     actionsFolder.addBlade({ view: 'separator' });
-    
     actionsFolder.addButton({ title: '↺ Reset to Defaults' }).on('click', () => {
       this.resetToDefaults();
     });

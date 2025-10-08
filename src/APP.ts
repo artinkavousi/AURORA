@@ -209,6 +209,8 @@ export class FlowApp {
       maxParticles: this.config.particles.maxCount,
     });
 
+    this.rendererManager.setSimulationTransform(this.boundaries.getSimulationTransform());
+
     this.currentRenderObject = this.rendererManager.getRenderer().object;
     this.currentRenderObject.visible = true;
     this.scenery.add(this.currentRenderObject);
@@ -434,6 +436,10 @@ export class FlowApp {
 
       // Update simulator uniforms
       this.mlsMpmSim.updateBoundaryUniforms();
+
+      if (this.rendererManager) {
+        this.rendererManager.setSimulationTransform(this.boundaries.getSimulationTransform());
+      }
 
       console.log('📐 Viewport adapted:', this.viewportGridSize.toArray().map(v => v.toFixed(1)));
     };

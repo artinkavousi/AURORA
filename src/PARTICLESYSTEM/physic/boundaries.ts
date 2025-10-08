@@ -13,6 +13,7 @@ import * as THREE from "three/webgpu";
 import { Fn, texture, uv, positionWorld, If, vec3, int, float } from "three/tsl";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { SimulationSpace, type SimulationTransform } from "./simulation-space";
 
 import boxObjUrl from '../../assets/boxSlightlySmooth.obj?url';
 import normalMapFile from '../../assets/concrete_0016_normal_opengl_1k.png';
@@ -86,6 +87,9 @@ export interface BoundaryConfig {
   customModelPath?: string;     // Path to OBJ model
   audioReactive?: boolean;      // Enable audio-reactive animations
   audioPulseStrength?: number;  // Strength of audio pulse effect (0-1)
+  baseGridSize?: THREE.Vector3; // Reference grid size (defaults to 64^3)
+  viewportAttractorStrength?: number; // Strength of soft centering force when boundaries are disabled
+  zCompression?: number;        // Rendering compression factor for Z axis
 }
 
 /**
@@ -110,7 +114,7 @@ export class ParticleBoundaries {
   public readonly restitution: number;
   public readonly friction: number;
   public readonly shape: BoundaryShape;
-  
+
   private boundaryMesh: THREE.Mesh | null = null;
   private customMesh: THREE.Mesh | null = null;
   private visualize: boolean;
@@ -121,10 +125,15 @@ export class ParticleBoundaries {
   private baseRadius: number = 0;  // Store base radius for pulsing
   private baseScale: THREE.Vector3 = new THREE.Vector3(1, 1, 1);
   private viewportPulse: number = 0;  // Audio-driven viewport expansion when shape = NONE
-  
+
   // Boundary limits (in grid space)
   public readonly min: THREE.Vector3;
   public readonly max: THREE.Vector3;
+
+  private readonly baseGridSize: THREE.Vector3;
+  private readonly zCompression: number;
+  private readonly simulationSpace: SimulationSpace;
+  private viewportAttractorStrength: number;
   
   constructor(config: BoundaryConfig = {}) {
     const {
@@ -139,8 +148,11 @@ export class ParticleBoundaries {
       customMesh = null,
       audioReactive = false,
       audioPulseStrength = 0.15,
+      baseGridSize = new THREE.Vector3(64, 64, 64),
+      viewportAttractorStrength = 0.08,
+      zCompression = 0.4,
     } = config;
-    
+
     this.object = new THREE.Object3D();
     this.shape = shape;
     this.gridSize = gridSize.clone();
@@ -153,13 +165,26 @@ export class ParticleBoundaries {
     this.customMesh = customMesh;
     this.audioReactive = audioReactive;
     this.audioPulseStrength = audioPulseStrength;
-    
+    this.baseGridSize = baseGridSize.clone();
+    this.viewportAttractorStrength = Math.max(0, viewportAttractorStrength);
+    this.zCompression = zCompression;
+    this.simulationSpace = new SimulationSpace({
+      baseGridSize: this.baseGridSize,
+      zCompression: this.zCompression,
+    });
+    this.simulationSpace.setGridSize(this.gridSize);
+
     // Calculate boundary limits
     this.min = new THREE.Vector3(wallThickness, wallThickness, wallThickness);
     this.max = this.gridSize.clone().subScalar(wallThickness);
-    
+
     // Store base radius for audio reactivity
     this.baseRadius = Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - wallThickness;
+    this.baseScale.set(
+      this.gridSize.x / this.baseGridSize.x,
+      this.gridSize.y / this.baseGridSize.y,
+      this.gridSize.z / this.baseGridSize.z
+    );
   }
   
   /**
@@ -167,28 +192,73 @@ export class ParticleBoundaries {
    */
   public async init(): Promise<void> {
     if (!this.visualize && this.shape !== BoundaryShape.NONE) return;
-    
+
     switch (this.shape) {
       case BoundaryShape.NONE:
         // No visual container - viewport mode
         break;
       case BoundaryShape.BOX:
         await this.createBoxBoundary();
+        this.updateBoundaryMeshTransform();
         break;
       case BoundaryShape.SPHERE:
         await this.createSphereBoundary();
+        this.updateBoundaryMeshTransform();
         break;
       case BoundaryShape.TUBE:
         await this.createTubeBoundary();
+        this.updateBoundaryMeshTransform();
         break;
       case BoundaryShape.DODECAHEDRON:
         await this.createDodecahedronBoundary();
+        this.updateBoundaryMeshTransform();
         break;
       case BoundaryShape.CUSTOM:
         if (this.customMesh) {
           this.boundaryMesh = this.customMesh;
           this.object.add(this.boundaryMesh);
+          this.updateBoundaryMeshTransform();
         }
+        break;
+    }
+  }
+
+  private getBaseScale(): number {
+    return 1 / this.baseGridSize.x;
+  }
+
+  private updateBoundaryMeshTransform(): void {
+    if (!this.boundaryMesh) return;
+
+    const scale = this.getBaseScale();
+    const gridCenter = this.gridSize.clone().multiplyScalar(0.5);
+
+    const offsetX = (gridCenter.x - this.gridSize.x * 0.5) * scale;
+    const offsetY = gridCenter.y * scale;
+    const offsetZ = gridCenter.z * scale * this.zCompression;
+
+    this.boundaryMesh.position.set(offsetX, offsetY, offsetZ);
+
+    if (this.shape === BoundaryShape.BOX && this.boundaryMesh) {
+      this.boundaryMesh.scale.set(this.baseScale.x, this.baseScale.y, this.baseScale.z);
+    }
+  }
+
+  private relaxVisualMeshState(): void {
+    if (!this.boundaryMesh) return;
+
+    switch (this.shape) {
+      case BoundaryShape.BOX:
+        this.boundaryMesh.scale.set(this.baseScale.x, this.baseScale.y, this.baseScale.z);
+        break;
+      case BoundaryShape.SPHERE:
+      case BoundaryShape.DODECAHEDRON:
+        this.boundaryMesh.scale.setScalar(1);
+        break;
+      case BoundaryShape.TUBE:
+        this.boundaryMesh.scale.set(1, 1, 1);
+        break;
+      default:
         break;
     }
   }
@@ -250,14 +320,11 @@ export class ParticleBoundaries {
     this.boundaryMesh.rotation.set(0, Math.PI, 0);
     
     // Position and scale to match particle world space
-    // Grid space (64x64x64) → World space with same transform as particles
-    const s = 1 / 64;
-    this.boundaryMesh.position.set(0, 0, 0);  // Centered in grid space
-    this.boundaryMesh.scale.set(1, 1, 1);     // Already sized correctly
-    
+    this.boundaryMesh.scale.set(this.baseScale.x, this.baseScale.y, this.baseScale.z);
+
     this.boundaryMesh.castShadow = true;
     this.boundaryMesh.receiveShadow = true;
-    
+
     this.object.add(this.boundaryMesh);
   }
   
@@ -291,24 +358,24 @@ export class ParticleBoundaries {
   private async createSphereBoundary(): Promise<void> {
     // Sphere radius in world space (grid units scaled to world)
     const gridCenter = this.gridSize.clone().multiplyScalar(0.5);
-    const radius = (Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness) / 64;
-    
+    const radius = (Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness) / this.baseGridSize.x;
+
     const geometry = new THREE.SphereGeometry(radius, 64, 64);
     const material = this.createGlassMaterial();
-    
+
     this.boundaryMesh = new THREE.Mesh(geometry, material);
-    
+
     // Position at grid center in world space
-    const s = 1 / 64;
+    const scale = this.getBaseScale();
     this.boundaryMesh.position.set(
-      (gridCenter.x - 32) * s,
-      gridCenter.y * s,
-      gridCenter.z * s * 0.4
+      (gridCenter.x - this.gridSize.x * 0.5) * scale,
+      gridCenter.y * scale,
+      gridCenter.z * scale * this.zCompression
     );
-    
+
     this.boundaryMesh.castShadow = false;
     this.boundaryMesh.receiveShadow = true;
-    
+
     this.object.add(this.boundaryMesh);
   }
   
@@ -317,26 +384,26 @@ export class ParticleBoundaries {
    */
   private async createTubeBoundary(): Promise<void> {
     const gridCenter = this.gridSize.clone().multiplyScalar(0.5);
-    const radiusX = (Math.min(this.gridSize.x, this.gridSize.y) / 2 - this.wallThickness) / 64;
-    const height = (this.gridSize.z - this.wallThickness * 2) / 64 * 0.4;  // Z compression
-    
+    const radiusX = (Math.min(this.gridSize.x, this.gridSize.y) / 2 - this.wallThickness) / this.baseGridSize.x;
+    const height = (this.gridSize.z - this.wallThickness * 2) / this.baseGridSize.x * this.zCompression;
+
     const geometry = new THREE.CylinderGeometry(radiusX, radiusX, height, 64, 1, false);
     const material = this.createGlassMaterial();
-    
+
     this.boundaryMesh = new THREE.Mesh(geometry, material);
     this.boundaryMesh.rotation.set(0, 0, 0);
-    
+
     // Position at grid center in world space
-    const s = 1 / 64;
+    const scale = this.getBaseScale();
     this.boundaryMesh.position.set(
-      (gridCenter.x - 32) * s,
-      gridCenter.y * s,
-      gridCenter.z * s * 0.4
+      (gridCenter.x - this.gridSize.x * 0.5) * scale,
+      gridCenter.y * scale,
+      gridCenter.z * scale * this.zCompression
     );
-    
+
     this.boundaryMesh.castShadow = false;
     this.boundaryMesh.receiveShadow = true;
-    
+
     this.object.add(this.boundaryMesh);
   }
   
@@ -345,24 +412,24 @@ export class ParticleBoundaries {
    */
   private async createDodecahedronBoundary(): Promise<void> {
     const gridCenter = this.gridSize.clone().multiplyScalar(0.5);
-    const radius = (Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness) / 64;
-    
+    const radius = (Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness) / this.baseGridSize.x;
+
     const geometry = new THREE.DodecahedronGeometry(radius, 0);
     const material = this.createGlassMaterial();
-    
+
     this.boundaryMesh = new THREE.Mesh(geometry, material);
-    
+
     // Position at grid center in world space
-    const s = 1 / 64;
+    const scale = this.getBaseScale();
     this.boundaryMesh.position.set(
-      (gridCenter.x - 32) * s,
-      gridCenter.y * s,
-      gridCenter.z * s * 0.4
+      (gridCenter.x - this.gridSize.x * 0.5) * scale,
+      gridCenter.y * scale,
+      gridCenter.z * scale * this.zCompression
     );
-    
+
     this.boundaryMesh.castShadow = false;
     this.boundaryMesh.receiveShadow = true;
-    
+
     this.object.add(this.boundaryMesh);
   }
   
@@ -399,7 +466,16 @@ export class ParticleBoundaries {
       gridCenter: this.gridSize.clone().multiplyScalar(0.5),
       boundaryRadius: Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness,
       viewportPulse: this.viewportPulse,
+      viewportAttractorStrength: this.viewportAttractorStrength,
     };
+  }
+
+  /**
+   * Expose the renderer transform so other systems (renderers, gizmos, etc.)
+   * can stay aligned with the simulation domain.
+   */
+  public getSimulationTransform(): SimulationTransform {
+    return this.simulationSpace.getRendererTransform();
   }
   
   /**
@@ -440,43 +516,20 @@ export class ParticleBoundaries {
       dt: any,
       gridSize: any,
       viewportPulse: any,
+      viewportAttractorStrength: any,
     }
   ): void {
-    const xN = particlePosition.add(particleVelocity.mul(uniforms.dt).mul(3.0));
-
     // === VIEWPORT MODE (NONE or disabled) ===
     // Particles use gridSize (viewport space) as boundaries
     // This keeps particles visible on page and adapts to page size
     If(uniforms.boundaryEnabled.equal(int(0)), () => {
-      const pulse = uniforms.viewportPulse.clamp(0, 1);
-      const expansionAmount = pulse.mul(6.0);
-      const expansion = vec3(expansionAmount, expansionAmount, expansionAmount);
-      const viewportMin = vec3(1, 1, 1).sub(expansion);
-      const viewportMax = uniforms.gridSize.sub(1).add(expansion);
-      const softStiffness = float(0.08).add(pulse.mul(0.12));  // Gentle base + audio boost
+      const viewportCenter = uniforms.gridSize.mul(0.5).toConst("viewportCenter");
+      const offsetToCenter = viewportCenter.sub(particlePosition).toConst("viewportOffset");
+      const attractStrength = uniforms.viewportAttractorStrength
+        .add(uniforms.viewportPulse.mul(0.25))
+        .toConst("viewportAttractorStrength");
 
-      // Soft viewport boundaries (keeps particles visible)
-      If(xN.x.lessThan(viewportMin.x), () => {
-        particleVelocity.x.addAssign(viewportMin.x.sub(xN.x).mul(softStiffness));
-      });
-      If(xN.x.greaterThan(viewportMax.x), () => { 
-        particleVelocity.x.addAssign(viewportMax.x.sub(xN.x).mul(softStiffness)); 
-      });
-      If(xN.y.lessThan(viewportMin.y), () => { 
-        particleVelocity.y.addAssign(viewportMin.y.sub(xN.y).mul(softStiffness)); 
-      });
-      If(xN.y.greaterThan(viewportMax.y), () => { 
-        particleVelocity.y.addAssign(viewportMax.y.sub(xN.y).mul(softStiffness)); 
-      });
-      If(xN.z.lessThan(viewportMin.z), () => { 
-        particleVelocity.z.addAssign(viewportMin.z.sub(xN.z).mul(softStiffness)); 
-      });
-      If(xN.z.greaterThan(viewportMax.z), () => { 
-        particleVelocity.z.addAssign(viewportMax.z.sub(xN.z).mul(softStiffness)); 
-      });
-      
-      // Clamp position to viewport
-      particlePosition.assign(particlePosition.clamp(viewportMin, viewportMax));
+      particleVelocity.addAssign(offsetToCenter.mul(attractStrength));
     });
     
     // === CUSTOM CONTAINER MODE (enabled) ===
@@ -757,11 +810,13 @@ export class ParticleBoundaries {
   public update(elapsed: number, audioData?: { bass: number; mid: number; treble: number; beatIntensity: number }): void {
     if (!this.audioReactive) {
       this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, 0, 0.15);
+      this.relaxVisualMeshState();
       return;
     }
 
     if (!audioData) {
       this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, 0, 0.15);
+      this.relaxVisualMeshState();
       return;
     }
 
@@ -777,6 +832,7 @@ export class ParticleBoundaries {
         audioData.beatIntensity * 0.5;
       const targetPulse = THREE.MathUtils.clamp(combinedEnergy * this.audioPulseStrength, 0, 1);
       this.viewportPulse = THREE.MathUtils.lerp(this.viewportPulse, targetPulse, 0.25);
+      this.relaxVisualMeshState();
       return;
     }
 
@@ -813,7 +869,11 @@ export class ParticleBoundaries {
     } else if (this.shape === BoundaryShape.BOX) {
       // Box: subtle pulse + rotation on beat
       const pulseScale = 1.0 + (audioData.bass + audioData.mid + audioData.treble) / 3 * this.audioPulseStrength * 0.3;
-      this.boundaryMesh.scale.setScalar(pulseScale);
+      this.boundaryMesh.scale.set(
+        this.baseScale.x * pulseScale,
+        this.baseScale.y * pulseScale,
+        this.baseScale.z * pulseScale
+      );
 
       // Subtle rotation on strong beats
       if (audioData.beatIntensity > 0.7) {
@@ -883,6 +943,8 @@ export class ParticleBoundaries {
     if (this.visualize) {
       await this.init();
     }
+
+    this.updateBoundaryMeshTransform();
   }
   
   /**
@@ -896,6 +958,8 @@ export class ParticleBoundaries {
     (this as any).wallThickness = thickness;
     this.min.set(thickness, thickness, thickness);
     this.max.copy(this.gridSize).subScalar(thickness);
+    this.baseRadius = Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness;
+    this.updateBoundaryMeshTransform();
   }
   
   public setRestitution(restitution: number): void {
@@ -917,6 +981,14 @@ export class ParticleBoundaries {
     this.gridSize.copy(gridSize);
     this.min.set(this.wallThickness, this.wallThickness, this.wallThickness);
     this.max.copy(this.gridSize).subScalar(this.wallThickness);
+    this.simulationSpace.setGridSize(this.gridSize);
+    this.baseRadius = Math.min(this.gridSize.x, this.gridSize.y, this.gridSize.z) / 2 - this.wallThickness;
+    this.baseScale.set(
+      this.gridSize.x / this.baseGridSize.x,
+      this.gridSize.y / this.baseGridSize.y,
+      this.gridSize.z / this.baseGridSize.z
+    );
+    this.updateBoundaryMeshTransform();
   }
   
   /**

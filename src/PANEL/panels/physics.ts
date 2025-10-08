@@ -33,10 +33,8 @@ import {
   type ParticleBoundaries
 } from '../../PARTICLESYSTEM/physic/boundaries';
 
-type PaneContainer = Pick<
-  Pane,
-  'addFolder' | 'addBinding' | 'addMonitor' | 'addBlade' | 'addButton' | 'addInput' | 'addTab' | 'refresh'
->;
+// Tweakpane v4 - using any due to incomplete type definitions
+type PaneContainer = any;
 
 export interface PhysicPanelCallbacks {
   onParticleCountChange?: (count: number) => void;
@@ -96,6 +94,8 @@ export class PhysicPanel {
     config: FlowConfig,
     callbacks: PhysicPanelCallbacks = {}
   ) {
+    console.log('[PhysicPanel] Constructor called');
+    console.log('[PhysicPanel] Dashboard:', dashboard);
     this.config = config;
     this.callbacks = callbacks;
     
@@ -103,14 +103,17 @@ export class PhysicPanel {
     this.forceFieldManager = new ForceFieldManager(8);
     this.emitterManager = new ParticleEmitterManager(8);
     
+    console.log('[PhysicPanel] About to call dashboard.registerPanel()');
     this.pane = dashboard.registerPanel({
       id: 'physics',
       title: '🌊 Particle Physics & Performance',
       icon: '🌊',
       description: 'Simulation, materials, forces, emitters, diagnostics',
     });
+    console.log('[PhysicPanel] Panel registered, pane:', this.pane);
 
     this.setupUI();
+    console.log('[PhysicPanel] Setup complete');
   }
 
   private setupUI(): void {
@@ -155,13 +158,16 @@ export class PhysicPanel {
       expanded: true 
     });
     
-    // Add FPS graph at the top
+    // FPS graph disabled - requires @tweakpane/plugin-essentials v4 (not yet available)
+    // TODO: Re-enable when plugin is updated for Tweakpane v4
+    /*
     this.fpsGraph = folder.addBlade({
       view: 'fpsgraph',
       label: 'FPS',
       rows: 3,
       lineCount: 2,
     });
+    */
     
     folder.addBinding(this.metrics, "activeParticles", { 
       label: "Particles", 
@@ -479,7 +485,7 @@ export class PhysicPanel {
     
     // Boundary state object for UI binding
     const boundaryState = {
-      container: 'none' as string,  // Container type (includes enabled state)
+      container: 'sphere' as string,  // Container type (includes enabled state)
       wallStiffness: 0.3,
       wallThickness: 3,
       restitution: 0.3,

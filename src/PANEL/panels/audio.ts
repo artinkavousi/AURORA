@@ -4,12 +4,17 @@
  */
 
 import type { Pane } from 'tweakpane';
-import type { AudioConfig, AudioReactiveConfig } from '../config';
-import type { FlowConfig } from '../config';
-import type { Dashboard } from '../PANEL/dashboard';
-import { AudioVisualizationMode } from './audioreactive';
-import { VISUALIZATION_MODE_NAMES } from './audiovisual';
-import type { AudioData } from './soundreactivity';
+import type { AudioConfig, AudioReactiveConfig } from '../../config';
+import type { FlowConfig } from '../../config';
+import type { Dashboard } from '../dashboard';
+import { AudioVisualizationMode } from '../../AUDIO/audioreactive';
+import { VISUALIZATION_MODE_NAMES } from '../../AUDIO/audiovisual';
+import type { AudioData } from '../../AUDIO/soundreactivity';
+
+type PaneContainer = Pick<
+  Pane,
+  'addFolder' | 'addBinding' | 'addMonitor' | 'addBlade' | 'addButton' | 'addInput' | 'addTab' | 'refresh'
+>;
 
 export interface AudioPanelCallbacks {
   onAudioConfigChange?: (config: Partial<AudioConfig>) => void;
@@ -173,51 +178,51 @@ export class AudioPanel {
     this.config = config;
     this.callbacks = callbacks;
     
-    // Create standalone draggable panel
-    const { pane } = dashboard.createPanel('audio', {
+    // Register within the adaptive dashboard shell
+    this.pane = dashboard.registerPanel({
+      id: 'audio',
       title: '🎵 Audio Reactivity',
-      position: { x: window.innerWidth - 340, y: 520 },
-      expanded: true,
-      draggable: true,
-      collapsible: true,
+      icon: '🎵',
+      description: 'Sound-reactive controls, modulation, and monitoring',
     });
-    
-    this.pane = pane;
+
     this.buildPanel();
   }
-  
+
   private buildPanel(): void {
-    // ==================== MAIN CONTROLS ====================
-    this.buildMainControls();
+    const tabs = this.pane.addTab({
+      pages: [
+        { title: 'Essentials' },
+        { title: 'Dynamics' },
+        { title: 'Modulation' },
+        { title: 'Advanced' },
+      ],
+    });
 
-    // ==================== LIVE OVERVIEW ====================
-    this.buildOverview();
+    const essentials = tabs.pages[0] as unknown as PaneContainer;
+    const dynamics = tabs.pages[1] as unknown as PaneContainer;
+    const modulation = tabs.pages[2] as unknown as PaneContainer;
+    const advanced = tabs.pages[3] as unknown as PaneContainer;
 
-    // ==================== FEATURE INSIGHTS ====================
-    this.buildFeatureInsights();
+    this.buildMainControls(essentials);
+    this.buildAudioInput(essentials);
+    this.buildPresets(essentials);
 
-    // ==================== MODULATION LAB ====================
-    this.buildModulationLab();
+    this.buildOverview(dynamics);
+    this.buildFeatureInsights(dynamics);
 
-    // ==================== HISTORY ====================
-    this.buildHistory();
+    this.buildModulationLab(modulation);
 
-    // ==================== AUDIO INPUT ====================
-    this.buildAudioInput();
-
-    // ==================== PRESETS ====================
-    this.buildPresets();
-    
-    // ==================== ADVANCED (Collapsed) ====================
-    this.buildAdvanced();
+    this.buildHistory(advanced);
+    this.buildAdvanced(advanced);
   }
   
   // ========================================
   // MAIN CONTROLS
   // ========================================
   
-  private buildMainControls(): void {
-    const folder = this.pane.addFolder({
+  private buildMainControls(container: PaneContainer = this.pane): void {
+    const folder = container.addFolder({
       title: '🎛️ Main Controls',
       expanded: true,
     });
@@ -256,8 +261,8 @@ export class AudioPanel {
   // LIVE METRICS
   // ========================================
   
-  private buildOverview(): void {
-    const folder = this.pane.addFolder({
+  private buildOverview(container: PaneContainer = this.pane): void {
+    const folder = container.addFolder({
       title: '📊 Live Overview',
       expanded: true,
     });
@@ -321,8 +326,8 @@ export class AudioPanel {
     }));
   }
 
-  private buildFeatureInsights(): void {
-    const folder = this.pane.addFolder({
+  private buildFeatureInsights(container: PaneContainer = this.pane): void {
+    const folder = container.addFolder({
       title: '🧠 Feature Insights',
       expanded: false,
     });
@@ -408,8 +413,8 @@ export class AudioPanel {
     }));
   }
 
-  private buildModulationLab(): void {
-    const folder = this.pane.addFolder({
+  private buildModulationLab(container: PaneContainer = this.pane): void {
+    const folder = container.addFolder({
       title: '🎚️ Modulation Lab',
       expanded: false,
     });
@@ -516,8 +521,8 @@ export class AudioPanel {
     });
   }
 
-  private buildHistory(): void {
-    const folder = this.pane.addFolder({
+  private buildHistory(container: PaneContainer = this.pane): void {
+    const folder = container.addFolder({
       title: '🗂️ Motion History',
       expanded: false,
     });
@@ -542,8 +547,8 @@ export class AudioPanel {
   // AUDIO INPUT
   // ========================================
   
-  private buildAudioInput(): void {
-    const folder = this.pane.addFolder({
+  private buildAudioInput(container: PaneContainer = this.pane): void {
+    const folder = container.addFolder({
       title: '🎤 Audio Source',
       expanded: false,
     });
@@ -603,8 +608,8 @@ export class AudioPanel {
   // PRESETS
   // ========================================
   
-  private buildPresets(): void {
-    const folder = this.pane.addFolder({
+  private buildPresets(container: PaneContainer = this.pane): void {
+    const folder = container.addFolder({
       title: '🎨 Visual Presets',
       expanded: true,
     });
@@ -650,8 +655,8 @@ export class AudioPanel {
   // ADVANCED SETTINGS
   // ========================================
   
-  private buildAdvanced(): void {
-    const folder = this.pane.addFolder({
+  private buildAdvanced(container: PaneContainer = this.pane): void {
+    const folder = container.addFolder({
       title: '⚙️ Advanced',
       expanded: false,
     });

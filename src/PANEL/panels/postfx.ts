@@ -2,8 +2,9 @@
  * POSTFX/PANELpostfx.ts - Refined Post-Effects Control Panel
  */
 
-import type { FlowConfig } from '../config';
-import type { Dashboard } from '../PANEL/dashboard';
+import type { Pane } from 'tweakpane';
+import type { FlowConfig } from '../../config';
+import type { Dashboard } from '../dashboard';
 
 export interface PostFXPanelCallbacks {
   onBloomChange?: (config: FlowConfig['bloom']) => void;
@@ -11,8 +12,10 @@ export interface PostFXPanelCallbacks {
   onRadialCAChange?: (config: FlowConfig['radialCA']) => void;
 }
 
+type PaneContainer = Pick<Pane, 'addFolder' | 'addBinding' | 'addBlade'>;
+
 export class PostFXPanel {
-  private pane: any;
+  private pane: Pane;
   private config: FlowConfig;
   private callbacks: PostFXPanelCallbacks;
 
@@ -24,27 +27,36 @@ export class PostFXPanel {
     this.config = config;
     this.callbacks = callbacks;
 
-    const { pane } = dashboard.createPanel('postfx', {
+    this.pane = dashboard.registerPanel({
+      id: 'postfx',
       title: '✨ Post Effects',
-      position: { x: window.innerWidth - 360, y: 16 },
-      expanded: true,
-      draggable: true,
-      collapsible: true,
+      icon: '✨',
+      description: 'Bloom, focus and chromatic controls',
     });
 
-    this.pane = pane;
+    this.buildPanel();
+  }
 
-    this.setupBloomControls();
-    this.setupRadialFocusControls();
-    this.setupRadialCAControls();
+  private buildPanel(): void {
+    const tabs = this.pane.addTab({
+      pages: [
+        { title: 'Glow' },
+        { title: 'Focus' },
+        { title: 'Chromatic' },
+      ],
+    });
+
+    this.setupBloomControls(tabs.pages[0] as unknown as PaneContainer);
+    this.setupRadialFocusControls(tabs.pages[1] as unknown as PaneContainer);
+    this.setupRadialCAControls(tabs.pages[2] as unknown as PaneContainer);
   }
 
   // ========================================
   // BLOOM (HDR-aware glow)
   // ========================================
   
-  private setupBloomControls(): void {
-    const folder = this.pane.addFolder({
+  private setupBloomControls(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "✨ Bloom",
       expanded: true,
     });
@@ -98,8 +110,8 @@ export class PostFXPanel {
   // RADIAL FOCUS/BLUR (sharp center → blurred edges)
   // ========================================
   
-  private setupRadialFocusControls(): void {
-    const folder = this.pane.addFolder({
+  private setupRadialFocusControls(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "🎯 Radial Focus",
       expanded: false,
     });
@@ -168,8 +180,8 @@ export class PostFXPanel {
   // RADIAL CHROMATIC ABERRATION (color fringing at edges)
   // ========================================
   
-  private setupRadialCAControls(): void {
-    const folder = this.pane.addFolder({
+  private setupRadialCAControls(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "🔴 Chromatic Aberration",
       expanded: false,
     });

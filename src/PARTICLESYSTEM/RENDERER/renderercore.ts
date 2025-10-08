@@ -5,6 +5,7 @@
 
 import * as THREE from "three/webgpu";
 import type { MlsMpmSimulator } from '../physic/mls-mpm';
+import type { SimulationTransform } from '../physic/simulation-space';
 import { MeshRenderer, type MeshRendererConfig } from './meshrenderer';
 import { PointRenderer } from './pointrenderer';
 import { SpriteRenderer, type SpriteRendererConfig } from './spriterenderer';
@@ -114,9 +115,15 @@ export class RendererManager {
   private config: RendererConfig;
   private currentRenderer: IParticleRenderer | null = null;
   private currentMode: ParticleRenderMode;
-  
+
   // Renderer cache (reuse when switching)
   private rendererCache: Map<ParticleRenderMode, IParticleRenderer> = new Map();
+
+  private simulationTransform: SimulationTransform = {
+    position: new THREE.Vector3(-0.5, 0, 0),
+    scale: new THREE.Vector3(1 / 64, 1 / 64, 1 / 64),
+    zCompression: 0.4,
+  };
   
   constructor(simulator: MlsMpmSimulator, config: Partial<RendererConfig> = {}) {
     this.simulator = simulator;
@@ -162,43 +169,75 @@ export class RendererManager {
    * Create a new renderer for the specified mode
    */
   private createRenderer(mode: ParticleRenderMode): IParticleRenderer {
+    let renderer: IParticleRenderer;
+
     switch (mode) {
       case ParticleRenderMode.POINT:
-        return new PointRenderer(this.simulator);
-      
+        renderer = new PointRenderer(this.simulator);
+        break;
+
       case ParticleRenderMode.MESH:
-        return new MeshRenderer(this.simulator, this.config.meshConfig);
-      
+        renderer = new MeshRenderer(this.simulator, this.config.meshConfig);
+        break;
+
       case ParticleRenderMode.SPRITE:
-        return new SpriteRenderer(this.simulator, this.config.spriteConfig);
-      
+        renderer = new SpriteRenderer(this.simulator, this.config.spriteConfig);
+        break;
+
       case ParticleRenderMode.TRAIL:
-        return new TrailRenderer(this.simulator, this.config.trailConfig);
-      
+        renderer = new TrailRenderer(this.simulator, this.config.trailConfig);
+        break;
+
       case ParticleRenderMode.GLOW:
         // Future implementation
         throw new Error('GlowRenderer not yet implemented');
-      
+
       case ParticleRenderMode.MESH_CUSTOM:
         // Future implementation
         throw new Error('CustomMeshRenderer not yet implemented');
-      
+
       case ParticleRenderMode.PROCEDURAL:
         // Future implementation
         throw new Error('ProceduralRenderer not yet implemented');
-      
+
       case ParticleRenderMode.METABALL:
         // Advanced feature
         throw new Error('MetaballRenderer not yet implemented');
-      
+
       case ParticleRenderMode.RIBBON:
         // Future implementation
         throw new Error('RibbonRenderer not yet implemented');
-      
+
       default:
         console.warn(`Unknown render mode ${mode}, falling back to MESH`);
-        return new MeshRenderer(this.simulator, this.config.meshConfig);
+        renderer = new MeshRenderer(this.simulator, this.config.meshConfig);
+        break;
     }
+
+    this.applySimulationTransform(renderer.object);
+    return renderer;
+  }
+
+  /** Update cached renderer transforms when the simulation space changes. */
+  public setSimulationTransform(transform: SimulationTransform): void {
+    this.simulationTransform = {
+      position: transform.position.clone(),
+      scale: transform.scale.clone(),
+      zCompression: transform.zCompression,
+    };
+
+    for (const cached of this.rendererCache.values()) {
+      this.applySimulationTransform(cached.object);
+    }
+
+    if (this.currentRenderer) {
+      this.applySimulationTransform(this.currentRenderer.object);
+    }
+  }
+
+  private applySimulationTransform(object: THREE.Object3D): void {
+    object.position.copy(this.simulationTransform.position);
+    object.scale.copy(this.simulationTransform.scale);
   }
   
   /**

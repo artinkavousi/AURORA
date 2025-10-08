@@ -385,10 +385,12 @@ export class PostFX {
       const shimmer = modulators.shimmer ?? audioData.smoothTreble;
       const pulse = modulators.pulse ?? audioData.beatIntensity;
       const warp = modulators.warp ?? 0;
+      const containment = modulators.containment ?? audioData.motion?.expansion ?? audioData.smoothOverall;
+      const sway = modulators.sway ?? ((audioData.motion?.sway ?? 0) + 1) * 0.5;
 
-      bloomMixTarget = Math.max(bloomMixTarget, 0.6) + aura * 0.9 * normalizedInfluence;
-      focusMixTarget = Math.max(focusMixTarget, 0.4) + (flow * 0.7 + pulse * 0.3) * normalizedInfluence;
-      caMixTarget = Math.max(caMixTarget, 0.35) + (shimmer * 0.85 + warp * 0.2) * normalizedInfluence;
+      bloomMixTarget = Math.max(bloomMixTarget, 0.6) + (aura * 0.7 + containment * 0.4) * normalizedInfluence;
+      focusMixTarget = Math.max(focusMixTarget, 0.4) + (flow * 0.6 + pulse * 0.25 + containment * 0.35) * normalizedInfluence;
+      caMixTarget = Math.max(caMixTarget, 0.35) + (shimmer * 0.75 + warp * 0.2 + Math.abs(sway - 0.5) * 0.4) * normalizedInfluence;
 
       if (this.baseEnabled.bloom < 0.5) {
         bloomEnableTarget = Math.min(1, aura * 1.25 * normalizedInfluence);

@@ -146,6 +146,9 @@ export interface AudioConfig {
   // Advanced analysis tuning
   historySize: number;
   featureSmoothing: number;
+  modulationSmoothing: number;
+  motionSmoothing: number;
+  dynamicsSmoothing: number;
   fluxSmoothing: number;
   onsetSensitivity: number;
   grooveSensitivity: number;
@@ -393,6 +396,9 @@ export const defaultConfig: FlowConfig = {
     maxDecibels: -10,
     historySize: 192,
     featureSmoothing: 0.82,
+    modulationSmoothing: 0.72,
+    motionSmoothing: 0.68,
+    dynamicsSmoothing: 0.78,
     fluxSmoothing: 0.7,
     onsetSensitivity: 0.55,
     grooveSensitivity: 0.45,

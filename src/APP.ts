@@ -11,18 +11,19 @@ import { Dashboard } from './PANEL/dashboard';
 import { Scenery } from './STAGE/scenery';
 import { PostFX } from './POSTFX/postfx';  // RE-ENABLED (simplified version)
 import { ParticleBoundaries } from './PARTICLESYSTEM/physic/boundaries';
-import { PostFXPanel } from './POSTFX/PANELpostfx';  // RE-ENABLED
+import { PostFXPanel } from './PANEL/panels/postfx';  // RE-ENABLED
 import { MlsMpmSimulator } from './PARTICLESYSTEM/physic/mls-mpm';
 import { MeshRenderer } from './PARTICLESYSTEM/RENDERER/meshrenderer';
 import { PointRenderer } from './PARTICLESYSTEM/RENDERER/pointrenderer';
 import { RendererManager, ParticleRenderMode } from './PARTICLESYSTEM/RENDERER/renderercore';
-import { PhysicPanel, ColorMode } from './PARTICLESYSTEM/PANELphysic';
-import { VisualsPanel } from './PARTICLESYSTEM/PANEL/PANELvisuals';
+import { PhysicPanel, ColorMode } from './PANEL/panels/physics';
+import { VisualsPanel } from './PANEL/panels/visuals';
 import { SoundReactivity } from './AUDIO/soundreactivity';
 import type { AudioData } from './AUDIO/soundreactivity';
 import { AudioReactiveBehavior } from './AUDIO/audioreactive';
 import { AudioVisualizationManager } from './AUDIO/audiovisual';
-import { AudioPanel } from './AUDIO/PANELsoundreactivity';
+import { AudioPanel } from './PANEL/panels/audio';
+import { ThemeManagerPanel } from './PANEL/panels/theme';
 import { AdaptivePerformanceManager, type PerformanceChangeContext, type PerformanceTier } from './APP/performance';
 
 export type { ProgressCallback } from './APP/types';
@@ -58,6 +59,7 @@ export class FlowApp {
   private physicPanel!: PhysicPanel;
   private visualsPanel!: VisualsPanel;  // NEW: Visual controls
   private audioPanel!: AudioPanel;
+  private themePanel!: ThemeManagerPanel;
 
   // Audio reactivity
   private soundReactivity!: SoundReactivity;
@@ -279,6 +281,8 @@ export class FlowApp {
         this.postFX.updateRadialCA(radialCAConfig);
       },
     });
+
+    this.themePanel = new ThemeManagerPanel(this.dashboard);
   }
 
   private async initializeAudioSystems(): Promise<void> {

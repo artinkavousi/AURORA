@@ -4,34 +4,39 @@
  */
 
 import type { Pane } from 'tweakpane';
-import type { FlowConfig } from '../config';
-import { updateParticleParams } from '../config';
-import type { Dashboard } from '../PANEL/dashboard';
+import type { FlowConfig } from '../../config';
+import { updateParticleParams } from '../../config';
+import type { Dashboard } from '../dashboard';
 import * as THREE from "three/webgpu";
-import { 
-  MaterialType, 
-  MATERIAL_PRESETS, 
-  MaterialManager 
-} from './physic/materials';
+import {
+  MaterialType,
+  MATERIAL_PRESETS,
+  MaterialManager
+} from '../../PARTICLESYSTEM/physic/materials';
 import {
   ForceFieldType,
   ForceFalloff,
   type ForceFieldConfig,
   ForceFieldManager,
   FORCE_FIELD_PRESETS
-} from './physic/forcefields';
+} from '../../PARTICLESYSTEM/physic/forcefields';
 import {
   EmitterType,
   EmissionPattern,
   type ParticleEmitterConfig,
   ParticleEmitterManager,
   EMITTER_PRESETS
-} from './physic/emitters';
+} from '../../PARTICLESYSTEM/physic/emitters';
 import {
   BoundaryShape,
   CollisionMode,
   type ParticleBoundaries
-} from './physic/boundaries';
+} from '../../PARTICLESYSTEM/physic/boundaries';
+
+type PaneContainer = Pick<
+  Pane,
+  'addFolder' | 'addBinding' | 'addMonitor' | 'addBlade' | 'addButton' | 'addInput' | 'addTab' | 'refresh'
+>;
 
 export interface PhysicPanelCallbacks {
   onParticleCountChange?: (count: number) => void;
@@ -58,7 +63,7 @@ export enum ColorMode {
  * Clean, organized interface with advanced controls
  */
 export class PhysicPanel {
-  private pane: any;
+  private pane: Pane;
   private config: FlowConfig;
   private callbacks: PhysicPanelCallbacks;
   private gravitySensor: any = null;
@@ -98,37 +103,54 @@ export class PhysicPanel {
     this.forceFieldManager = new ForceFieldManager(8);
     this.emitterManager = new ParticleEmitterManager(8);
     
-    // Create standalone draggable panel (now with integrated FPS monitor)
-    const { pane } = dashboard.createPanel('physics', {
+    this.pane = dashboard.registerPanel({
+      id: 'physics',
       title: '🌊 Particle Physics & Performance',
-      position: { x: 16, y: 16 },
-      expanded: true,
-      draggable: true,
-      collapsible: true,
+      icon: '🌊',
+      description: 'Simulation, materials, forces, emitters, diagnostics',
     });
-    
-    this.pane = pane;
+
     this.setupUI();
   }
-  
+
   private setupUI(): void {
-    this.setupMetrics();
-    this.setupSimulationControls();
-    this.setupParticleControls();
-    this.setupMaterialManager();
-    this.setupForceFieldManager();
-    this.setupEmitterManager();
-    this.setupBoundaryControls();
-    this.setupVisualSettings();
-    this.setupPresets();
+    const tabs = this.pane.addTab({
+      pages: [
+        { title: 'Overview' },
+        { title: 'Simulation' },
+        { title: 'Materials' },
+        { title: 'Forces' },
+        { title: 'Emitters' },
+        { title: 'Boundaries' },
+        { title: 'Visuals' },
+      ],
+    });
+
+    const overview = tabs.pages[0] as unknown as PaneContainer;
+    const simulation = tabs.pages[1] as unknown as PaneContainer;
+    const materials = tabs.pages[2] as unknown as PaneContainer;
+    const forces = tabs.pages[3] as unknown as PaneContainer;
+    const emitters = tabs.pages[4] as unknown as PaneContainer;
+    const boundaries = tabs.pages[5] as unknown as PaneContainer;
+    const visuals = tabs.pages[6] as unknown as PaneContainer;
+
+    this.setupMetrics(overview);
+    this.setupSimulationControls(simulation);
+    this.setupParticleControls(simulation);
+    this.setupMaterialManager(materials);
+    this.setupForceFieldManager(forces);
+    this.setupEmitterManager(emitters);
+    this.setupBoundaryControls(boundaries);
+    this.setupVisualSettings(visuals);
+    this.setupPresets(overview);
   }
   
   // ========================================
   // PERFORMANCE METRICS
   // ========================================
   
-  private setupMetrics(): void {
-    const folder = this.pane.addFolder({ 
+  private setupMetrics(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "📊 Performance", 
       expanded: true 
     });
@@ -173,8 +195,8 @@ export class PhysicPanel {
   // SIMULATION CONTROLS
   // ========================================
   
-  private setupSimulationControls(): void {
-    const folder = this.pane.addFolder({ 
+  private setupSimulationControls(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "⚙️ Simulation", 
       expanded: true 
     });
@@ -304,8 +326,8 @@ export class PhysicPanel {
   // PARTICLE SETTINGS
   // ========================================
   
-  private setupParticleControls(): void {
-    const folder = this.pane.addFolder({ 
+  private setupParticleControls(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "⚛️ Particles", 
       expanded: true 
     });
@@ -339,8 +361,8 @@ export class PhysicPanel {
   // MATERIALS
   // ========================================
   
-  private setupMaterialManager(): void {
-    const folder = this.pane.addFolder({ 
+  private setupMaterialManager(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "🧪 Materials", 
       expanded: false 
     });
@@ -369,8 +391,8 @@ export class PhysicPanel {
   // FORCE FIELDS
   // ========================================
   
-  private setupForceFieldManager(): void {
-    const folder = this.pane.addFolder({ 
+  private setupForceFieldManager(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "🌀 Force Fields", 
       expanded: false 
     });
@@ -414,8 +436,8 @@ export class PhysicPanel {
   // EMITTERS
   // ========================================
   
-  private setupEmitterManager(): void {
-    const folder = this.pane.addFolder({ 
+  private setupEmitterManager(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "💫 Emitters", 
       expanded: false 
     });
@@ -449,8 +471,8 @@ export class PhysicPanel {
   // BOUNDARIES - Full Control System
   // ========================================
   
-  private setupBoundaryControls(): void {
-    const folder = this.pane.addFolder({ 
+  private setupBoundaryControls(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "🔲 Boundaries", 
       expanded: true  // Expanded by default to show key controls
     });
@@ -663,8 +685,8 @@ export class PhysicPanel {
   // VISUAL SETTINGS
   // ========================================
   
-  private setupVisualSettings(): void {
-    const folder = this.pane.addFolder({ 
+  private setupVisualSettings(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "🎨 Visuals", 
       expanded: false 
     });
@@ -706,8 +728,8 @@ export class PhysicPanel {
   // PRESETS
   // ========================================
   
-  private setupPresets(): void {
-    const folder = this.pane.addFolder({ 
+  private setupPresets(container: PaneContainer): void {
+    const folder = container.addFolder({
       title: "📦 Scene Presets", 
       expanded: false 
     });

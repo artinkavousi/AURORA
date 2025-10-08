@@ -157,6 +157,20 @@ export class AudioPanel {
     warp: 0,
     density: 0,
     aura: 0,
+    containment: 0,
+    sway: 0,
+  };
+
+  private motionReadouts = {
+    expansion: 0,
+    sway: 0,
+    sparkle: 0,
+  };
+
+  private dynamicsReadouts = {
+    momentum: 0,
+    acceleration: 0,
+    breath: 0,
   };
 
   private sparklineState = {
@@ -168,6 +182,8 @@ export class AudioPanel {
   private metricBindings: any[] = [];
   private featureBindings: any[] = [];
   private modulatorBindings: any[] = [];
+  private motionBindings: any[] = [];
+  private dynamicsBindings: any[] = [];
   private sparklineBindings: any[] = [];
   
   constructor(
@@ -210,6 +226,7 @@ export class AudioPanel {
 
     this.buildOverview(dynamics);
     this.buildFeatureInsights(dynamics);
+    this.buildMotionDynamics(dynamics);
 
     this.buildModulationLab(modulation);
 
@@ -413,6 +430,67 @@ export class AudioPanel {
     }));
   }
 
+  private buildMotionDynamics(container: PaneContainer = this.pane): void {
+    const motionFolder = container.addFolder({
+      title: '🌬️ Motion Field',
+      expanded: false,
+    });
+
+    this.motionBindings.push(motionFolder.addBinding(this.motionReadouts, 'expansion', {
+      label: 'Expansion',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.motionBindings.push(motionFolder.addBinding(this.motionReadouts, 'sway', {
+      label: 'Stereo Sway',
+      readonly: true,
+      min: -1,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.motionBindings.push(motionFolder.addBinding(this.motionReadouts, 'sparkle', {
+      label: 'Sparkle',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    const dynamicsFolder = container.addFolder({
+      title: '🫁 Dynamics Envelope',
+      expanded: false,
+    });
+
+    this.dynamicsBindings.push(dynamicsFolder.addBinding(this.dynamicsReadouts, 'momentum', {
+      label: 'Momentum',
+      readonly: true,
+      min: -1,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.dynamicsBindings.push(dynamicsFolder.addBinding(this.dynamicsReadouts, 'acceleration', {
+      label: 'Acceleration',
+      readonly: true,
+      min: -1,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+
+    this.dynamicsBindings.push(dynamicsFolder.addBinding(this.dynamicsReadouts, 'breath', {
+      label: 'Breath',
+      readonly: true,
+      min: 0,
+      max: 1,
+      format: (v: number) => v.toFixed(3),
+    }));
+  }
+
+
   private buildModulationLab(container: PaneContainer = this.pane): void {
     const folder = container.addFolder({
       title: '🎚️ Modulation Lab',
@@ -424,7 +502,7 @@ export class AudioPanel {
       expanded: true,
     });
 
-    (['pulse', 'flow', 'shimmer', 'warp', 'density', 'aura'] as const).forEach((key) => {
+    (['pulse', 'flow', 'shimmer', 'warp', 'density', 'aura', 'containment', 'sway'] as const).forEach((key) => {
       this.modulatorBindings.push(readoutFolder.addBinding(this.modulationReadouts, key, {
         label: key.charAt(0).toUpperCase() + key.slice(1),
         readonly: true,
@@ -722,7 +800,48 @@ export class AudioPanel {
     }).on('change', (ev: any) => {
       this.callbacks.onAudioConfigChange?.({ smoothing: ev.value });
     });
-    
+
+    const responseFolder = folder.addFolder({
+      title: 'Signal Response',
+      expanded: false,
+    });
+
+    responseFolder.addBinding(this.config.audio, 'featureSmoothing', {
+      label: 'Feature Lag',
+      min: 0,
+      max: 0.95,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioConfigChange?.({ featureSmoothing: ev.value });
+    });
+
+    responseFolder.addBinding(this.config.audio, 'modulationSmoothing', {
+      label: 'Modulation Lag',
+      min: 0,
+      max: 0.95,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioConfigChange?.({ modulationSmoothing: ev.value });
+    });
+
+    responseFolder.addBinding(this.config.audio, 'motionSmoothing', {
+      label: 'Motion Lag',
+      min: 0,
+      max: 0.95,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioConfigChange?.({ motionSmoothing: ev.value });
+    });
+
+    responseFolder.addBinding(this.config.audio, 'dynamicsSmoothing', {
+      label: 'Dynamics Lag',
+      min: 0,
+      max: 0.95,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.callbacks.onAudioConfigChange?.({ dynamicsSmoothing: ev.value });
+    });
+
     // Beat sensitivity
     folder.addBinding(this.config.audio, 'beatThreshold', {
       label: 'Beat Sensitivity',
@@ -831,6 +950,16 @@ export class AudioPanel {
     this.modulationReadouts.warp = audio.modulators.warp;
     this.modulationReadouts.density = audio.modulators.density;
     this.modulationReadouts.aura = audio.modulators.aura;
+    this.modulationReadouts.containment = audio.modulators.containment;
+    this.modulationReadouts.sway = audio.modulators.sway;
+
+    this.motionReadouts.expansion = audio.motion.expansion;
+    this.motionReadouts.sway = audio.motion.sway;
+    this.motionReadouts.sparkle = audio.motion.sparkle;
+
+    this.dynamicsReadouts.momentum = audio.dynamics.momentum;
+    this.dynamicsReadouts.acceleration = audio.dynamics.acceleration;
+    this.dynamicsReadouts.breath = audio.dynamics.breath;
 
     this.sparklineState.loudness = this.renderSparkline(audio.history.loudness);
     this.sparklineState.flux = this.renderSparkline(audio.history.flux);
@@ -839,6 +968,8 @@ export class AudioPanel {
     this.metricBindings.forEach((binding) => binding.refresh());
     this.featureBindings.forEach((binding) => binding.refresh());
     this.modulatorBindings.forEach((binding) => binding.refresh());
+    this.motionBindings.forEach((binding) => binding.refresh());
+    this.dynamicsBindings.forEach((binding) => binding.refresh());
     this.sparklineBindings.forEach((binding) => binding.refresh());
   }
   

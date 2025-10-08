@@ -63,18 +63,18 @@ interface ResizeState {
 }
 
 const DEFAULT_THEME: DashboardTheme = {
-  accent: '#7dd3ff',
-  backgroundHue: 218,
-  backgroundSaturation: 0.48,
-  backgroundLightness: 0.22,
-  glassOpacity: 0.78,
-  glassBlur: 42,
-  glassSaturation: 2.0,
-  glassBrightness: 1.12,
-  radius: 22,
-  shadowStrength: 0.9,
-  highlightStrength: 0.7,
-  textBrightness: 0.82,
+  accent: '#8be9ff',
+  backgroundHue: 226,
+  backgroundSaturation: 0.5,
+  backgroundLightness: 0.18,
+  glassOpacity: 0.7,
+  glassBlur: 48,
+  glassSaturation: 2.5,
+  glassBrightness: 1.22,
+  radius: 24,
+  shadowStrength: 0.88,
+  highlightStrength: 0.82,
+  textBrightness: 0.9,
 };
 
 const THEME_STORAGE_KEY = 'aurora.dashboard.theme.default';
@@ -159,6 +159,29 @@ export class Dashboard {
   private readonly sideInset = 24;
   private theme: DashboardTheme;
   private fpsGraph: FpsGraphBladeApi | null = null;
+  private handleWindowResize = (): void => {
+    if (typeof window === 'undefined') return;
+
+    if (this.dock === 'bottom') {
+      const widthLimits = this.bottomSizeLimits.width;
+      const heightLimits = this.bottomSizeLimits.height;
+      const maxWidth = Math.max(widthLimits[0], Math.min(widthLimits[1], window.innerWidth - 80));
+      const maxHeight = Math.max(heightLimits[0], Math.min(heightLimits[1], window.innerHeight - 160));
+      this.bottomSize.width = clamp(this.bottomSize.width, widthLimits[0], maxWidth);
+      this.bottomSize.height = clamp(this.bottomSize.height, heightLimits[0], maxHeight);
+    } else {
+      const widthLimits = this.sideSizeLimits.width;
+      const heightLimits = this.sideSizeLimits.height;
+      const maxWidth = Math.max(widthLimits[0], Math.min(widthLimits[1], window.innerWidth - 120));
+      const maxHeight = Math.max(heightLimits[0], Math.min(heightLimits[1], window.innerHeight - 120));
+      this.sideSize.width = clamp(this.sideSize.width, widthLimits[0], maxWidth);
+      this.sideSize.height = clamp(this.sideSize.height, heightLimits[0], maxHeight);
+      const maxTop = Math.max(32, window.innerHeight - this.sideSize.height - 32);
+      this.sideOffsetTop = clamp(this.sideOffsetTop, 32, maxTop);
+    }
+
+    this.applyDock(this.dock);
+  };
 
   constructor(options: DashboardOptions = {}) {
     if (!Dashboard.pluginsRegistered) {
@@ -190,6 +213,9 @@ export class Dashboard {
     document.body.appendChild(this.root);
 
     this.applyDock(this.dock);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.handleWindowResize, { passive: true });
+    }
     if (options.collapsed) {
       this.collapse();
     }
@@ -222,6 +248,7 @@ export class Dashboard {
       title: options.title,
     });
     pane.element.classList.add('aurora-pane');
+    pane.element.setAttribute('data-panel-id', options.id);
 
     const tab = document.createElement('button');
     tab.type = 'button';
@@ -351,6 +378,9 @@ export class Dashboard {
     this.panels.clear();
     this.styleSheet.remove();
     this.root.remove();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.handleWindowResize);
+    }
   }
 
   private createRoot(): HTMLDivElement {
@@ -528,6 +558,9 @@ export class Dashboard {
     this.root.classList.remove('dock-left', 'dock-right', 'dock-bottom');
     this.root.classList.add(`dock-${dock}`);
 
+    let appliedWidth = this.sideSize.width;
+    let appliedHeight = this.sideSize.height;
+
     if (dock === 'left') {
       this.root.style.left = `${this.sideInset}px`;
       this.root.style.right = 'auto';
@@ -552,12 +585,21 @@ export class Dashboard {
       this.root.style.width = `${this.bottomSize.width}px`;
       this.root.style.height = `${this.bottomSize.height}px`;
       this.root.style.transform = 'translateX(-50%)';
+      appliedWidth = this.bottomSize.width;
+      appliedHeight = this.bottomSize.height;
     }
+
+    this.updateShellMetrics(appliedWidth, appliedHeight);
 
     this.updateTabOrientation();
     if (this.activePanelId) {
       this.panels.get(this.activePanelId)?.pane.refresh();
     }
+  }
+
+  private updateShellMetrics(width: number, height: number): void {
+    this.root.style.setProperty('--aurora-shell-width', `${Math.round(width)}px`);
+    this.root.style.setProperty('--aurora-shell-height', `${Math.round(height)}px`);
   }
 
   private updateTabOrientation(): void {
@@ -645,22 +687,58 @@ export class Dashboard {
       }
 
       .aurora-dashboard {
+        --aurora-ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+        --aurora-ease-soft: cubic-bezier(0.45, 0.05, 0.24, 1);
         position: fixed;
         top: 96px;
         right: 24px;
+        width: var(--aurora-shell-width, 360px);
+        height: var(--aurora-shell-height, 620px);
         display: flex;
-        gap: 14px;
-        z-index: 3000;
+        gap: 16px;
+        padding: 12px;
         align-items: stretch;
-        transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-          box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-          opacity 0.25s ease;
-        will-change: transform, opacity;
+        border-radius: calc(var(--aurora-radius, 20px) + 12px);
+        z-index: 3000;
+        pointer-events: auto;
+        will-change: transform, opacity, filter;
+        transition: transform 0.45s var(--aurora-ease-spring), opacity 0.35s ease, filter 0.35s ease;
+        transform-origin: top right;
+      }
+
+      .aurora-dashboard::before,
+      .aurora-dashboard::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+      }
+
+      .aurora-dashboard::before {
+        background: linear-gradient(135deg, var(--aurora-surface-top, rgba(24, 36, 68, 0.82)), var(--aurora-surface-bottom, rgba(12, 18, 36, 0.92)));
+        border: 1px solid var(--aurora-border, rgba(255, 255, 255, 0.24));
+        box-shadow: var(--aurora-shadow, 0 22px 48px rgba(8, 12, 28, 0.45));
+        backdrop-filter: blur(var(--aurora-glass-blur, 48px)) saturate(var(--aurora-glass-saturation, 240%)) brightness(var(--aurora-glass-brightness, 118%));
+        opacity: 0.96;
+      }
+
+      .aurora-dashboard::after {
+        background: radial-gradient(140% 120% at 30% 0%, rgba(255, 255, 255, 0.28), transparent 60%),
+          radial-gradient(120% 120% at 80% 100%, rgba(139, 233, 255, 0.18), transparent 70%);
+        mix-blend-mode: screen;
+        opacity: 0.55;
+      }
+
+      .aurora-dashboard > * {
+        position: relative;
+        z-index: 1;
         pointer-events: auto;
       }
 
       .aurora-dashboard.is-dragging {
         transition: none;
+        filter: brightness(1.05);
         cursor: grabbing;
       }
 
@@ -668,45 +746,71 @@ export class Dashboard {
         user-select: none;
       }
 
+      .aurora-dashboard.is-collapsed {
+        opacity: 0.55;
+        filter: saturate(0.82);
+      }
+
+      .aurora-dashboard.is-collapsed::before {
+        opacity: 0.75;
+      }
+
       .aurora-dashboard.is-collapsed .aurora-panel-viewport {
+        max-width: 0;
+        flex: 0 0 0;
         width: 0;
         opacity: 0;
         pointer-events: none;
         margin-right: 0;
+        transform: translateX(12px);
       }
 
       .aurora-dashboard.is-collapsed .aurora-resize-handle {
         opacity: 0;
         pointer-events: none;
+        transform: scale(0.5);
       }
 
       .aurora-tab-rail {
+        position: relative;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        gap: 16px;
-        background: var(--aurora-rail-bg, rgba(22, 32, 64, 0.72));
-        backdrop-filter: blur(calc(var(--aurora-glass-blur, 40px) * 0.66)) saturate(var(--aurora-glass-saturation, 220%));
-        border-radius: calc(var(--aurora-radius, 20px) * 0.8);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 12px 36px rgba(6, 10, 24, 0.45);
+        gap: 18px;
         padding: 18px 12px;
+        min-width: 104px;
+        border-radius: calc(var(--aurora-radius, 24px) * 0.82);
+        background: rgba(8, 16, 32, 0.4);
+        backdrop-filter: blur(calc(var(--aurora-glass-blur, 48px) * 0.55)) saturate(calc(var(--aurora-glass-saturation, 240%) * 0.9));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 18px 36px rgba(6, 10, 24, 0.55);
+      }
+
+      .aurora-tab-rail::after {
+        content: '';
+        position: absolute;
+        inset: 12px;
+        border-radius: inherit;
+        pointer-events: none;
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02) 55%, transparent 100%);
+        opacity: 0.7;
       }
 
       .aurora-tab-rail[data-orientation="horizontal"] {
         flex-direction: row;
         align-items: center;
-        padding: 12px 18px;
+        min-height: 90px;
+        padding: 14px 20px;
       }
 
       .aurora-drag-handle {
-        width: 32px;
-        height: 6px;
+        width: 38px;
+        height: 8px;
         border-radius: 999px;
-        background: linear-gradient(90deg, rgba(255,255,255,0.25), rgba(255,255,255,0.08));
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.12));
         align-self: center;
         cursor: grab;
-        transition: transform 0.2s ease, opacity 0.2s ease;
+        transition: transform 0.25s var(--aurora-ease-soft), opacity 0.2s ease;
       }
 
       .aurora-drag-handle:hover {
@@ -716,7 +820,7 @@ export class Dashboard {
       .aurora-tab-list {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
       }
 
       .aurora-tab-rail[data-orientation="horizontal"] .aurora-tab-list {
@@ -727,46 +831,87 @@ export class Dashboard {
         position: relative;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
         font-family: 'Inter', 'Segoe UI', sans-serif;
         font-size: 14px;
-        font-weight: 500;
-        color: var(--aurora-text-secondary, rgba(230, 240, 255, 0.7));
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: var(--aurora-text-secondary, rgba(223, 235, 255, 0.7));
         background: transparent;
         border: none;
         border-radius: 16px;
-        padding: 10px 14px;
+        padding: 11px 16px;
         cursor: pointer;
-        transition: background 0.25s ease, color 0.25s ease, transform 0.25s ease;
-        text-align: left;
+        transition: color 0.25s ease, transform 0.25s var(--aurora-ease-soft);
+        isolation: isolate;
       }
 
+      .aurora-tab::before,
       .aurora-tab::after {
         content: '';
         position: absolute;
         inset: 0;
         border-radius: inherit;
-        background: linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0));
+        pointer-events: none;
+        transition: opacity 0.25s ease, transform 0.3s var(--aurora-ease-soft);
+      }
+
+      .aurora-tab::before {
+        background: rgba(255, 255, 255, 0.04);
         opacity: 0;
-        transition: opacity 0.25s ease;
+      }
+
+      .aurora-tab::after {
+        background: radial-gradient(120% 100% at 0% 50%, rgba(139, 233, 255, 0.35), transparent 60%);
+        opacity: 0;
+        transform: translateX(-8px);
+      }
+
+      .aurora-tab:hover {
+        color: var(--aurora-text-primary, #f6fbff);
+      }
+
+      .aurora-tab:hover::before {
+        opacity: 0.4;
+      }
+
+      .aurora-tab:hover::after {
+        opacity: 0.4;
+        transform: translateX(0);
+      }
+
+      .aurora-tab.is-active {
+        color: var(--aurora-accent-text, #041024);
+        transform: translateX(4px);
+      }
+
+      .aurora-tab.is-active::before {
+        opacity: 1;
+        background: linear-gradient(135deg, var(--aurora-accent-soft, rgba(139, 233, 255, 0.36)), rgba(255, 255, 255, 0.12));
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32);
+      }
+
+      .aurora-tab.is-active::after {
+        opacity: 0.8;
+        transform: translateX(0);
       }
 
       .aurora-tab .aurora-tab-icon {
         font-size: 16px;
-        filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
+        filter: drop-shadow(0 6px 16px rgba(8, 12, 28, 0.5));
       }
 
       .aurora-tab .aurora-tab-badge {
         margin-left: auto;
-        padding: 0 8px;
+        padding: 2px 9px;
         font-size: 11px;
-        font-weight: 600;
+        font-weight: 700;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.12);
-        color: var(--aurora-text-primary, #f5f8ff);
+        background: rgba(255, 255, 255, 0.14);
+        color: var(--aurora-text-primary, #f6fbff);
         opacity: 0;
         transform: translateY(-4px);
-        transition: opacity 0.2s ease, transform 0.2s ease;
+        transition: opacity 0.22s ease, transform 0.22s ease;
       }
 
       .aurora-tab .aurora-tab-badge.is-visible {
@@ -774,106 +919,123 @@ export class Dashboard {
         transform: translateY(0);
       }
 
-      .aurora-tab:hover {
-        background: rgba(255, 255, 255, 0.05);
-        color: var(--aurora-text-primary, #f5f8ff);
-      }
-
-      .aurora-tab:hover::after {
-        opacity: 0.35;
-      }
-
-      .aurora-tab.is-active {
-        background: linear-gradient(135deg, var(--aurora-accent-soft, rgba(125, 211, 255, 0.3)), rgba(255,255,255,0.04));
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-        color: var(--aurora-accent-text, #0b132b);
-        transform: translateX(2px);
-      }
-
-      .aurora-tab.is-active::after {
-        opacity: 0.4;
-      }
-
       .aurora-collapse {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
-        padding: 10px 12px;
+        padding: 10px 14px;
         border-radius: 14px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        color: var(--aurora-text-secondary, rgba(230, 240, 255, 0.65));
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: var(--aurora-text-secondary, rgba(223, 235, 255, 0.7));
         font-size: 12px;
-        font-weight: 600;
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         cursor: pointer;
-        transition: background 0.25s ease, color 0.25s ease;
+        transition: background 0.3s var(--aurora-ease-soft), color 0.3s ease, transform 0.3s var(--aurora-ease-soft);
       }
 
       .aurora-collapse:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: var(--aurora-text-primary, #f5f8ff);
+        background: rgba(255, 255, 255, 0.16);
+        color: var(--aurora-text-primary, #f6fbff);
+        transform: translateY(-1px);
       }
 
       .aurora-dashboard.is-collapsed .aurora-collapse {
-        background: rgba(255, 255, 255, 0.14);
-        color: var(--aurora-accent-text, #0b132b);
+        background: rgba(255, 255, 255, 0.22);
+        color: var(--aurora-accent-text, #041024);
       }
 
       .aurora-panel-viewport {
+        position: relative;
         flex: 1;
         min-width: 0;
         display: flex;
         flex-direction: column;
         justify-content: stretch;
-        border-radius: var(--aurora-radius, 20px);
-        box-shadow: var(--aurora-shadow, 0 20px 50px rgba(8, 12, 28, 0.5));
+        border-radius: calc(var(--aurora-radius, 24px) + 2px);
         overflow: hidden;
-        transition: width 0.3s ease, opacity 0.3s ease;
-        background: linear-gradient(135deg, var(--aurora-surface-top, rgba(28,40,72,0.76)), var(--aurora-surface-bottom, rgba(18,26,52,0.84)));
-        backdrop-filter: blur(var(--aurora-glass-blur, 42px)) saturate(var(--aurora-glass-saturation, 210%)) brightness(var(--aurora-glass-brightness, 112%));
-        border: 1px solid var(--aurora-border, rgba(255,255,255,0.25));
+        transition: max-width 0.35s var(--aurora-ease-spring), opacity 0.35s ease, transform 0.35s var(--aurora-ease-spring);
+        box-shadow: var(--aurora-shadow, 0 24px 60px rgba(8, 12, 28, 0.52));
+      }
+
+      .aurora-panel-viewport::before,
+      .aurora-panel-viewport::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: inherit;
+      }
+
+      .aurora-panel-viewport::before {
+        background: linear-gradient(135deg, var(--aurora-surface-top, rgba(28, 42, 74, 0.8)), var(--aurora-surface-bottom, rgba(14, 20, 38, 0.92)));
+        border: 1px solid var(--aurora-border, rgba(255, 255, 255, 0.22));
+        backdrop-filter: blur(var(--aurora-glass-blur, 48px)) saturate(var(--aurora-glass-saturation, 240%)) brightness(var(--aurora-glass-brightness, 118%));
+      }
+
+      .aurora-panel-viewport::after {
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 55%);
+        opacity: 0.55;
+        mix-blend-mode: screen;
+      }
+
+      .aurora-panel-viewport > * {
+        position: relative;
+        z-index: 1;
       }
 
       .aurora-panel-page {
         flex: 1;
         display: none;
-        padding: 12px 16px 18px;
+        padding: 16px 18px 22px;
         overflow-y: auto;
         scrollbar-width: thin;
       }
 
       .aurora-panel-page.is-active {
         display: block;
+        animation: aurora-page-fade 0.4s var(--aurora-ease-soft);
       }
 
       .aurora-panel-page::-webkit-scrollbar {
-        width: 6px;
+        width: 8px;
       }
 
       .aurora-panel-page::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.18);
         border-radius: 999px;
       }
 
       .aurora-resize-handle {
         position: absolute;
         right: 18px;
-        bottom: 14px;
+        bottom: 18px;
         width: 18px;
         height: 18px;
-        border-radius: 4px;
-        background: linear-gradient(135deg, rgba(255,255,255,0.38), rgba(255,255,255,0.08));
-        opacity: 0.55;
+        border-radius: 6px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        opacity: 0.7;
         cursor: nwse-resize;
-        transition: opacity 0.2s ease;
+        transition: opacity 0.25s ease, transform 0.3s var(--aurora-ease-soft);
         pointer-events: auto;
+      }
+
+      .aurora-resize-handle::after {
+        content: '';
+        position: absolute;
+        inset: 4px;
+        border-radius: inherit;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), transparent);
+        opacity: 0.7;
       }
 
       .aurora-resize-handle:hover {
         opacity: 1;
+        transform: scale(1.1);
       }
 
       .aurora-dashboard.dock-bottom .aurora-tab-rail {
@@ -882,35 +1044,40 @@ export class Dashboard {
 
       .aurora-dashboard.dock-bottom .aurora-resize-handle {
         right: 22px;
-        bottom: 18px;
+        bottom: 22px;
       }
 
       .aurora-dashboard.dock-bottom .aurora-panel-viewport {
         min-height: 260px;
       }
 
-      /* Tweakpane harmonisation */
+      /* Tweakpane refinements */
       .aurora-panel-viewport .tp-dfwv,
       .aurora-panel-viewport .tp-rotv {
         background: transparent !important;
         box-shadow: none !important;
       }
 
+      .aurora-panel-viewport .tp-tstv {
+        color: var(--aurora-text-secondary, rgba(223, 235, 255, 0.7));
+      }
+
       .aurora-panel-viewport .tp-fldv {
-        border-radius: 16px !important;
-        background: rgba(12, 18, 38, 0.38);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        margin-bottom: 12px;
+        border-radius: 18px !important;
+        background: rgba(10, 18, 36, 0.44);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        margin-bottom: 14px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
       }
 
       .aurora-panel-viewport .tp-fldv_t {
         font-size: 13px;
         font-weight: 600;
-        letter-spacing: 0.02em;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
-        color: var(--aurora-text-secondary, rgba(230, 240, 255, 0.7));
-        padding: 12px 16px !important;
-        background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+        color: var(--aurora-text-secondary, rgba(223, 235, 255, 0.72));
+        padding: 12px 18px !important;
+        background: linear-gradient(100deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
       }
 
       .aurora-panel-viewport .tp-fldv_t::before {
@@ -918,40 +1085,71 @@ export class Dashboard {
       }
 
       .aurora-panel-viewport .tp-rotv_v {
-        color: var(--aurora-text-primary, #f5f8ff);
+        color: var(--aurora-text-primary, #f6fbff);
       }
 
       .aurora-panel-viewport .tp-btnv {
-        border-radius: 12px;
-        background: linear-gradient(135deg, var(--aurora-accent-soft, rgba(125, 211, 255, 0.3)), rgba(255,255,255,0.06));
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        color: var(--aurora-accent-text, #0b132b);
+        border-radius: 14px;
+        background: linear-gradient(135deg, var(--aurora-accent-soft, rgba(139, 233, 255, 0.36)), rgba(255, 255, 255, 0.1));
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: var(--aurora-accent-text, #041024);
         font-weight: 600;
+        transition: transform 0.25s var(--aurora-ease-soft), box-shadow 0.25s var(--aurora-ease-soft);
       }
 
       .aurora-panel-viewport .tp-btnv:hover {
-        background: linear-gradient(135deg, var(--aurora-accent, #7dd3ff), rgba(255,255,255,0.2));
+        transform: translateY(-1px);
+        box-shadow: 0 12px 26px rgba(8, 12, 28, 0.35);
       }
 
       .aurora-panel-viewport .tp-lstv {
-        border-radius: 12px;
-        background: rgba(12, 18, 38, 0.46);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        background: rgba(8, 16, 32, 0.56);
+        border: 1px solid rgba(255, 255, 255, 0.12);
       }
 
       .aurora-panel-viewport .tp-rotv {
-        color: var(--aurora-text-primary, #f5f8ff);
+        color: var(--aurora-text-primary, #f6fbff);
       }
 
       .aurora-panel-viewport .tp-grdv {
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.12);
         border-radius: 12px;
+      }
+
+      .aurora-panel-viewport .tp-swv {
+        color: var(--aurora-text-secondary, rgba(223, 235, 255, 0.7));
+      }
+
+      @keyframes aurora-page-fade {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       @media (max-width: 1280px) {
         .aurora-dashboard {
-          transform-origin: top right;
-          scale: 0.92;
+          gap: 12px;
+          padding: 10px;
+        }
+
+        .aurora-tab {
+          font-size: 13px;
+          padding: 10px 14px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .aurora-dashboard,
+        .aurora-dashboard * {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
         }
       }
     `;

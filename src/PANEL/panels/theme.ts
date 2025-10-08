@@ -14,10 +14,15 @@ interface ThemePreset {
   builtIn?: boolean;
 }
 
-type PaneContainer = Pick<
-  Pane,
-  'addFolder' | 'addBinding' | 'addBlade' | 'addButton' | 'addInput' | 'addTab' | 'refresh'
->;
+// Type for Tweakpane containers (Pane and tab pages)
+// Note: Folders only support addBinding (not addInput/addMonitor)
+interface PaneContainer {
+  addFolder(params: { title: string; expanded?: boolean }): any;
+  addBinding(target: any, key: string, params?: any): any;
+  addBlade(params: any): any;
+  addButton(params: { title: string }): any;
+  refresh?(): void;
+}
 
 const PRESET_STORAGE_KEY = 'aurora.dashboard.theme.presets';
 
@@ -116,7 +121,7 @@ export class ThemeManagerPanel {
   }
 
   private buildPanel(): void {
-    const tabs = this.pane.addTab({
+    const tabs = (this.pane as any).addTab({
       pages: [
         { title: 'Presets' },
         { title: 'Surface' },
@@ -158,7 +163,7 @@ export class ThemeManagerPanel {
     });
 
     const customFolder = container.addFolder({ title: '📝 Custom Presets', expanded: false });
-    customFolder.addInput(this.controlState, 'customName', { label: 'Name' });
+    customFolder.addBinding(this.controlState, 'customName', { label: 'Name' });
     customFolder.addButton({ title: '💾 Save Preset' }).on('click', () => {
       this.saveCustomPreset();
     });
@@ -167,7 +172,7 @@ export class ThemeManagerPanel {
     if (deletable.length > 0) {
       this.deleteState.preset = deletable[0].id;
       const deleteFolder = container.addFolder({ title: '🗑️ Remove Custom', expanded: false });
-      deleteFolder.addInput(this.deleteState, 'preset', {
+      deleteFolder.addBinding(this.deleteState, 'preset', {
         label: 'Preset',
         options: deletable.reduce<Record<string, string>>((acc, preset) => {
           acc[preset.name] = preset.id;
@@ -245,7 +250,7 @@ export class ThemeManagerPanel {
   private buildAccentPage(container: PaneContainer): void {
     const folder = container.addFolder({ title: 'Accents & Lighting', expanded: true });
 
-    folder.addInput(this.themeState, 'accent', {
+    folder.addBinding(this.themeState, 'accent', {
       label: 'Accent',
       view: 'color',
     }).on('change', (ev: any) => this.commitTheme({ accent: ev.value }));
@@ -275,10 +280,10 @@ export class ThemeManagerPanel {
   private buildSystemPage(container: PaneContainer): void {
     const folder = container.addFolder({ title: 'System Theme', expanded: true });
 
-    folder.addMonitor(this.themeState, 'backgroundHue', { label: 'Hue' });
-    folder.addMonitor(this.themeState, 'glassBlur', { label: 'Blur' });
-    folder.addMonitor(this.themeState, 'glassOpacity', { label: 'Opacity' });
-    folder.addMonitor(this.themeState, 'accent', { label: 'Accent' });
+    folder.addBinding(this.themeState, 'backgroundHue', { label: 'Hue', readonly: true });
+    folder.addBinding(this.themeState, 'glassBlur', { label: 'Blur', readonly: true });
+    folder.addBinding(this.themeState, 'glassOpacity', { label: 'Opacity', readonly: true });
+    folder.addBinding(this.themeState, 'accent', { label: 'Accent', readonly: true });
 
     folder.addBlade({ view: 'separator' });
 
@@ -295,7 +300,7 @@ export class ThemeManagerPanel {
     this.selectedPresetId = id;
     this.dashboard.applyTheme({ ...this.themeState }, false);
     this.refreshPresetSelector();
-    this.pane.refresh();
+    (this.pane as any).refresh?.();
   }
 
   private saveCustomPreset(): void {
@@ -317,7 +322,7 @@ export class ThemeManagerPanel {
     this.selectedPresetId = id;
     this.controlState.customName = '';
     this.refreshPresetSelector();
-    this.pane.refresh();
+    (this.pane as any).refresh?.();
   }
 
   private deletePreset(id: string): void {
@@ -335,7 +340,7 @@ export class ThemeManagerPanel {
     this.deleteState.preset = remaining[0]?.id ?? '';
 
     this.refreshPresetSelector();
-    this.pane.refresh();
+    (this.pane as any).refresh?.();
   }
 
   private commitTheme(partial: Partial<DashboardTheme>): void {
@@ -355,7 +360,7 @@ export class ThemeManagerPanel {
     this.themeState = { ...this.dashboard.getTheme() };
     this.selectedPresetId = this.matchPresetId(this.themeState) ?? this.selectedPresetId;
     this.refreshPresetSelector();
-    this.pane.refresh();
+    (this.pane as any).refresh?.();
   }
 
   private loadPresets(): ThemePreset[] {

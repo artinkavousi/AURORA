@@ -707,25 +707,13 @@ export class AudioPanel {
     
     folder.addBlade({ view: 'separator' });
     
-    // Quick preset buttons
-    folder.addBlade({
-      view: 'buttongrid',
-      size: [2, 3],
-      cells: (x: number, y: number) => {
-        const index = y * 2 + x;
-        if (index < PRESETS.length) {
-          return { title: PRESETS[index].name };
-        }
-        return { title: '' };
-      },
-      label: 'Quick Select',
-    }).on('click', (ev: any) => {
-      const index = ev.index[1] * 2 + ev.index[0];
-      if (index < PRESETS.length) {
-        this.applyPreset(PRESETS[index].name);
-        this.state.preset = PRESETS[index].name;
-        this.pane.refresh();
-      }
+    // Quick preset buttons (replaced buttongrid which isn't available in Tweakpane v4)
+    PRESETS.forEach((preset) => {
+      folder.addButton({ title: preset.name }).on('click', () => {
+        this.applyPreset(preset.name);
+        this.state.preset = preset.name;
+        (this.pane as any).refresh?.();
+      });
     });
   }
   

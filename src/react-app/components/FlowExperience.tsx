@@ -1,9 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import * as THREE from 'three/webgpu';
 import { FlowHud } from './hud/FlowHud';
 import { LoadingOverlay } from './overlays/LoadingOverlay';
 import { ErrorOverlay } from './overlays/ErrorOverlay';
 import { FlowControlBar } from './ui/FlowControlBar';
 import { FlowRuntime, type FlowFrameMetrics, type FlowRuntimeStatus } from '../runtime/FlowRuntime';
+import { FlowSceneBridge } from './experience/FlowSceneBridge';
 
 interface RuntimeErrorState {
   message: string;
@@ -11,7 +14,6 @@ interface RuntimeErrorState {
 
 export const FlowExperience: React.FC = () => {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const runtimeRef = useRef<FlowRuntime | null>(null);
   const [status, setStatus] = useState<FlowRuntimeStatus>('idle');
   const [progress, setProgress] = useState(0);
@@ -35,68 +37,63 @@ export const FlowExperience: React.FC = () => {
     };
   }, []);
 
+  const handleRuntimeError = useCallback((runtimeError: Error) => {
+    console.error('[FlowExperience] Flow runtime failed', runtimeError);
+    setStatus('error');
+    setError({ message: runtimeError.message });
+    const runtime = runtimeRef.current;
+    if (runtime) {
+      runtime
+        .dispose()
+        .catch((disposeError) => {
+          console.warn('[FlowExperience] Failed to dispose runtime after error', disposeError);
+        });
+      runtimeRef.current = null;
+    }
+  }, []);
+
+  const handleStatusChange = useCallback((nextStatus: FlowRuntimeStatus) => {
+    setStatus(nextStatus);
+  }, []);
+
+  const handleProgress = useCallback((value: number) => {
+    setProgress(value);
+  }, []);
+
+  const handleReady = useCallback(() => {
+    setProgress(1);
+  }, []);
+
+  const handleMetrics = useCallback((frameMetrics: FlowFrameMetrics) => {
+    latestMetricsRef.current = frameMetrics;
+  }, []);
+
   useEffect(() => {
     const container = containerRef.current;
-    const canvas = canvasRef.current;
 
-    if (!container || !canvas) {
+    if (!container) {
       return;
     }
 
-    let mounted = true;
-
-    const handleStatusChange = (nextStatus: FlowRuntimeStatus) => {
-      if (mounted) {
-        setStatus(nextStatus);
-      }
-    };
-
-    const handleProgress = (value: number) => {
-      if (mounted) {
-        setProgress(value);
-      }
-    };
-
     const runtime = new FlowRuntime({
-      canvas,
       container,
+      useExternalRenderLoop: true,
       onProgress: handleProgress,
-      onReady: () => {
-        if (mounted) {
-          setStatus('ready');
-          setProgress(1);
-        }
-      },
+      onReady: handleReady,
       onStatusChange: handleStatusChange,
-      onError: (runtimeError) => {
-        console.error('[FlowExperience] Flow runtime failed to start', runtimeError);
-        if (mounted) {
-          setError({ message: runtimeError.message });
-        }
-      },
-      onMetrics: (frameMetrics) => {
-        latestMetricsRef.current = frameMetrics;
-      },
+      onError: handleRuntimeError,
+      onMetrics: handleMetrics,
     });
 
     runtimeRef.current = runtime;
 
-    runtime
-      .start()
-      .catch((runtimeError) => {
-        if (mounted) {
-          setError({ message: runtimeError.message });
-        }
-      });
-
     return () => {
-      mounted = false;
       runtimeRef.current = null;
       runtime.dispose().catch((disposeError) => {
         console.warn('[FlowExperience] Failed to dispose runtime cleanly', disposeError);
       });
     };
-  }, []);
+  }, [handleProgress, handleReady, handleStatusChange, handleRuntimeError, handleMetrics]);
 
   const handleToggleDashboard = useCallback(() => {
     runtimeRef.current?.toggleDashboard();
@@ -106,9 +103,32 @@ export const FlowExperience: React.FC = () => {
     runtimeRef.current?.activateDashboardTab(panelId);
   }, []);
 
+  const canvasRendererFactory = useMemo(
+    () =>
+      function createRenderer(canvas: HTMLCanvasElement) {
+        const renderer = new THREE.WebGPURenderer({
+          canvas,
+          antialias: true,
+          alpha: true,
+          powerPreference: 'high-performance',
+        });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        return renderer;
+      },
+    [],
+  );
+
   return (
     <div className="flow-experience" ref={containerRef}>
-      <canvas ref={canvasRef} className="flow-experience__canvas" />
+      <Canvas
+        className="flow-experience__canvas"
+        dpr={[1, 2]}
+        gl={canvasRendererFactory}
+      >
+        {runtimeRef.current && status !== 'error' ? (
+          <FlowSceneBridge runtime={runtimeRef.current} onError={handleRuntimeError} />
+        ) : null}
+      </Canvas>
       <FlowHud progress={progress} status={status} />
       <FlowControlBar
         status={status}

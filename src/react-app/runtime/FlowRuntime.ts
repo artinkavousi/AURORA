@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
-import { FlowApp, type ProgressCallback } from '../../APP';
+import { FlowApp, type ProgressCallback, type FlowFrameMetrics } from '../../APP';
+
+export type { FlowFrameMetrics };
 
 export type FlowRuntimeStatus = 'idle' | 'initializing' | 'ready' | 'error';
 
@@ -10,6 +12,7 @@ export interface FlowRuntimeOptions {
   readonly onReady?: () => void;
   readonly onError?: (error: Error) => void;
   readonly onStatusChange?: (status: FlowRuntimeStatus) => void;
+  readonly onMetrics?: (metrics: FlowFrameMetrics) => void;
 }
 
 export class FlowRuntime {
@@ -23,6 +26,7 @@ export class FlowRuntime {
   private resizeObserver: ResizeObserver | null = null;
   private started = false;
   private disposed = false;
+  private latestMetrics: FlowFrameMetrics | null = null;
 
   constructor(options: FlowRuntimeOptions) {
     this.options = options;
@@ -94,7 +98,9 @@ export class FlowRuntime {
     try {
       const delta = this.clock.getDelta();
       const elapsed = this.clock.getElapsedTime();
-      await this.app.update(delta, elapsed);
+      const metrics = await this.app.update(delta, elapsed);
+      this.latestMetrics = metrics;
+      this.options.onMetrics?.(metrics);
     } catch (error) {
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       this.options.onStatusChange?.('error');
@@ -184,5 +190,18 @@ export class FlowRuntime {
     }
 
     this.started = false;
+    this.latestMetrics = null;
+  }
+
+  public toggleDashboard(): void {
+    this.app?.toggleDashboard();
+  }
+
+  public activateDashboardTab(id: string): void {
+    this.app?.activateDashboardTab(id);
+  }
+
+  public getMetrics(): FlowFrameMetrics | null {
+    return this.latestMetrics ?? this.app?.getFrameMetrics() ?? null;
   }
 }

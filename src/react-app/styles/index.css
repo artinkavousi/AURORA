@@ -55,6 +55,111 @@ body {
   pointer-events: none !important;
 }
 
+.flow-control-bar {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 999px;
+  background: rgba(6, 14, 24, 0.78);
+  border: 1px solid rgba(120, 200, 255, 0.28);
+  box-shadow: 0 24px 48px rgba(4, 10, 24, 0.55);
+  backdrop-filter: blur(28px) saturate(160%);
+  pointer-events: auto;
+  z-index: 32;
+  color: #e5f6ff;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+
+.flow-control-bar__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.flow-control-bar__status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 16px currentColor;
+}
+
+.flow-control-bar__status-indicator--idle {
+  color: #64748b;
+}
+
+.flow-control-bar__status-indicator--initializing {
+  color: #38bdf8;
+}
+
+.flow-control-bar__status-indicator--ready {
+  color: #4ade80;
+}
+
+.flow-control-bar__status-indicator--error {
+  color: #f87171;
+}
+
+.flow-control-bar__metrics {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.flow-control-bar__metrics span {
+  white-space: nowrap;
+}
+
+.flow-control-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flow-control-bar__action {
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 233, 255, 0.45);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.45), rgba(103, 232, 249, 0.25));
+  color: #0b1120;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.flow-control-bar__action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.28);
+}
+
+.flow-control-bar__action:focus-visible {
+  outline: 2px solid rgba(148, 233, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.flow-control-bar__action--ghost {
+  background: rgba(11, 17, 32, 0.6);
+  border-color: rgba(148, 233, 255, 0.18);
+  color: #e5f6ff;
+}
+
+.flow-control-bar__action--ghost:hover {
+  background: rgba(56, 189, 248, 0.18);
+}
+
 .flow-overlay {
   position: absolute;
   inset: 0;
@@ -150,5 +255,24 @@ body {
   .flow-overlay__content {
     width: 100%;
     padding: 2rem 1.75rem;
+  }
+
+  .flow-control-bar {
+    flex-direction: column;
+    gap: 0.75rem;
+    width: calc(100% - 2rem);
+    padding: 0.85rem 1.1rem;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .flow-control-bar__metrics {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .flow-control-bar__actions {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }

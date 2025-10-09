@@ -6,8 +6,10 @@ export type { FlowFrameMetrics };
 export type FlowRuntimeStatus = 'idle' | 'initializing' | 'ready' | 'error';
 
 export interface FlowRuntimeOptions {
-  readonly canvas: HTMLCanvasElement;
+  readonly canvas?: HTMLCanvasElement;
   readonly container: HTMLElement;
+  readonly renderer?: THREE.WebGPURenderer;
+  readonly useExternalRenderLoop?: boolean;
   readonly onProgress?: (value: number) => void;
   readonly onReady?: () => void;
   readonly onError?: (error: Error) => void;
@@ -21,17 +23,26 @@ export class FlowRuntime {
   private frameHandle: number | null = null;
   private readonly clock = new THREE.Clock();
   private readonly options: FlowRuntimeOptions;
-  private readonly canvas: HTMLCanvasElement;
   private readonly container: HTMLElement;
   private resizeObserver: ResizeObserver | null = null;
   private started = false;
   private disposed = false;
   private latestMetrics: FlowFrameMetrics | null = null;
+  private readonly externalRenderLoop: boolean;
+  private accumulatedElapsed = 0;
+  private canvas: HTMLCanvasElement | null = null;
+  private ownsRenderer = true;
 
   constructor(options: FlowRuntimeOptions) {
     this.options = options;
-    this.canvas = options.canvas;
     this.container = options.container;
+    this.externalRenderLoop = Boolean(options.useExternalRenderLoop);
+    if (options.canvas) {
+      this.canvas = options.canvas;
+    }
+    if (options.renderer) {
+      this.attachRenderer(options.renderer, options.canvas ?? null, false);
+    }
   }
 
   public async start(): Promise<void> {
@@ -48,22 +59,42 @@ export class FlowRuntime {
       }
 
       this.options.onStatusChange?.('initializing');
-      const renderer = new THREE.WebGPURenderer({
-        canvas: this.canvas,
-        antialias: true,
-        alpha: true,
-        powerPreference: 'high-performance',
-      });
 
-      renderer.setPixelRatio(window.devicePixelRatio);
-      this.applySize(renderer);
-      await renderer.init();
+      if (!this.renderer) {
+        if (!this.canvas) {
+          throw new Error('A canvas element is required to initialize the Flow runtime.');
+        }
 
-      if (!renderer.backend || !(renderer.backend as any).isWebGPUBackend) {
-        throw new Error('WebGPU backend failed to initialize.');
+        const renderer = new THREE.WebGPURenderer({
+          canvas: this.canvas,
+          antialias: true,
+          alpha: true,
+          powerPreference: 'high-performance',
+        });
+
+        renderer.setPixelRatio(window.devicePixelRatio);
+        this.applySize(renderer);
+        await renderer.init();
+
+        if (!renderer.backend || !(renderer.backend as any).isWebGPUBackend) {
+          throw new Error('WebGPU backend failed to initialize.');
+        }
+
+        this.renderer = renderer;
+        this.ownsRenderer = true;
+      } else {
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.applySize(this.renderer);
+        if (typeof this.renderer.init === 'function') {
+          await this.renderer.init();
+        }
+
+        if (!this.renderer.backend || !(this.renderer.backend as any).isWebGPUBackend) {
+          throw new Error('WebGPU backend failed to initialize.');
+        }
       }
 
-      this.renderer = renderer;
+      const renderer = this.renderer;
       const app = new FlowApp(renderer);
       this.app = app;
 
@@ -75,12 +106,16 @@ export class FlowRuntime {
       };
 
       await app.init(progressCallback);
-      this.attachResizeListener();
+      if (!this.externalRenderLoop) {
+        this.attachResizeListener();
+      }
       this.options.onProgress?.(1);
       this.options.onStatusChange?.('ready');
       this.options.onReady?.();
 
-      this.frameHandle = requestAnimationFrame(this.step);
+      if (!this.externalRenderLoop) {
+        this.frameHandle = requestAnimationFrame(this.step);
+      }
     } catch (error) {
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       this.options.onStatusChange?.('error');
@@ -98,9 +133,7 @@ export class FlowRuntime {
     try {
       const delta = this.clock.getDelta();
       const elapsed = this.clock.getElapsedTime();
-      const metrics = await this.app.update(delta, elapsed);
-      this.latestMetrics = metrics;
-      this.options.onMetrics?.(metrics);
+      await this.advanceFrame(delta, elapsed);
     } catch (error) {
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       this.options.onStatusChange?.('error');
@@ -184,13 +217,14 @@ export class FlowRuntime {
       this.app = null;
     }
 
-    if (this.renderer) {
+    if (this.renderer && this.ownsRenderer) {
       this.renderer.dispose();
       this.renderer = null;
     }
 
     this.started = false;
     this.latestMetrics = null;
+    this.accumulatedElapsed = 0;
   }
 
   public toggleDashboard(): void {
@@ -203,5 +237,39 @@ export class FlowRuntime {
 
   public getMetrics(): FlowFrameMetrics | null {
     return this.latestMetrics ?? this.app?.getFrameMetrics() ?? null;
+  }
+
+  public attachRenderer(
+    renderer: THREE.WebGPURenderer,
+    canvas: HTMLCanvasElement | null = null,
+    ownsRenderer: boolean = false,
+  ): void {
+    this.renderer = renderer;
+    this.ownsRenderer = ownsRenderer;
+    if (canvas) {
+      this.canvas = canvas;
+    } else if (!this.canvas) {
+      this.canvas = renderer.domElement;
+    }
+  }
+
+  public async advanceFrame(delta: number, elapsedOverride?: number): Promise<void> {
+    if (!this.app || !this.renderer || this.disposed) {
+      return;
+    }
+
+    const elapsed = elapsedOverride ?? (this.accumulatedElapsed += delta);
+    const metrics = await this.app.update(delta, elapsed);
+    this.latestMetrics = metrics;
+    this.options.onMetrics?.(metrics);
+  }
+
+  public resize(width: number, height: number): void {
+    if (!this.renderer || !this.app) {
+      return;
+    }
+
+    this.renderer.setSize(width, height, false);
+    this.app.resize(width, height);
   }
 }

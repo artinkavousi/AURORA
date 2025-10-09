@@ -565,7 +565,6 @@ export class VisualsPanel {
    * Open preset browser (placeholder)
    */
   private openPresetBrowser(): void {
-    console.log('Preset browser not yet implemented');
     alert('Preset Browser\n\nCategories: ' + getCategories().join(', '));
   }
   
@@ -573,7 +572,6 @@ export class VisualsPanel {
    * Open gradient editor (placeholder)
    */
   private openGradientEditor(): void {
-    console.log('Gradient editor not yet implemented');
     alert('Gradient Editor\n\nThis feature is coming soon!');
   }
   

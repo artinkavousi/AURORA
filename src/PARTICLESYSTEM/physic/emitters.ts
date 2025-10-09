@@ -263,7 +263,7 @@ export class ParticleEmitterManager {
    */
   public addEmitter(config: Partial<ParticleEmitterConfig> = {}): number {
     if (this.emitters.length >= this.maxEmitters) {
-      console.warn(`Maximum emitters (${this.maxEmitters}) reached`);
+      // Maximum emitters reached
       return -1;
     }
     

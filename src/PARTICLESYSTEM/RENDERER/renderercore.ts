@@ -196,7 +196,7 @@ export class RendererManager {
         throw new Error('RibbonRenderer not yet implemented');
       
       default:
-        console.warn(`Unknown render mode ${mode}, falling back to MESH`);
+        // Unknown render mode, falling back to MESH
         return new MeshRenderer(this.simulator, this.config.meshConfig);
     }
   }

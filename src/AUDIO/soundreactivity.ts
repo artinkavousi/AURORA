@@ -205,9 +205,7 @@ export class SoundReactivity {
       this.source = this.audioContext!.createMediaStreamSource(stream);
       this.source.connect(this.gainNode!);
       this.connectAnalyzers();
-      console.log('🎤 Microphone input initialized');
     } catch (error) {
-      console.error('Failed to access microphone:', error);
       throw error;
     }
   }
@@ -224,20 +222,17 @@ export class SoundReactivity {
       this.connectAnalyzers();
       this.analyser.connect(this.audioContext.destination);
     }
-
-    console.log('🎵 File input initialized (use loadAudioFile to load a file)');
   }
 
   loadAudioFile(url: string): void {
     if (!this.audioElement) {
-      console.error('Audio element not initialized');
       return;
     }
 
     this.audioElement.src = url;
     this.audioElement.loop = true;
     this.audioElement.play().catch(err => {
-      console.warn('Autoplay prevented, user interaction required:', err);
+      // Autoplay prevented, user interaction required
     });
   }
 
@@ -409,6 +404,30 @@ export class SoundReactivity {
       count++;
     }
     return count > 0 ? (sum / count) / 255 : 0;
+  }
+
+  private findPeakFrequency(): { frequency: number; intensity: number } {
+    if (!this.audioContext || !this.frequencyData.length) {
+      return { frequency: 0, intensity: 0 };
+    }
+
+    let maxIntensity = 0;
+    let maxIndex = 0;
+
+    for (let i = 0; i < this.frequencyData.length; i++) {
+      if (this.frequencyData[i] > maxIntensity) {
+        maxIntensity = this.frequencyData[i];
+        maxIndex = i;
+      }
+    }
+
+    const sampleRate = this.audioContext.sampleRate;
+    const nyquist = sampleRate / 2;
+    const binWidth = nyquist / this.frequencyData.length;
+    const frequency = maxIndex * binWidth;
+    const intensity = maxIntensity / 255;
+
+    return { frequency, intensity };
   }
 
   private detectBeat(currentIntensity: number, time: number): {

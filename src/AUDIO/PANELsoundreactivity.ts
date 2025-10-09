@@ -183,10 +183,27 @@ export class AudioPanel {
     });
     
     this.pane = pane;
+    
+    // Ensure pane is valid before building
+    if (!this.pane) {
+      return;
+    }
+    
     this.buildPanel();
   }
   
+  private checkPaneValid(): boolean {
+    if (!this.pane || typeof this.pane.addFolder !== 'function') {
+      return false;
+    }
+    return true;
+  }
+
   private buildPanel(): void {
+    if (!this.checkPaneValid()) {
+      return;
+    }
+
     // ==================== MAIN CONTROLS ====================
     this.buildMainControls();
 
@@ -217,6 +234,10 @@ export class AudioPanel {
   // ========================================
   
   private buildMainControls(): void {
+    if (!this.pane || typeof this.pane.addFolder !== 'function') {
+      return;
+    }
+
     const folder = this.pane.addFolder({
       title: '🎛️ Main Controls',
       expanded: true,
@@ -409,15 +430,27 @@ export class AudioPanel {
   }
 
   private buildModulationLab(): void {
+    if (!this.pane || typeof this.pane.addFolder !== 'function') {
+      return;
+    }
+
     const folder = this.pane.addFolder({
       title: '🎚️ Modulation Lab',
       expanded: false,
     });
 
+    if (!folder || typeof folder.addFolder !== 'function') {
+      return;
+    }
+
     const readoutFolder = folder.addFolder({
       title: 'Live Modulators',
       expanded: true,
     });
+
+    if (!readoutFolder || typeof readoutFolder.addBinding !== 'function') {
+      return;
+    }
 
     (['pulse', 'flow', 'shimmer', 'warp', 'density', 'aura'] as const).forEach((key) => {
       this.modulatorBindings.push(readoutFolder.addBinding(this.modulationReadouts, key, {
@@ -586,7 +619,6 @@ export class AudioPanel {
         if (file) {
           const url = URL.createObjectURL(file);
           this.callbacks.onFileLoad?.(url);
-          console.log(`🎵 Loaded: ${file.name}`);
         }
       };
       input.click();
@@ -739,9 +771,6 @@ export class AudioPanel {
   private applyPreset(presetName: string): void {
     const preset = PRESETS.find(p => p.name === presetName);
     if (!preset) return;
-    
-    console.log(`🎨 Applying preset: ${preset.name}`);
-    console.log(`   ${preset.description}`);
     
     // Extract base influences and store them
     const { audioSmoothing, bassInfluence, midInfluence, trebleInfluence, ...otherConfig } = preset.config;

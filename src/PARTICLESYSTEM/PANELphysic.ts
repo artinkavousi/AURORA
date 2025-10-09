@@ -803,7 +803,7 @@ export class PhysicPanel {
       });
       this.gravitySensor.start();
     } catch (error) {
-      console.warn("GravitySensor not available:", error);
+      // GravitySensor not available
     }
   }
   

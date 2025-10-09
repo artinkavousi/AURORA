@@ -87,7 +87,6 @@ export class StructuredArray {
   public set(index: number, element: string, value: number | number[] | { x: number; y?: number; z?: number; w?: number }): void {
     const member = this.layout[element];
     if (!member) {
-      console.error(`Unknown element '${element}'`);
       return;
     }
 
@@ -96,7 +95,6 @@ export class StructuredArray {
 
     if (member.size === 1) {
       if (typeof value !== 'number') {
-        console.error(`Expected a Number value for element '${element}'`);
         return;
       }
       array[offset] = value;
@@ -107,12 +105,10 @@ export class StructuredArray {
       } else if (Array.isArray(value)) {
         arr = value;
       } else {
-        console.error(`Expected an array or vector for element '${element}'`);
         return;
       }
 
       if (arr.length < member.size) {
-        console.error(`Expected an array of length ${member.size} for element '${element}'`);
         return;
       }
 
@@ -155,7 +151,6 @@ export class StructuredArray {
 
       const type = member.type;
       if (!TYPES[type]) {
-        console.error(`Unknown type '${type}'`);
         continue;
       }
 

@@ -6,6 +6,7 @@
 import * as THREE from "three/webgpu";
 import { defaultConfig, updateParticleParams, type FlowConfig } from './config';
 import { createUnifiedPanels, type UnifiedPanelCallbacks, ColorMode } from './PANEL';
+import type { DashboardDock } from './PANEL/dashboard';
 import { Scenery } from './STAGE/scenery';
 import { PostFX } from './POSTFX/postfx';
 import { ParticleBoundaries } from './PARTICLESYSTEM/physic/boundaries';
@@ -27,6 +28,18 @@ import { AdaptivePerformanceManager, type PerformanceChangeContext, type Perform
  * @param delay - Optional delay in ms before resolving
  */
 export type ProgressCallback = (fraction: number, delay?: number) => Promise<void>;
+
+export interface FlowFrameMetrics {
+  readonly delta: number;
+  readonly elapsed: number;
+  readonly fps: number;
+  readonly frameTime: number;
+  readonly particleCount: number;
+  readonly performanceTier: PerformanceTier;
+  readonly rendererMode: ParticleRenderMode;
+  readonly audioReactive: boolean;
+  readonly dashboardDock: DashboardDock;
+}
 
 /**
  * Initialization pipeline step
@@ -78,6 +91,7 @@ export class FlowApp {
   private performanceManager!: AdaptivePerformanceManager;
   private currentPerformanceTier: PerformanceTier = 'high';
   private preferredRenderMode: ParticleRenderMode = ParticleRenderMode.MESH;
+  private lastFrameMetrics: FlowFrameMetrics | null = null;
 
   // Shared grid metrics
   private readonly baseGridSize = new THREE.Vector3(64, 64, 64);
@@ -494,7 +508,7 @@ export class FlowApp {
   /**
    * Update loop
    */
-  public async update(delta: number, elapsed: number): Promise<void> {
+  public async update(delta: number, elapsed: number): Promise<FlowFrameMetrics> {
     if (this.panelManager) {
       this.panelManager.updateFPS();
     }
@@ -510,6 +524,28 @@ export class FlowApp {
     await this.postFX.render();
 
     this.performanceManager.update(delta);
+
+    const fps = delta > 0 ? 1 / delta : 0;
+    const frameTime = delta > 0 ? delta * 1000 : 0;
+    const particleCount = this.mlsMpmSim?.numParticles ?? this.config.particles.count;
+    const rendererMode = this.rendererManager?.getCurrentMode() ?? this.preferredRenderMode;
+    const dashboardDock = this.panelManager?.getDashboard().getDock() ?? 'right';
+
+    const metrics: FlowFrameMetrics = {
+      delta,
+      elapsed,
+      fps,
+      frameTime,
+      particleCount,
+      performanceTier: this.currentPerformanceTier,
+      rendererMode,
+      audioReactive: Boolean(this.config.audioReactive.enabled && this.config.audio.enabled),
+      dashboardDock,
+    };
+
+    this.lastFrameMetrics = metrics;
+
+    return metrics;
   }
 
   private updateAudioReactivity(delta: number, elapsed: number): AudioData | null {
@@ -761,6 +797,18 @@ export class FlowApp {
     this.soundReactivity?.dispose();
     this.audioReactiveBehavior?.dispose();
     this.audioVisualizationManager?.dispose();
+  }
+
+  public toggleDashboard(): void {
+    this.panelManager?.toggleCollapse();
+  }
+
+  public activateDashboardTab(id: string): void {
+    this.panelManager?.activateTab(id);
+  }
+
+  public getFrameMetrics(): FlowFrameMetrics | null {
+    return this.lastFrameMetrics;
   }
 }
 

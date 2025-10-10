@@ -6,7 +6,8 @@
 import * as THREE from "three/webgpu";
 import { AppPipeline, type PipelineReporter } from './APP/pipeline';
 import type { ProgressCallback } from './APP/types';
-import { defaultConfig, updateParticleParams, type FlowConfig } from './config';
+import type { FlowConfig } from './config';
+import { flowStore } from './state/store';
 import { Dashboard } from './PANEL/dashboard';
 import { Pane } from 'tweakpane';
 import * as EssentialsPlugin from '@tweakpane/plugin-essentials';
@@ -35,8 +36,8 @@ export type { ProgressCallback } from './APP/types';
  * Coordinates all modules and manages the application lifecycle
  */
 export class FlowApp {
-  // Configuration
-  private config: FlowConfig = { ...defaultConfig };
+  // Global state store
+  private readonly store = flowStore;
 
   // Core modules
   private scenery!: Scenery;
@@ -91,7 +92,13 @@ export class FlowApp {
     this.onMouseMove(event);
   };
 
+  private unsubscribeStore: (() => void) | null = null;
+
   constructor(private renderer: THREE.WebGPURenderer) {}
+
+  private get config() {
+    return this.store.getState().engineConfig;
+  }
 
   /**
    * Initialize all modules
@@ -103,6 +110,8 @@ export class FlowApp {
       reporter: this.createPipelineReporter(),
       settleDelayMs: 100,
     });
+    this.setupStoreSubscriptions();
+    this.applyAudioConfig(this.config.audio, this.config.audioReactive);
   }
 
   private createPipelineReporter(): PipelineReporter {
@@ -136,11 +145,11 @@ export class FlowApp {
   }
 
   private isAudioPipelineEnabled(): boolean {
-    return this.config.audio.enabled || this.config.audioReactive.enabled;
+    return this.store.getState().selectors.isAudioPipelineEnabled();
   }
 
   private initializeConfigAndDashboard(): void {
-    updateParticleParams(this.config);
+    this.store.getState().recalculateParticleParams();
     // Dashboard disabled - using standalone panels
     // this.dashboard = new Dashboard({ showInfo: false, showFPS: false });
   }
@@ -286,10 +295,15 @@ export class FlowApp {
       'Device': 3,
       'Mouse': 4
     };
-    physicsPane.addBinding(this.config.simulation, 'gravityType', {
-      label: 'Gravity',
-      options: gravityTypes,
-    });
+    const simulationBinding = { gravityType: this.config.simulation.gravityType };
+    physicsPane
+      .addBinding(simulationBinding, 'gravityType', {
+        label: 'Gravity',
+        options: gravityTypes,
+      })
+      .on('change', (ev: any) => {
+        this.store.getState().updateSimulation({ gravityType: ev.value });
+      });
     
     // Create standalone post-FX panel
     const postfxPane: any = new Pane({
@@ -304,12 +318,25 @@ export class FlowApp {
     
     // Add bloom controls
     const bloomFolder = postfxPane.addFolder({ title: 'Bloom', expanded: true });
-    bloomFolder.addBinding(this.config.bloom, 'enabled', { label: 'Enable' })
-      .on('change', () => this.postFX.updateBloom(this.config.bloom));
-    bloomFolder.addBinding(this.config.bloom, 'strength', { label: 'Strength', min: 0, max: 2, step: 0.01 })
-      .on('change', () => this.postFX.updateBloom(this.config.bloom));
-    bloomFolder.addBinding(this.config.bloom, 'threshold', { label: 'Threshold', min: 0, max: 1, step: 0.01 })
-      .on('change', () => this.postFX.updateBloom(this.config.bloom));
+    const bloomBinding = { ...this.config.bloom };
+    bloomFolder
+      .addBinding(bloomBinding, 'enabled', { label: 'Enable' })
+      .on('change', (ev: any) => {
+        this.store.getState().updateBloom({ enabled: ev.value });
+        this.postFX.updateBloom(this.store.getState().engineConfig.bloom);
+      });
+    bloomFolder
+      .addBinding(bloomBinding, 'strength', { label: 'Strength', min: 0, max: 2, step: 0.01 })
+      .on('change', (ev: any) => {
+        this.store.getState().updateBloom({ strength: ev.value });
+        this.postFX.updateBloom(this.store.getState().engineConfig.bloom);
+      });
+    bloomFolder
+      .addBinding(bloomBinding, 'threshold', { label: 'Threshold', min: 0, max: 1, step: 0.01 })
+      .on('change', (ev: any) => {
+        this.store.getState().updateBloom({ threshold: ev.value });
+        this.postFX.updateBloom(this.store.getState().engineConfig.bloom);
+      });
     
     // Store references for later use
     (this as any).physicsPane = physicsPane;
@@ -398,19 +425,37 @@ export class FlowApp {
     audioPane.element.style.zIndex = '1000';
     
     // Add audio reactivity toggle
-    audioPane.addBinding(this.config.audioReactive, 'enabled', {
-      label: 'Audio Reactive',
-    }).on('change', (ev: any) => {
-      this.config.audioReactive.enabled = ev.value;
-    });
-    
+    const audioReactiveBinding: any = {
+      enabled: this.config.audioReactive.enabled,
+      intensity: (this.config.audioReactive as any).intensity ?? 1,
+    };
+
+    audioPane
+      .addBinding(audioReactiveBinding, 'enabled', {
+        label: 'Audio Reactive',
+      })
+      .on('change', (ev: any) => {
+        this.store.getState().updateAudioReactive({ enabled: ev.value });
+        this.audioReactiveBehavior?.updateConfig({ enabled: ev.value });
+        this.audioVisualizationManager?.setMode(this.store.getState().engineConfig.audioReactive.mode);
+      });
+
     // Add intensity control
-    audioPane.addBinding(this.config.audioReactive, 'intensity', {
-      label: 'Intensity',
-      min: 0,
-      max: 2,
-      step: 0.1,
-    });
+    audioPane
+      .addBinding(audioReactiveBinding, 'intensity', {
+        label: 'Intensity',
+        min: 0,
+        max: 2,
+        step: 0.1,
+      })
+      .on('change', (ev: any) => {
+        (this.store.getState().updateAudioReactive as (patch: Partial<any>) => void)({
+          intensity: ev.value,
+        } as any);
+        this.audioReactiveBehavior?.updateConfig({
+          intensity: ev.value,
+        } as any);
+      });
     
     // Store reference
     (this as any).audioPane = audioPane;
@@ -454,9 +499,28 @@ export class FlowApp {
     };
     
     window.addEventListener('resize', this.resizeHandler);
-    
+
     // Trigger initial resize to set correct dimensions
     this.resizeHandler();
+  }
+
+  private setupStoreSubscriptions(): void {
+    this.unsubscribeStore?.();
+    this.unsubscribeStore = this.store.subscribe((state, previousState) => {
+      if (state.audioVersion !== previousState.audioVersion) {
+        this.applyAudioConfig(state.engineConfig.audio, state.engineConfig.audioReactive);
+      }
+    });
+  }
+
+  private applyAudioConfig(
+    audioConfig: FlowConfig['audio'],
+    audioReactiveConfig: FlowConfig['audioReactive'],
+  ): void {
+    this.soundReactivity?.updateConfig(audioConfig);
+    this.audioReactiveBehavior?.updateConfig(audioReactiveConfig);
+    this.audioVisualizationManager?.setMode(audioReactiveConfig.mode);
+    this.mlsMpmSim?.setAudioVisualizationMode(audioReactiveConfig.mode);
   }
 
   /**
@@ -553,8 +617,10 @@ export class FlowApp {
       if (this.config.audioReactive.materialModulation) {
         const modulation = this.audioReactiveBehavior?.getMaterialModulation(audioData);
         if (modulation) {
-          this.config.simulation.dynamicViscosity = modulation.viscosity;
-          this.config.simulation.stiffness = modulation.stiffness;
+          this.store.getState().updateSimulation({
+            dynamicViscosity: modulation.viscosity,
+            stiffness: modulation.stiffness,
+          });
         }
       }
     }
@@ -722,7 +788,7 @@ export class FlowApp {
 
 
     // Keep legacy config flags aligned with the active renderer
-    this.config.rendering.points = mode === ParticleRenderMode.POINT;
+    this.store.getState().updateRendering({ points: mode === ParticleRenderMode.POINT });
   }
 
   private applyPerformanceTier(context: PerformanceChangeContext): void {
@@ -751,6 +817,8 @@ export class FlowApp {
    * Dispose of all resources
    */
   public dispose(): void {
+    this.unsubscribeStore?.();
+    this.unsubscribeStore = null;
     // Clean up resize handler
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);

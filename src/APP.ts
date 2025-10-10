@@ -8,6 +8,8 @@ import { AppPipeline, type PipelineReporter } from './APP/pipeline';
 import type { ProgressCallback } from './APP/types';
 import { defaultConfig, updateParticleParams, type FlowConfig } from './config';
 import { Dashboard } from './PANEL/dashboard';
+import { Pane } from 'tweakpane';
+import * as EssentialsPlugin from '@tweakpane/plugin-essentials';
 import { Scenery } from './STAGE/scenery';
 import { PostFX } from './POSTFX/postfx';  // RE-ENABLED (simplified version)
 import { ParticleBoundaries } from './PARTICLESYSTEM/physic/boundaries';
@@ -54,12 +56,14 @@ export class FlowApp {
   private pointRenderer!: PointRenderer;
   private useLegacyRenderers: boolean = false;  // Set to true to use old system
 
-  // UI Panels
-  private postFXPanel!: PostFXPanel;  // RE-ENABLED
-  private physicPanel!: PhysicPanel;
-  private visualsPanel!: VisualsPanel;  // NEW: Visual controls
-  private audioPanel!: AudioPanel;
-  private themePanel!: ThemeManagerPanel;
+  // UI Panels (standalone mode)
+  private fpsGraph: any = null;
+  // Note: Using standalone Pane instances instead of Dashboard-based panels
+  // private postFXPanel!: PostFXPanel;
+  // private physicPanel!: PhysicPanel;
+  // private visualsPanel!: VisualsPanel;
+  // private audioPanel!: AudioPanel;
+  // private themePanel!: ThemeManagerPanel;
 
   // Audio reactivity
   private soundReactivity!: SoundReactivity;
@@ -104,13 +108,13 @@ export class FlowApp {
   private createPipelineReporter(): PipelineReporter {
     return {
       onStepStart: ({ step }) => {
-        console.info(`⏳ [${step.id}] ${step.label}...`);
+        // Silent
       },
       onStepComplete: ({ step, durationMs }) => {
-        console.info(`✅ [${step.id}] ${step.label} (${durationMs.toFixed(1)}ms)`);
+        // Silent
       },
       onStepSkipped: ({ step }) => {
-        console.info(`⏭️ [${step.id}] ${step.label} skipped`);
+        // Silent
       },
     };
   }
@@ -137,7 +141,8 @@ export class FlowApp {
 
   private initializeConfigAndDashboard(): void {
     updateParticleParams(this.config);
-    this.dashboard = new Dashboard({ showInfo: false, showFPS: false });
+    // Dashboard disabled - using standalone panels
+    // this.dashboard = new Dashboard({ showInfo: false, showFPS: false });
   }
 
   private async initializeScenery(): Promise<void> {
@@ -229,9 +234,7 @@ export class FlowApp {
       },
       {
         onTierChange: (context) => {
-          console.info(
-            `⚙️ Adaptive performance → ${context.tier} (${context.reason}) @ ${context.fps.toFixed(1)}fps`
-          );
+          // Silent
           this.applyPerformanceTier(context);
         },
       }
@@ -251,38 +254,64 @@ export class FlowApp {
   }
 
   private initializeCorePanels(): void {
-    this.physicPanel = new PhysicPanel(this.dashboard, this.config, {
-      onParticleCountChange: (_count) => {},
-      onSizeChange: (_size) => {},
-      onSimulationChange: (_simConfig) => {},
-      onMaterialChange: () => {
-        if (this.physicPanel.colorMode === ColorMode.MATERIAL) {
-          this.mlsMpmSim.setColorMode(ColorMode.MATERIAL);
-        }
-      },
-      onForceFieldsChange: () => {
-        this.mlsMpmSim.updateForceFields(this.physicPanel.forceFieldManager);
-      },
-      onEmittersChange: () => {},
-      onBoundariesChange: () => {
-        this.mlsMpmSim.updateBoundaryUniforms();
-      },
+    // Create standalone physics panel
+    const physicsPane: any = new Pane({
+      title: '🌊 Physics',
+      expanded: true,
     });
-    this.physicPanel.boundaries = this.boundaries;
-
-    this.postFXPanel = new PostFXPanel(this.dashboard, this.config, {
-      onBloomChange: (bloomConfig) => {
-        this.postFX.updateBloom(bloomConfig);
-      },
-      onRadialFocusChange: (radialFocusConfig) => {
-        this.postFX.updateRadialFocus(radialFocusConfig);
-      },
-      onRadialCAChange: (radialCAConfig) => {
-        this.postFX.updateRadialCA(radialCAConfig);
-      },
+    physicsPane.registerPlugin(EssentialsPlugin as any);
+    
+    // Position the pane
+    physicsPane.element.style.position = 'fixed';
+    physicsPane.element.style.top = '20px';
+    physicsPane.element.style.right = '20px';
+    physicsPane.element.style.width = '320px';
+    physicsPane.element.style.zIndex = '1000';
+    
+    // Add FPS monitor
+    const fpsGraph = physicsPane.addBlade({
+      view: 'fpsgraph',
+      label: 'FPS',
+      lineCount: 2,
+    }) as any;
+    this.fpsGraph = fpsGraph;
+    
+    // Add gravity control
+    const gravityTypes = {
+      'Down': 0,
+      'Up': 1,
+      'Center': 2,
+      'Device': 3,
+      'Mouse': 4
+    };
+    physicsPane.addBinding(this.config.simulation, 'gravityType', {
+      label: 'Gravity',
+      options: gravityTypes,
     });
-
-    this.themePanel = new ThemeManagerPanel(this.dashboard);
+    
+    // Create standalone post-FX panel
+    const postfxPane: any = new Pane({
+      title: '✨ Post-FX',
+      expanded: false,
+    });
+    postfxPane.element.style.position = 'fixed';
+    postfxPane.element.style.top = '20px';
+    postfxPane.element.style.right = '360px';
+    postfxPane.element.style.width = '320px';
+    postfxPane.element.style.zIndex = '1000';
+    
+    // Add bloom controls
+    const bloomFolder = postfxPane.addFolder({ title: 'Bloom', expanded: true });
+    bloomFolder.addBinding(this.config.bloom, 'enabled', { label: 'Enable' })
+      .on('change', () => this.postFX.updateBloom(this.config.bloom));
+    bloomFolder.addBinding(this.config.bloom, 'strength', { label: 'Strength', min: 0, max: 2, step: 0.01 })
+      .on('change', () => this.postFX.updateBloom(this.config.bloom));
+    bloomFolder.addBinding(this.config.bloom, 'threshold', { label: 'Threshold', min: 0, max: 1, step: 0.01 })
+      .on('change', () => this.postFX.updateBloom(this.config.bloom));
+    
+    // Store references for later use
+    (this as any).physicsPane = physicsPane;
+    (this as any).postfxPane = postfxPane;
   }
 
   private async initializeAudioSystems(): Promise<void> {
@@ -290,14 +319,14 @@ export class FlowApp {
     if (this.config.audio.enabled) {
       try {
         await this.soundReactivity.init();
-        console.log('🎤 SoundReactivity initialized successfully!');
       } catch (error) {
         console.warn('⚠️ Failed to initialize audio (microphone access denied?):', error);
       }
     }
 
     this.audioReactiveBehavior = new AudioReactiveBehavior(this.renderer, this.config.audioReactive);
-    this.audioReactiveBehavior.setForceFieldManager(this.physicPanel.forceFieldManager);
+    // Note: ForceFieldManager integration disabled in standalone panel mode
+    // this.audioReactiveBehavior.setForceFieldManager(this.physicPanel.forceFieldManager);
 
     this.audioVisualizationManager = new AudioVisualizationManager(
       this.renderer,
@@ -308,106 +337,81 @@ export class FlowApp {
   }
 
   private initializeVisualsPanel(): void {
-    this.visualsPanel = new VisualsPanel(this.dashboard, {
-      onRenderModeChange: (mode) => {
-        this.preferredRenderMode = mode;
-        this.performanceManager.registerManualOverride();
-        this.switchRenderMode(mode);
-      },
-      onMaterialPresetChange: (preset) => {
-        console.log(`🎨 Applying preset: ${preset.name}`);
-        this.visualsPanel.settings.metalness = preset.metalness;
-        this.visualsPanel.settings.roughness = preset.roughness;
-        this.visualsPanel.settings.emissive = preset.emissive;
-
-        const currentMode = this.rendererManager.getCurrentMode();
-        if (currentMode === ParticleRenderMode.MESH) {
-          const renderer = this.rendererManager.getRenderer() as MeshRenderer;
-          if (renderer && renderer.material) {
-            renderer.material.metalness = preset.metalness;
-            renderer.material.roughness = preset.roughness;
-            renderer.material.needsUpdate = true;
-          }
-        }
-
-        if (this.meshRenderer && this.meshRenderer.material) {
-          this.meshRenderer.material.metalness = preset.metalness;
-          this.meshRenderer.material.roughness = preset.roughness;
-          this.meshRenderer.material.needsUpdate = true;
-        }
-      },
-      onColorModeChange: (mode) => {
-        const legacyColorMode = mode as number;
-        this.mlsMpmSim.setColorMode(legacyColorMode);
-      },
-      onColorGradientChange: (gradientName) => {
-        console.log('🌈 Color gradient changed:', gradientName);
-      },
-      onSizeChange: (size) => {
-        this.rendererManager.update(this.mlsMpmSim.numParticles, size);
-      },
-      onMaterialPropertyChange: (property, value) => {
-        console.log(`🎨 ${property}: ${value.toFixed(2)}`);
-
-        const currentMode = this.rendererManager.getCurrentMode();
-        if (currentMode === ParticleRenderMode.MESH) {
-          const renderer = this.rendererManager.getRenderer() as MeshRenderer;
-          if (renderer && renderer.material) {
-            const material = renderer.material as any;
-            if (property in material) {
-              material[property] = value;
-              material.needsUpdate = true;
-            }
-          }
-        }
-
-        if (this.meshRenderer && this.meshRenderer.material) {
-          const material = this.meshRenderer.material as any;
-          if (property in material) {
-            material[property] = value;
-            material.needsUpdate = true;
-          }
-        }
-      },
+    // Create standalone visuals panel
+    const visualsPane: any = new Pane({
+      title: '🎨 Visuals',
+      expanded: false,
     });
-
-    this.visualsPanel.setRendererManager(this.rendererManager);
+    visualsPane.element.style.position = 'fixed';
+    visualsPane.element.style.top = '220px';
+    visualsPane.element.style.right = '20px';
+    visualsPane.element.style.width = '320px';
+    visualsPane.element.style.zIndex = '1000';
+    
+    // Add render mode selector
+    const renderModes = {
+      'Mesh': ParticleRenderMode.MESH,
+      'Point': ParticleRenderMode.POINT,
+    };
+    visualsPane.addBinding({ mode: this.preferredRenderMode }, 'mode', {
+      label: 'Render Mode',
+      options: renderModes,
+    }).on('change', (ev: any) => {
+      this.preferredRenderMode = ev.value;
+      this.performanceManager.registerManualOverride();
+      this.switchRenderMode(ev.value);
+    });
+    
+    // Add particle size control
+    const particleSettings = {
+      size: 0.12,
+    };
+    visualsPane.addBinding(particleSettings, 'size', {
+      label: 'Particle Size',
+      min: 0.05,
+      max: 0.5,
+      step: 0.01,
+    }).on('change', (ev: any) => {
+      this.rendererManager.update(this.mlsMpmSim.numParticles, ev.value);
+    });
+    
+    // Store reference
+    (this as any).visualsPane = visualsPane;
   }
 
   private initializeAudioPanel(): void {
-    this.audioPanel = new AudioPanel(this.dashboard, this.config, {
-      onAudioConfigChange: (audioConfig) => {
-        this.soundReactivity.updateConfig(audioConfig);
-      },
-      onAudioReactiveConfigChange: (audioReactiveConfig) => {
-        this.audioReactiveBehavior.updateConfig(audioReactiveConfig);
-        if (audioReactiveConfig.mode !== undefined) {
-          this.audioVisualizationManager.setMode(audioReactiveConfig.mode);
-          this.mlsMpmSim.setAudioVisualizationMode(audioReactiveConfig.mode);
-          console.log(`🎵 Visualization mode changed to: ${audioReactiveConfig.mode}`);
-        }
-      },
-      onSourceChange: async (source) => {
-        this.soundReactivity.dispose();
-        this.config.audio.source = source;
-        this.soundReactivity = new SoundReactivity(this.config.audio);
-        try {
-          await this.soundReactivity.init();
-          console.log('✅ Audio source changed to:', source);
-        } catch (error) {
-          console.error('Failed to initialize audio:', error);
-        }
-      },
-      onFileLoad: (url) => {
-        this.soundReactivity.loadAudioFile(url);
-      },
-      onTogglePlayback: () => {
-        this.soundReactivity.togglePlayback();
-      },
-      onVolumeChange: (volume) => {
-        this.soundReactivity.setVolume(volume);
-      },
+    // Create standalone audio panel (only if audio is enabled)
+    if (!this.isAudioPipelineEnabled()) {
+      return;
+    }
+    
+    const audioPane: any = new Pane({
+      title: '🎵 Audio',
+      expanded: false,
     });
+    audioPane.element.style.position = 'fixed';
+    audioPane.element.style.top = '420px';
+    audioPane.element.style.right = '20px';
+    audioPane.element.style.width = '320px';
+    audioPane.element.style.zIndex = '1000';
+    
+    // Add audio reactivity toggle
+    audioPane.addBinding(this.config.audioReactive, 'enabled', {
+      label: 'Audio Reactive',
+    }).on('change', (ev: any) => {
+      this.config.audioReactive.enabled = ev.value;
+    });
+    
+    // Add intensity control
+    audioPane.addBinding(this.config.audioReactive, 'intensity', {
+      label: 'Intensity',
+      min: 0,
+      max: 2,
+      step: 0.1,
+    });
+    
+    // Store reference
+    (this as any).audioPane = audioPane;
   }
 
   private initializeInteraction(): void {
@@ -445,7 +449,6 @@ export class FlowApp {
         this.rendererManager.setSimulationTransform(this.boundaries.getSimulationTransform());
       }
 
-      console.log('📐 Viewport adapted:', this.viewportGridSize.toArray().map(v => v.toFixed(1)));
     };
     
     window.addEventListener('resize', this.resizeHandler);
@@ -486,8 +489,8 @@ export class FlowApp {
    * Update loop
    */
   public async update(delta: number, elapsed: number): Promise<void> {
-    if (this.physicPanel?.fpsGraph) {
-      this.physicPanel.fpsGraph.begin();
+    if (this.fpsGraph) {
+      this.fpsGraph.begin();
     }
 
     this.scenery.update(delta, elapsed);
@@ -502,8 +505,8 @@ export class FlowApp {
 
     this.performanceManager.update(delta);
 
-    if (this.physicPanel?.fpsGraph) {
-      this.physicPanel.fpsGraph.end();
+    if (this.fpsGraph) {
+      this.fpsGraph.end();
     }
   }
 
@@ -534,20 +537,12 @@ export class FlowApp {
 
     this.mlsMpmSim?.updateBoundaryUniforms();
 
-    if (audioData && audioEnabled) {
-      this.audioPanel?.updateMetrics(audioData);
-    }
+    // Note: Audio metrics update disabled in standalone panel mode
+    // if (audioData && audioEnabled) {
+    //   this.audioPanel?.updateMetrics(audioData);
+    // }
 
     if (audioData && this.config.audioReactive.enabled) {
-      if (import.meta.env.DEV && Math.random() < 0.016) {
-        console.log('🎵 Audio:', {
-          bass: audioData.smoothBass.toFixed(2),
-          mid: audioData.smoothMid.toFixed(2),
-          treble: audioData.smoothTreble.toFixed(2),
-          beat: audioData.isBeat ? '🔴' : '⚫',
-          beatIntensity: audioData.beatIntensity.toFixed(2),
-        });
-      }
 
       this.audioReactiveBehavior?.updateAudioData(audioData);
       this.audioReactiveBehavior?.updateBeatEffects(audioData, delta, this.viewportGridSize);
@@ -589,10 +584,10 @@ export class FlowApp {
     }
 
     const particleSize =
-      this.visualsPanel?.settings.particleSize ??
+      // this.visualsPanel?.settings.particleSize ??
       this.config.particles.actualSize ??
       this.config.particles.size ??
-      1.0;
+      0.12;
 
     const particleCount = this.mlsMpmSim?.numParticles ?? this.config.particles.count;
     this.rendererManager.update(particleCount, particleSize);
@@ -620,9 +615,10 @@ export class FlowApp {
       return;
     }
 
-    this.mlsMpmSim.updateForceFields(this.physicPanel.forceFieldManager);
-    this.mlsMpmSim.setColorMode(this.physicPanel.colorMode);
-    this.physicPanel.emitterManager.update(delta);
+    // Note: ForceField, ColorMode, and Emitter integration disabled in standalone panel mode
+    // this.mlsMpmSim.updateForceFields(this.physicPanel.forceFieldManager);
+    // this.mlsMpmSim.setColorMode(this.physicPanel.colorMode);
+    // this.physicPanel.emitterManager.update(delta);
 
     const gravityType = this.config.simulation.gravityType;
     this.tmpGravity.set(0, 0, 0);
@@ -680,18 +676,18 @@ export class FlowApp {
 
     const fps = delta > 0 ? 1 / delta : 0;
     const frameMs = delta > 0 ? delta * 1000 : 0;
-    this.physicPanel.updateMetrics(
-      this.mlsMpmSim.numParticles,
-      fps,
-      frameMs
-    );
+    // Note: Metrics update disabled in standalone panel mode
+    // this.physicPanel.updateMetrics(
+    //   this.mlsMpmSim.numParticles,
+    //   fps,
+    //   frameMs
+    // );
   }
 
   /**
    * Switch particle render mode (Unified System)
    */
   private switchRenderMode(mode: ParticleRenderMode): void {
-    console.log(`🎨 Switching render mode to: ${RendererManager.getModeName(mode)}`);
     
     // Ensure legacy renderers are hidden
     if (this.meshRenderer) this.meshRenderer.object.visible = false;
@@ -712,17 +708,16 @@ export class FlowApp {
     
     // Update renderer with current particle count
     const particleSize =
-      this.visualsPanel?.settings.particleSize ??
+      // this.visualsPanel?.settings.particleSize ??
       this.config.particles.actualSize ??
       this.config.particles.size ??
-      1.0;
+      0.12;
 
     this.rendererManager.update(
       this.mlsMpmSim.numParticles,
       particleSize
     );
 
-    console.log(`✅ Now rendering with: ${RendererManager.getModeName(mode)}`);
 
     // Keep legacy config flags aligned with the active renderer
     this.config.rendering.points = mode === ParticleRenderMode.POINT;
@@ -744,11 +739,9 @@ export class FlowApp {
     }
 
     if (this.rendererManager.getCurrentMode() !== targetMode) {
-      console.info(
-        `🎯 Renderer mode adjusted for ${context.tier} tier (was ${previousTier}) → ${RendererManager.getModeName(targetMode)}`
-      );
       this.switchRenderMode(targetMode);
-      this.visualsPanel?.syncRenderMode(targetMode);
+      // Note: Render mode sync disabled in standalone panel mode
+      // this.visualsPanel?.syncRenderMode(targetMode);
     }
   }
   
@@ -763,16 +756,18 @@ export class FlowApp {
 
     this.renderer.domElement.removeEventListener("pointermove", this.pointerMoveHandler);
     
-    this.dashboard?.dispose();
+    // Note: Dashboard disabled in standalone panel mode
+    // this.dashboard?.dispose();
     this.scenery?.dispose();
     this.postFX?.dispose();  // RE-ENABLED
     this.boundaries?.dispose();
     this.meshRenderer?.dispose();
     this.pointRenderer?.dispose();
     this.rendererManager?.dispose();  // NEW
-    this.physicPanel?.dispose();
-    this.visualsPanel?.dispose();  // NEW
-    this.audioPanel?.dispose();
+    // Note: Standalone panels don't have dispose methods
+    // this.physicPanel?.dispose();
+    // this.visualsPanel?.dispose();
+    // this.audioPanel?.dispose();
     this.soundReactivity?.dispose();
     this.audioReactiveBehavior?.dispose();
     this.audioVisualizationManager?.dispose();

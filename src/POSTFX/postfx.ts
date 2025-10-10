@@ -106,8 +106,6 @@ export class PostFX {
     this.buildPipeline(options);
 
     this.initializeAudioDynamicsState();
-
-    console.log('✅ PostFX: Refined pipeline with radial effects initialized');
   }
 
   private applyConfig(options: PostFXOptions): void {

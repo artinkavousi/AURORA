@@ -239,7 +239,6 @@ export class Scenery {
     if (this.environmentConfig.hdriFile) {
       this.hdriTexture = await this.loadHDR(this.environmentConfig.hdriFile);
       this.applyEnvironmentToScene();
-      console.log('✅ HDR environment loaded and configured');
     }
   }
 
@@ -304,7 +303,6 @@ export class Scenery {
       this.renderer.toneMapping = THREE.NoToneMapping;
       this.renderer.toneMappingExposure = 1.0;
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-      console.log('⚙️ Scenery tone mapping: DISABLED');
       return;
     }
 
@@ -332,8 +330,6 @@ export class Scenery {
     
     // Output color space MUST be sRGB for proper display
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    
-    console.log(`⚙️ Scenery tone mapping: ${modeValue}, exposure: ${exposure.toFixed(2)}`);
   }
 
   /**
@@ -348,7 +344,6 @@ export class Scenery {
     this.renderer.toneMappingExposure = 1.0;
     // Output LINEAR color space for PostFX to process
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-    console.log('⚙️ Scenery: Tone mapping DISABLED for PostFX pipeline (outputting linear HDR)');
   }
 
   // ==================== Scene Management ====================

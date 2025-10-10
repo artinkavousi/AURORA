@@ -94,8 +94,6 @@ export class PhysicPanel {
     config: FlowConfig,
     callbacks: PhysicPanelCallbacks = {}
   ) {
-    console.log('[PhysicPanel] Constructor called');
-    console.log('[PhysicPanel] Dashboard:', dashboard);
     this.config = config;
     this.callbacks = callbacks;
     
@@ -103,17 +101,14 @@ export class PhysicPanel {
     this.forceFieldManager = new ForceFieldManager(8);
     this.emitterManager = new ParticleEmitterManager(8);
     
-    console.log('[PhysicPanel] About to call dashboard.registerPanel()');
     this.pane = dashboard.registerPanel({
       id: 'physics',
       title: '🌊 Particle Physics & Performance',
       icon: '🌊',
       description: 'Simulation, materials, forces, emitters, diagnostics',
     });
-    console.log('[PhysicPanel] Panel registered, pane:', this.pane);
 
     this.setupUI();
-    console.log('[PhysicPanel] Setup complete');
   }
 
   private setupUI(): void {

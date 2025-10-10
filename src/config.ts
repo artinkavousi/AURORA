@@ -388,7 +388,7 @@ export const defaultConfig: FlowConfig = {
     environmentIntensity: 0.25,  // Conservative default to prevent overexposure
   },
   audio: {
-    enabled: true, // ENABLED BY DEFAULT for testing
+    enabled: false, // Disabled by default
     source: 'microphone',
     fftSize: 2048,
     smoothing: 0.88, // Higher smoothing for smoother, more fluid motion
@@ -415,7 +415,7 @@ export const defaultConfig: FlowConfig = {
     postFXInfluence: 0.2,
   },
   audioReactive: {
-    enabled: true, // ENABLED BY DEFAULT for testing
+    enabled: false, // Disabled by default
     mode: 0, // WAVE_FIELD
     bassInfluence: 1.0,
     midInfluence: 0.8,

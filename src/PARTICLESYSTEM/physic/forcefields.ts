@@ -368,7 +368,6 @@ export class ForceFieldManager {
    */
   public addField(config: Partial<ForceFieldConfig> = {}): number {
     if (this.fields.length >= this.maxFields) {
-      console.warn(`Maximum force fields (${this.maxFields}) reached`);
       return -1;
     }
     

@@ -229,7 +229,6 @@ export class SoundReactivity {
       this.source = this.audioContext!.createMediaStreamSource(stream);
       this.source.connect(this.gainNode!);
       this.connectAnalyzers();
-      console.log('🎤 Microphone input initialized');
     } catch (error) {
       console.error('Failed to access microphone:', error);
       throw error;
@@ -248,8 +247,6 @@ export class SoundReactivity {
       this.connectAnalyzers();
       this.analyser.connect(this.audioContext.destination);
     }
-
-    console.log('🎵 File input initialized (use loadAudioFile to load a file)');
   }
 
   loadAudioFile(url: string): void {
@@ -501,6 +498,29 @@ export class SoundReactivity {
     const stability = mean > 0 ? THREE.MathUtils.clamp(1 - deviation / mean, 0, 1) : 0;
     this.rhythmConfidence = THREE.MathUtils.lerp(this.rhythmConfidence, stability, 0.35);
     this.tempoEstimate = THREE.MathUtils.clamp(60 / mean, 40, 200);
+  }
+
+  private findPeakFrequency(): { frequency: number; intensity: number } {
+    if (!this.analyser || !this.frequencyData) {
+      return { frequency: 0, intensity: 0 };
+    }
+
+    let maxIntensity = 0;
+    let maxIndex = 0;
+
+    for (let i = 0; i < this.frequencyData.length; i++) {
+      if (this.frequencyData[i] > maxIntensity) {
+        maxIntensity = this.frequencyData[i];
+        maxIndex = i;
+      }
+    }
+
+    const sampleRate = this.audioContext?.sampleRate || 44100;
+    const binWidth = sampleRate / (this.analyser.fftSize || 2048);
+    const frequency = maxIndex * binWidth;
+    const intensity = maxIntensity / 255;
+
+    return { frequency, intensity };
   }
 
   private computeSpectralFlux(): number {

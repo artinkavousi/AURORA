@@ -224,7 +224,6 @@ export class Dashboard {
     }
 
     this.applyTheme(this.theme, false);
-    console.log('[Dashboard] Initialized successfully. Panels count:', this.panels.size);
   }
 
   private configurePane(pane: Pane): void {
@@ -234,7 +233,6 @@ export class Dashboard {
 
   /** Register a panel and return its Tweakpane instance */
   public registerPanel(options: DashboardPanelOptions): Pane {
-    console.log(`[Dashboard] Registering panel: ${options.id} - ${options.title}`);
     if (this.panels.has(options.id)) {
       throw new Error(`Panel with id "${options.id}" already exists.`);
     }

@@ -502,7 +502,11 @@ export class AudioPanel {
       expanded: true,
     });
 
-    (['pulse', 'flow', 'shimmer', 'warp', 'density', 'aura', 'containment', 'sway'] as const).forEach((key) => {
+    const modulatorKeys: Array<keyof typeof this.modulationReadouts> = [
+      'pulse', 'flow', 'shimmer', 'warp', 'density', 'aura', 'containment', 'sway'
+    ];
+
+    for (const key of modulatorKeys) {
       this.modulatorBindings.push(readoutFolder.addBinding(this.modulationReadouts, key, {
         label: key.charAt(0).toUpperCase() + key.slice(1),
         readonly: true,
@@ -510,7 +514,7 @@ export class AudioPanel {
         max: 1,
         format: (v: number) => v.toFixed(3),
       }));
-    });
+    }
 
     folder.addBlade({ view: 'separator' });
 
@@ -669,7 +673,6 @@ export class AudioPanel {
         if (file) {
           const url = URL.createObjectURL(file);
           this.callbacks.onFileLoad?.(url);
-          console.log(`🎵 Loaded: ${file.name}`);
         }
       };
       input.click();
@@ -851,9 +854,6 @@ export class AudioPanel {
   private applyPreset(presetName: string): void {
     const preset = PRESETS.find(p => p.name === presetName);
     if (!preset) return;
-    
-    console.log(`🎨 Applying preset: ${preset.name}`);
-    console.log(`   ${preset.description}`);
     
     // Extract base influences and store them
     const { audioSmoothing, bassInfluence, midInfluence, trebleInfluence, ...otherConfig } = preset.config;

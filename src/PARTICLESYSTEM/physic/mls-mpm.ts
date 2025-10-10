@@ -562,7 +562,7 @@ export class MlsMpmSimulator {
           const bassContrib = smoothstep(0.5, 0.0, bandFreqNorm).mul(this.uniforms.audioBass).toConst('bassContrib');
           const midContrib = smoothstep(0.2, 0.5, bandFreqNorm).mul(smoothstep(0.8, 0.5, bandFreqNorm)).mul(this.uniforms.audioMid).toConst('midContrib');
           const trebleContrib = smoothstep(0.5, 1.0, bandFreqNorm).mul(this.uniforms.audioTreble).toConst('trebleContrib');
-          const amplitude = bassContrib.add(midContrib).add(trebleContrib).toConst('amplitude');
+          const amplitude = bassContrib.add(midContrib).add(trebleContrib).toConst('amplitude_wave');
           
           // Vertical force toward target height
           const targetHeight = amplitude.mul(this.uniforms.gridSize.y).mul(0.8).toConst('targetHeight');
@@ -590,10 +590,10 @@ export class MlsMpmSimulator {
         
         // Mode 3: Morphological - Shape forming
         If(this.uniforms.audioVisualizationMode.equal(int(3)), () => {
-          const center = vec3(this.uniforms.gridSize).mul(0.5).toConst('center');
-          const toCenter = center.sub(particlePosition).toConst('toCenter');
-          const distFromCenter = length(toCenter).toConst('distFromCenter');
-          const dirToCenter = normalize(toCenter).toConst('dirToCenter');
+          const center = vec3(this.uniforms.gridSize).mul(0.5).toConst('center_morph');
+          const toCenter = center.sub(particlePosition).toConst('toCenter_morph');
+          const distFromCenter = length(toCenter).toConst('distFromCenter_morph');
+          const dirToCenter = normalize(toCenter).toConst('dirToCenter_morph');
           
           // Bass → Sphere attraction
           const sphereRadius = this.uniforms.gridSize.x.mul(0.25).toConst('sphereRadius');
@@ -613,9 +613,9 @@ export class MlsMpmSimulator {
         
         // Mode 4: Galaxy Spiral - Orbital motion
         If(this.uniforms.audioVisualizationMode.equal(int(4)), () => {
-          const center = vec3(this.uniforms.gridSize).mul(0.5).toConst('center');
-          const radialDir = normalize(vec3(particlePosition.x.sub(center.x), 0, particlePosition.z.sub(center.z))).toConst('radialDir');
-          const tangent = vec3(radialDir.z.negate(), 0, radialDir.x).toConst('tangent');
+          const center = vec3(this.uniforms.gridSize).mul(0.5).toConst('center_galaxy');
+          const radialDir = normalize(vec3(particlePosition.x.sub(center.x), 0, particlePosition.z.sub(center.z))).toConst('radialDir_galaxy');
+          const tangent = vec3(radialDir.z.negate(), 0, radialDir.x).toConst('tangent_galaxy');
           
           // Orbital speed modulated by audio
           const orbitalSpeed = this.uniforms.audioBass.add(this.uniforms.audioMid).add(this.uniforms.audioTreble).div(3).mul(2).add(1.0).toConst('orbitalSpeed');
@@ -639,8 +639,8 @@ export class MlsMpmSimulator {
           forceAccumulator.addAssign(bassFlow.mul(this.uniforms.dt));
           
           // Mid: swirling flows
-          const center = vec3(0.5).toConst('center');
-          const toCenter = normPos.sub(center).toConst('toCenter');
+          const center = vec3(0.5).toConst('center_kinetic');
+          const toCenter = normPos.sub(center).toConst('toCenter_kinetic');
           const midSwirl = vec3(toCenter.z.negate(), 0, toCenter.x).mul(this.uniforms.audioMid).mul(8.0).toConst('midSwirl');
           forceAccumulator.addAssign(midSwirl.mul(this.uniforms.dt));
           
@@ -655,8 +655,8 @@ export class MlsMpmSimulator {
         
         // Mode 6: Fractal Burst - Explosive patterns on beat
         If(this.uniforms.audioVisualizationMode.equal(int(6)), () => {
-          const center = vec3(this.uniforms.gridSize).mul(0.5).toConst('center');
-          const toCenter = center.sub(particlePosition).toConst('toCenter');
+          const center = vec3(this.uniforms.gridSize).mul(0.5).toConst('center_fractal');
+          const toCenter = center.sub(particlePosition).toConst('toCenter_fractal');
           
           // Fractal branching pattern
           const branchNoise = triNoise3Dvec(particlePosition.mul(0.1), time.mul(0.1), 0.2).toConst('branchNoise');
@@ -686,7 +686,7 @@ export class MlsMpmSimulator {
           ).toConst('resonanceFactor');
 
           // Oscillation amplitude
-          const amplitude = this.uniforms.audioBass.add(this.uniforms.audioMid).add(this.uniforms.audioTreble).div(3).mul(resonanceFactor).mul(7.5).toConst('amplitude');
+          const amplitude = this.uniforms.audioBass.add(this.uniforms.audioMid).add(this.uniforms.audioTreble).div(3).mul(resonanceFactor).mul(7.5).toConst('amplitude_lattice');
           const oscillation = sin(time.mul(omega0)).mul(amplitude).toConst('oscillation');
           const oscillationDir = normalize(toLattice.add(0.001)).toConst('oscillationDir');
           forceAccumulator.addAssign(oscillationDir.mul(oscillation).mul(this.uniforms.dt));
@@ -733,9 +733,9 @@ export class MlsMpmSimulator {
         });
 
         // Beat pulse (global, applies to all modes)
-        const center = vec3(0.5).toConst('center');
-        const toCenter = center.sub(normPos).toConst('toCenter');
-        const distFromCenter = length(toCenter).toConst('distFromCenter');
+        const center = vec3(0.5).toConst('center_beat');
+        const toCenter = center.sub(normPos).toConst('toCenter_beat');
+        const distFromCenter = length(toCenter).toConst('distFromCenter_beat');
         const beatIntensity = this.uniforms.audioBeatIntensity
           .mul(smoothstep(0.0, 0.3, distFromCenter))
           .toConst('beatIntensity');

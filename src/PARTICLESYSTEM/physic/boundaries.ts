@@ -567,9 +567,38 @@ export class ParticleBoundaries {
     // Particles use gridSize (viewport space) as boundaries
     // This keeps particles visible on page and adapts to page size
     If(uniforms.boundaryEnabled.equal(int(0)), () => {
+      // Tighter soft viewport walls to keep particles more centered
+      const wallMarginXY = float(15).toConst("wallMarginXY"); // Larger margins for X/Y to keep particles more central
+      const wallMarginZ = float(8).toConst("wallMarginZ"); // Smaller Z margin for less extreme depth
+      const wallStiffness = float(0.5).toConst("wallStiffness"); // Stronger walls
+      const xN2 = particlePosition.add(particleVelocity.mul(uniforms.dt).mul(2.0));
+      
+      // Apply soft wall forces with tighter constraints
+      If(xN2.x.lessThan(wallMarginXY), () => {
+        particleVelocity.x.addAssign(wallMarginXY.sub(xN2.x).mul(wallStiffness));
+      });
+      If(xN2.x.greaterThan(uniforms.gridSize.x.sub(wallMarginXY)), () => {
+        particleVelocity.x.addAssign(uniforms.gridSize.x.sub(wallMarginXY).sub(xN2.x).mul(wallStiffness));
+      });
+      If(xN2.y.lessThan(wallMarginXY), () => {
+        particleVelocity.y.addAssign(wallMarginXY.sub(xN2.y).mul(wallStiffness));
+      });
+      If(xN2.y.greaterThan(uniforms.gridSize.y.sub(wallMarginXY)), () => {
+        particleVelocity.y.addAssign(uniforms.gridSize.y.sub(wallMarginXY).sub(xN2.y).mul(wallStiffness));
+      });
+      // Reduced Z range for less extreme depth
+      If(xN2.z.lessThan(wallMarginZ), () => {
+        particleVelocity.z.addAssign(wallMarginZ.sub(xN2.z).mul(wallStiffness));
+      });
+      If(xN2.z.greaterThan(uniforms.gridSize.z.sub(wallMarginZ)), () => {
+        particleVelocity.z.addAssign(uniforms.gridSize.z.sub(wallMarginZ).sub(xN2.z).mul(wallStiffness));
+      });
+      
+      // Stronger centering attractor for more natural clustering
       const viewportCenter = uniforms.gridSize.mul(0.5).toConst("viewportCenter");
       const offsetToCenter = viewportCenter.sub(particlePosition).toConst("viewportOffset");
       const attractStrength = uniforms.viewportAttractorStrength
+        .mul(1.5) // Increase attractor strength by 50%
         .add(uniforms.viewportPulse.mul(0.25))
         .toConst("viewportAttractorStrength");
 

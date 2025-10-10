@@ -282,7 +282,7 @@ export const defaultConfig: FlowConfig = {
     restDensity: 1.0,
     density: 1.0,
     dynamicViscosity: 0.1,
-    gravityType: 2,  // 0=back, 1=down, 2=center (default), 3=device
+    gravityType: 0,  // 0=back (default for viewport mode), 1=down, 2=center (use with boundaries), 3=device
     
     // FLIP/PIC Hybrid (default: 95% FLIP, 5% PIC)
     transferMode: 2,  // 0=PIC, 1=FLIP, 2=HYBRID

@@ -189,8 +189,10 @@ export class FlowApp {
       wallThickness: 3,
       wallStiffness: 0.3,
       visualize: false,
-      audioReactive: true,
+      audioReactive: false, // Disabled by default (matches audio config)
       audioPulseStrength: 0.15,
+      viewportAttractorStrength: 0.12, // Default centering force for viewport mode
+      zCompression: 0.25, // Reduced Z-axis depth for more natural look
     });
     await this.boundaries.init();
     this.scenery.add(this.boundaries.object);

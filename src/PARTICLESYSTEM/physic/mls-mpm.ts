@@ -517,10 +517,12 @@ export class MlsMpmSimulator {
       // Start with forces (gravity + noise + audio-reactive)
       const forceAccumulator = vec3(0).toVar("forceAccumulator");
 
-      If(this.uniforms.gravityType.equal(uint(2)), () => {
+      // Center gravity only works correctly with fixed boundaries (not viewport mode)
+      // In viewport mode, use the viewport attractor instead
+      If(this.uniforms.gravityType.equal(uint(2)).and(this.uniforms.boundaryEnabled.equal(int(1))), () => {
         const pn = particlePosition.div(vec3(this.uniforms.gridSize.sub(1))).sub(0.5).normalize().toConst();
         forceAccumulator.subAssign(pn.mul(0.3).mul(this.uniforms.dt));
-      }).Else(() => {
+      }).ElseIf(this.uniforms.gravityType.notEqual(uint(2)), () => {
         forceAccumulator.addAssign(this.uniforms.gravity.mul(this.uniforms.dt));
       });
 
